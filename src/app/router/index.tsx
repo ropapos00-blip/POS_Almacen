@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import { Navigate, createBrowserRouter } from 'react-router-dom'
+import { Navigate, createHashRouter } from 'react-router-dom'
 import { AppShell } from '../layouts/AppShell'
 import { ProtectedRoute } from './ProtectedRoute'
 import {
@@ -27,7 +27,7 @@ function withFallback(node: React.ReactNode) {
   )
 }
 
-export const appRouter = createBrowserRouter([
+export const appRouter = createHashRouter([
   {
     path: '/login',
     element: withFallback(<LoginPage />),
