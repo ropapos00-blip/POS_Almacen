@@ -1,9 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import { z } from 'zod'
-import { getCachedStoreName } from '../../../shared/utils/storeNameCache'
+import { supabase } from '../../../integrations/supabase/client/supabaseClient'
+import { cacheStoreName, getCachedStoreName } from '../../../shared/utils/storeNameCache'
 import { useAuthStore } from '../model/useAuthStore'
 
 const loginSchema = z.object({
@@ -20,7 +21,8 @@ export function LoginPage() {
   const isLoading = useAuthStore((state) => state.isLoading)
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
   const authError = useAuthStore((state) => state.error)
-  const displayStoreName = storeName ?? getCachedStoreName() ?? 'POS Retail'
+  const [publicStoreName, setPublicStoreName] = useState<string | null>(null)
+  const displayStoreName = storeName ?? publicStoreName ?? getCachedStoreName() ?? 'POS Retail'
 
   const {
     register,
@@ -37,6 +39,36 @@ export function LoginPage() {
   const onSubmit = handleSubmit(async (values) => {
     await signIn(values.email, values.password)
   })
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadPublicStoreName() {
+      const { data, error } = await supabase
+        .from('stores')
+        .select('name')
+        .eq('is_active', true)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle<{ name: string }>()
+
+      if (!isMounted || error) {
+        return
+      }
+
+      const normalizedName = data?.name?.trim()
+      if (normalizedName) {
+        cacheStoreName(normalizedName)
+        setPublicStoreName(normalizedName)
+      }
+    }
+
+    void loadPublicStoreName()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   useEffect(() => {
     if (isAuthenticated) {
