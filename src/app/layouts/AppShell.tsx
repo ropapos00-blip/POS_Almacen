@@ -36,7 +36,9 @@ export function AppShell() {
       <div className="mx-auto grid min-h-screen w-full max-w-7xl grid-cols-1 gap-6 px-4 py-6 lg:grid-cols-[240px_1fr]">
         <aside className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4 backdrop-blur">
           <div className="mb-6 border-b border-zinc-800 pb-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-amber-400">POS Retail</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-amber-400">
+              {user?.storeName ?? 'POS Retail'}
+            </p>
             <p className="mt-2 text-sm font-medium text-zinc-300">{user?.fullName}</p>
             <p className="text-xs text-zinc-500">Rol: {user?.role}</p>
           </div>

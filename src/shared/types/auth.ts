@@ -6,4 +6,5 @@ export interface SessionUser {
   fullName: string
   role: AppRole
   storeId: string
+  storeName: string
 }

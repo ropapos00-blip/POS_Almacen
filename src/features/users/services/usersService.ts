@@ -134,3 +134,27 @@ export async function reactivatePosUser(input: ReactivateUserInput) {
 
   return data
 }
+
+export async function updateStoreName(storeId: string, storeName: string) {
+  const normalizedName = storeName.trim()
+  if (normalizedName.length < 3) {
+    throw new Error('El nombre del almacen debe tener al menos 3 caracteres.')
+  }
+
+  const { data, error } = await supabase.rpc('update_store_name', {
+    p_store_id: storeId,
+    p_store_name: normalizedName,
+  })
+
+  if (error) {
+    if (error.code === 'PGRST202' || error.message.toLowerCase().includes('update_store_name')) {
+      throw new Error(
+        'No existe la funcion RPC update_store_name en Supabase. Ejecuta el script 09_update_store_name_rpc.sql y reintenta.',
+      )
+    }
+
+    throw new Error(error.message)
+  }
+
+  return (data?.[0]?.out_store_name as string | undefined) ?? normalizedName
+}

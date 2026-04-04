@@ -9,6 +9,7 @@
 6. `06_user_management_rpc.sql`
 7. `07_discount_authorization_and_cashier_inventory.sql`
 8. `08_set_currency_cop.sql`
+9. `09_update_store_name_rpc.sql`
 
 ## Desde Supabase Dashboard
 1. Ir a `SQL Editor`.
@@ -21,6 +22,7 @@
 8. Repetir con `06_user_management_rpc.sql`.
 9. Repetir con `07_discount_authorization_and_cashier_inventory.sql`.
 10. Repetir con `08_set_currency_cop.sql`.
+11. Repetir con `09_update_store_name_rpc.sql`.
 
 ## Si aparece error
 - Revisar la linea exacta que marca el editor.

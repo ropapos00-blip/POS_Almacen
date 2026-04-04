@@ -11,6 +11,7 @@ import {
   deactivatePosUser,
   listUsersByStore,
   reactivatePosUser,
+  updateStoreName,
   updatePosUserRole,
 } from '../services/usersService'
 
@@ -65,6 +66,20 @@ export function useReactivateUserMutation(storeId?: string) {
     mutationFn: (input: ReactivateUserInput) => reactivatePosUser(input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['users', 'store', storeId] })
+    },
+  })
+}
+
+export function useUpdateStoreNameMutation(storeId?: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (storeName: string) => updateStoreName(storeId as string, storeName),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['users', 'store', storeId] }),
+      ])
     },
   })
 }

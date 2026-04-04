@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { useAuthStore } from '../../auth/model/useAuthStore'
@@ -7,6 +7,7 @@ import {
   useCreateUserMutation,
   useDeactivateUserMutation,
   useReactivateUserMutation,
+  useUpdateStoreNameMutation,
   useUpdateUserRoleMutation,
   useUsersQuery,
 } from '../model/useUsersQueries'
@@ -27,7 +28,9 @@ function roleBadge(roleCode: string) {
 
 export function UsersPage() {
   const user = useAuthStore((state) => state.user)
+  const setStoreName = useAuthStore((state) => state.setStoreName)
   const [feedback, setFeedback] = useState<string | null>(null)
+  const [storeNameInput, setStoreNameInput] = useState('')
   const [modalMessage, setModalMessage] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
   const [editingRoleByAssignment, setEditingRoleByAssignment] = useState<Record<string, 'admin' | 'cashier'>>({})
@@ -45,6 +48,11 @@ export function UsersPage() {
   const updateRoleMutation = useUpdateUserRoleMutation(user?.storeId)
   const deactivateMutation = useDeactivateUserMutation(user?.storeId)
   const reactivateMutation = useReactivateUserMutation(user?.storeId)
+  const updateStoreNameMutation = useUpdateStoreNameMutation(user?.storeId)
+
+  useEffect(() => {
+    setStoreNameInput(user?.storeName ?? '')
+  }, [user?.storeName])
 
   const form = useForm<CreateUserInput>({
     resolver: zodResolver(createUserSchema),
@@ -155,6 +163,24 @@ export function UsersPage() {
     setConfirmAction(null)
   }
 
+  const saveStoreName = async () => {
+    if (!user?.storeId || user.role !== 'super_admin') {
+      return
+    }
+
+    setFeedback(null)
+    try {
+      const updatedName = await updateStoreNameMutation.mutateAsync(storeNameInput)
+      setStoreName(updatedName)
+      setStoreNameInput(updatedName)
+      setFeedback(`Nombre del almacen actualizado a: ${updatedName}`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo actualizar el nombre del almacen.'
+      setFeedback(message)
+      setModalMessage(message)
+    }
+  }
+
   return (
     <section className="space-y-6">
       <header>
@@ -164,6 +190,34 @@ export function UsersPage() {
         </p>
         {feedback ? <p className="mt-2 text-sm text-amber-300">{feedback}</p> : null}
       </header>
+
+      {user?.role === 'super_admin' ? (
+        <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
+          <h2 className="text-lg font-semibold text-zinc-100">Configuracion de almacen</h2>
+          <p className="mt-1 text-sm text-zinc-400">
+            Cambia el nombre que veran todos los usuarios de este POS.
+          </p>
+
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <input
+              value={storeNameInput}
+              onChange={(event) => setStoreNameInput(event.target.value)}
+              placeholder="Nombre del almacen"
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                void saveStoreName()
+              }}
+              disabled={updateStoreNameMutation.isPending}
+              className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-900 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {updateStoreNameMutation.isPending ? 'Guardando...' : 'Guardar nombre'}
+            </button>
+          </div>
+        </article>
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[1fr_1.5fr]">
         <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">

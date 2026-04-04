@@ -1,6 +1,7 @@
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '../../../integrations/supabase/client/supabaseClient'
 import type { AppRole, SessionUser } from '../../../shared/types/auth'
+import { cacheStoreName } from '../../../shared/utils/storeNameCache'
 
 interface UserStoreRoleRow {
   store_id: string
@@ -14,6 +15,10 @@ interface RoleRow {
 interface ProfileRow {
   full_name: string
   email: string
+}
+
+interface StoreRow {
+  name: string
 }
 
 function isAppRole(value: string): value is AppRole {
@@ -75,19 +80,39 @@ async function getProfile(userId: string, fallbackEmail?: string | null) {
   }
 }
 
+async function getStoreName(storeId: string) {
+  const { data, error } = await supabase
+    .from('stores')
+    .select('name')
+    .eq('id', storeId)
+    .maybeSingle<StoreRow>()
+
+  if (error) {
+    return 'POS Retail'
+  }
+
+  return data?.name ?? 'POS Retail'
+}
+
 export async function buildSessionUser(user: User): Promise<SessionUser> {
-  const [roleData, profileData] = await Promise.all([
-    getPrimaryRole(user.id),
+  const roleData = await getPrimaryRole(user.id)
+  const [profileData, storeName] = await Promise.all([
     getProfile(user.id, user.email),
+    getStoreName(roleData.storeId),
   ])
 
-  return {
+  const sessionUser = {
     id: user.id,
     email: profileData.email,
     fullName: profileData.fullName,
     role: roleData.role,
     storeId: roleData.storeId,
+    storeName,
   }
+
+  cacheStoreName(sessionUser.storeName)
+
+  return sessionUser
 }
 
 export async function signInWithPassword(email: string, password: string) {
