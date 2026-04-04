@@ -17,6 +17,9 @@ export function SalesPage() {
   const user = useAuthStore((state) => state.user)
   const today = new Date().toISOString().slice(0, 10)
   const isCashier = user?.role === 'cashier'
+  const [saleToVoid, setSaleToVoid] = useState<SaleRow | null>(null)
+  const [voidReason, setVoidReason] = useState('')
+  const [voidFeedback, setVoidFeedback] = useState<string | null>(null)
   const [filters, setFilters] = useState<SalesFilters>({
     search: '',
     status: 'all',
@@ -60,6 +63,31 @@ export function SalesPage() {
     contentRef: receiptRef,
     documentTitle: selectedSale?.sale_number ?? 'ticket-venta',
   })
+
+  async function confirmVoidSale() {
+    if (!saleToVoid || !user?.id) {
+      return
+    }
+
+    const reason = voidReason.trim()
+    if (reason.length < 3) {
+      setVoidFeedback('Escribe un motivo de al menos 3 caracteres.')
+      return
+    }
+
+    setVoidFeedback(null)
+    try {
+      await voidSaleMutation.mutateAsync({
+        saleId: saleToVoid.id,
+        actorUserId: user.id,
+        reason,
+      })
+      setSaleToVoid(null)
+      setVoidReason('')
+    } catch {
+      setVoidFeedback('No se pudo anular la venta. Intenta de nuevo.')
+    }
+  }
 
   return (
     <section className="space-y-6">
@@ -182,15 +210,9 @@ export function SalesPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        const reason = window.prompt('Motivo de anulacion:')
-                        if (!reason || !user?.id) {
-                          return
-                        }
-                        void voidSaleMutation.mutateAsync({
-                          saleId: sale.id,
-                          actorUserId: user.id,
-                          reason,
-                        })
+                        setVoidFeedback(null)
+                        setVoidReason('')
+                        setSaleToVoid(sale)
                       }}
                       className="rounded-md border border-rose-500/40 px-2 py-1 text-xs text-rose-300"
                     >
@@ -243,6 +265,54 @@ export function SalesPage() {
           )}
         </article>
       </div>
+
+      {saleToVoid ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
+            <h3 className="text-lg font-semibold text-zinc-100">Anular venta</h3>
+            <p className="mt-2 text-sm text-zinc-400">
+              Vas a anular la venta {saleToVoid.sale_number}. Esta accion no se puede deshacer.
+            </p>
+
+            <label className="mt-4 block space-y-1">
+              <span className="text-xs text-zinc-400">Motivo de anulacion</span>
+              <textarea
+                value={voidReason}
+                onChange={(event) => setVoidReason(event.target.value)}
+                rows={3}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                placeholder="Ej. cliente solicito cancelacion por error en items"
+              />
+            </label>
+
+            {voidFeedback ? <p className="mt-3 text-sm text-amber-300">{voidFeedback}</p> : null}
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setSaleToVoid(null)
+                  setVoidReason('')
+                  setVoidFeedback(null)
+                }}
+                className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void confirmVoidSale()
+                }}
+                disabled={voidSaleMutation.isPending}
+                className="rounded-lg bg-rose-400 px-3 py-2 text-sm font-semibold text-zinc-900 disabled:opacity-70"
+              >
+                {voidSaleMutation.isPending ? 'Anulando...' : 'Confirmar anulacion'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <SalesReceipt sale={selectedSale} receiptRef={receiptRef} />
     </section>
