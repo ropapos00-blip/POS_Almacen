@@ -1,5 +1,6 @@
 import type { RefObject } from 'react'
 import { formatCop } from '../../../shared/utils/currency'
+import { useAuthStore } from '../../auth/model/useAuthStore'
 import type { PaymentMethod, PosCartItem } from '../model/pos.types'
 
 interface SaleReceiptData {
@@ -29,14 +30,33 @@ export function SaleReceipt({
   receiptRef: RefObject<HTMLDivElement | null>
   data: SaleReceiptData | null
 }) {
+  const user = useAuthStore((state) => state.user)
+
   if (!data) {
     return null
   }
 
+  const businessName = user?.storeReceipt.legalName || user?.storeName || 'POS Retail'
+  const hasBusinessDetails = Boolean(
+    user?.storeReceipt.taxId ||
+      user?.storeReceipt.taxRegime ||
+      user?.storeReceipt.address ||
+      user?.storeReceipt.city ||
+      user?.storeReceipt.phone,
+  )
+
   return (
     <div className="sr-only">
       <div ref={receiptRef} className="w-75 bg-white p-4 text-black">
-        <h1 className="text-center text-lg font-bold">POS Retail</h1>
+        <h1 className="text-center text-lg font-bold">{businessName}</h1>
+        {user?.storeReceipt.taxId ? <p className="text-center text-xs">NIT: {user.storeReceipt.taxId}</p> : null}
+        {user?.storeReceipt.taxRegime ? (
+          <p className="text-center text-xs">{user.storeReceipt.taxRegime}</p>
+        ) : null}
+        {user?.storeReceipt.address ? <p className="text-center text-xs">{user.storeReceipt.address}</p> : null}
+        {user?.storeReceipt.city ? <p className="text-center text-xs">{user.storeReceipt.city}</p> : null}
+        {user?.storeReceipt.phone ? <p className="text-center text-xs">{user.storeReceipt.phone}</p> : null}
+        {hasBusinessDetails ? <p className="my-1 border-t border-dashed border-black" /> : null}
         <p className="text-center text-xs">Ticket de venta</p>
         <p className="mt-3 text-xs">Venta: {data.saleNumber}</p>
         <p className="text-xs">Fecha: {data.soldAt}</p>

@@ -7,6 +7,7 @@ import {
   useCreateUserMutation,
   useDeactivateUserMutation,
   useReactivateUserMutation,
+  useUpdateStoreReceiptProfileMutation,
   useUpdateStoreNameMutation,
   useUpdateUserRoleMutation,
   useUsersQuery,
@@ -16,6 +17,12 @@ import type { CreateUserInput } from '../model/users.types'
 const createUserSchema = z.object({
   fullName: z.string().trim().min(2, 'Nombre requerido'),
   email: z.email('Email invalido'),
+  phone: z
+    .string()
+    .trim()
+    .min(7, 'Telefono invalido')
+    .max(20, 'Telefono demasiado largo')
+    .regex(/^[+0-9\s()-]+$/, 'Telefono invalido'),
   password: z.string().min(6, 'Minimo 6 caracteres'),
   roleCode: z.enum(['admin', 'cashier']),
 })
@@ -29,6 +36,8 @@ function roleBadge(roleCode: string) {
 export function UsersPage() {
   const user = useAuthStore((state) => state.user)
   const setStoreName = useAuthStore((state) => state.setStoreName)
+  const setStoreSlogan = useAuthStore((state) => state.setStoreSlogan)
+  const setStoreReceipt = useAuthStore((state) => state.setStoreReceipt)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [storeNameInput, setStoreNameInput] = useState('')
   const [modalMessage, setModalMessage] = useState<string | null>(null)
@@ -49,16 +58,47 @@ export function UsersPage() {
   const deactivateMutation = useDeactivateUserMutation(user?.storeId)
   const reactivateMutation = useReactivateUserMutation(user?.storeId)
   const updateStoreNameMutation = useUpdateStoreNameMutation(user?.storeId)
+  const updateStoreReceiptProfileMutation = useUpdateStoreReceiptProfileMutation(user?.storeId)
+  const [receiptProfileInput, setReceiptProfileInput] = useState({
+    loginSlogan: '',
+    legalName: '',
+    taxId: '',
+    taxRegime: '',
+    address: '',
+    city: '',
+    phone: '',
+  })
 
   useEffect(() => {
     setStoreNameInput(user?.storeName ?? '')
   }, [user?.storeName])
+
+  useEffect(() => {
+    setReceiptProfileInput({
+      loginSlogan: user?.storeSlogan ?? '',
+      legalName: user?.storeReceipt.legalName ?? '',
+      taxId: user?.storeReceipt.taxId ?? '',
+      taxRegime: user?.storeReceipt.taxRegime ?? '',
+      address: user?.storeReceipt.address ?? '',
+      city: user?.storeReceipt.city ?? '',
+      phone: user?.storeReceipt.phone ?? '',
+    })
+  }, [
+    user?.storeSlogan,
+    user?.storeReceipt.address,
+    user?.storeReceipt.city,
+    user?.storeReceipt.legalName,
+    user?.storeReceipt.phone,
+    user?.storeReceipt.taxId,
+    user?.storeReceipt.taxRegime,
+  ])
 
   const form = useForm<CreateUserInput>({
     resolver: zodResolver(createUserSchema),
     defaultValues: {
       fullName: '',
       email: '',
+      phone: '',
       password: '',
       roleCode: user?.role === 'admin' ? 'cashier' : 'admin',
     },
@@ -82,6 +122,7 @@ export function UsersPage() {
       form.reset({
         fullName: '',
         email: '',
+        phone: '',
         password: '',
         roleCode: user?.role === 'admin' ? 'cashier' : 'admin',
       })
@@ -181,6 +222,26 @@ export function UsersPage() {
     }
   }
 
+  const saveReceiptProfile = async () => {
+    if (!user?.storeId || user.role !== 'super_admin') {
+      return
+    }
+
+    setFeedback(null)
+    try {
+      const updated = await updateStoreReceiptProfileMutation.mutateAsync(receiptProfileInput)
+      setReceiptProfileInput(updated)
+      setStoreSlogan(updated.loginSlogan || 'Cada venta cuenta, cada cliente vuelve')
+      setStoreReceipt(updated)
+      setFeedback('Datos de factura/comanda actualizados correctamente.')
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'No se pudieron actualizar los datos de factura/comanda.'
+      setFeedback(message)
+      setModalMessage(message)
+    }
+  }
+
   return (
     <section className="space-y-6">
       <header>
@@ -193,9 +254,9 @@ export function UsersPage() {
 
       {user?.role === 'super_admin' ? (
         <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
-          <h2 className="text-lg font-semibold text-zinc-100">Configuracion de almacen</h2>
+          <h2 className="text-lg font-semibold text-zinc-100">Configuracion de almacen y factura</h2>
           <p className="mt-1 text-sm text-zinc-400">
-            Cambia el nombre que veran todos los usuarios de este POS.
+            Super admin define los datos que salen en factura/comanda.
           </p>
 
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -216,6 +277,79 @@ export function UsersPage() {
               {updateStoreNameMutation.isPending ? 'Guardando...' : 'Guardar nombre'}
             </button>
           </div>
+
+          <div className="mt-4 grid gap-2 md:grid-cols-2">
+            <textarea
+              value={receiptProfileInput.loginSlogan}
+              onChange={(event) =>
+                setReceiptProfileInput((prev) => ({ ...prev, loginSlogan: event.target.value }))
+              }
+              placeholder="Eslogan del login (debajo del logo)"
+              rows={2}
+              className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm md:col-span-2"
+            />
+            <input
+              value={receiptProfileInput.legalName}
+              onChange={(event) =>
+                setReceiptProfileInput((prev) => ({ ...prev, legalName: event.target.value }))
+              }
+              placeholder="Empresa / razon social"
+              className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+            />
+            <input
+              value={receiptProfileInput.taxId}
+              onChange={(event) =>
+                setReceiptProfileInput((prev) => ({ ...prev, taxId: event.target.value }))
+              }
+              placeholder="NIT"
+              className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+            />
+            <input
+              value={receiptProfileInput.taxRegime}
+              onChange={(event) =>
+                setReceiptProfileInput((prev) => ({ ...prev, taxRegime: event.target.value }))
+              }
+              placeholder="Regimen fiscal (ej. No responsable de IVA)"
+              className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+            />
+            <input
+              value={receiptProfileInput.phone}
+              onChange={(event) =>
+                setReceiptProfileInput((prev) => ({ ...prev, phone: event.target.value }))
+              }
+              placeholder="Telefono de la tienda"
+              className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+            />
+            <input
+              value={receiptProfileInput.address}
+              onChange={(event) =>
+                setReceiptProfileInput((prev) => ({ ...prev, address: event.target.value }))
+              }
+              placeholder="Direccion"
+              className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm md:col-span-2"
+            />
+            <input
+              value={receiptProfileInput.city}
+              onChange={(event) =>
+                setReceiptProfileInput((prev) => ({ ...prev, city: event.target.value }))
+              }
+              placeholder="Ciudad"
+              className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              void saveReceiptProfile()
+            }}
+            disabled={updateStoreReceiptProfileMutation.isPending}
+            className="mt-3 rounded-lg border border-amber-500/50 px-4 py-2 text-sm font-semibold text-amber-200 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {updateStoreReceiptProfileMutation.isPending
+              ? 'Guardando datos de factura...'
+              : 'Guardar datos de factura/comanda'}
+          </button>
         </article>
       ) : null}
 
@@ -232,6 +366,12 @@ export function UsersPage() {
               placeholder="Email"
               type="email"
               {...form.register('email')}
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+            />
+            <input
+              placeholder="Telefono"
+              type="tel"
+              {...form.register('phone')}
               className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
             />
             <input
@@ -284,6 +424,7 @@ export function UsersPage() {
                   <div>
                     <p className="text-sm font-medium text-zinc-200">{row.fullName}</p>
                     <p className="text-xs text-zinc-500">{row.email}</p>
+                    {row.phone ? <p className="text-xs text-zinc-500">Tel: {row.phone}</p> : null}
                   </div>
                   <div className="flex items-center gap-2">
                     <span

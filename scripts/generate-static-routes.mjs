@@ -21,6 +21,7 @@ const staticRoutes = [
   'price-check',
   'inventory',
   'sales',
+  'manual-invoices',
   'users',
 ]
 

@@ -39,3 +39,9 @@ export const PriceCheckPage = lazy(() =>
     default: m.PriceCheckPage,
   })),
 )
+
+export const ManualInvoicesPage = lazy(() =>
+  import('../../features/manual-invoices/ui/ManualInvoicesPage').then((m) => ({
+    default: m.ManualInvoicesPage,
+  })),
+)

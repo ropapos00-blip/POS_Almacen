@@ -1,4 +1,4 @@
-import { LogOut, Package, ReceiptText, ShoppingCart, Store } from 'lucide-react'
+import { FileText, LogOut, Package, ReceiptText, ShoppingCart, Store } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuthStore } from '../../features/auth/model/useAuthStore'
 
@@ -6,6 +6,7 @@ const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: Store },
   { to: '/pos', label: 'POS', icon: ShoppingCart },
   { to: '/sales', label: 'Ventas', icon: ReceiptText },
+  { to: '/manual-invoices', label: 'Factura manual', icon: FileText },
   { to: '/price-check', label: 'Consulta', icon: Package, roles: ['cashier'] },
   { to: '/catalog', label: 'Catalogo', icon: Package, roles: ['super_admin', 'admin'] },
   { to: '/inventory', label: 'Inventario', icon: ReceiptText, roles: ['super_admin', 'admin'] },

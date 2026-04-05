@@ -18,11 +18,15 @@ export function LoginPage() {
   const navigate = useNavigate()
   const signIn = useAuthStore((state) => state.signIn)
   const storeName = useAuthStore((state) => state.user?.storeName)
+  const storeSlogan = useAuthStore((state) => state.user?.storeSlogan)
   const isLoading = useAuthStore((state) => state.isLoading)
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
   const authError = useAuthStore((state) => state.error)
   const [publicStoreName, setPublicStoreName] = useState<string | null>(null)
+  const [publicStoreSlogan, setPublicStoreSlogan] = useState<string | null>(null)
   const displayStoreName = storeName ?? publicStoreName ?? getCachedStoreName() ?? 'POS Retail'
+  const displayStoreSlogan =
+    storeSlogan ?? publicStoreSlogan ?? 'Cada venta cuenta, cada cliente vuelve'
 
   const {
     register,
@@ -46,20 +50,24 @@ export function LoginPage() {
     async function loadPublicStoreName() {
       const { data, error } = await supabase
         .from('stores')
-        .select('name')
+        .select('name, login_slogan')
         .eq('is_active', true)
         .order('created_at', { ascending: true })
         .limit(1)
-        .maybeSingle<{ name: string }>()
+        .maybeSingle<{ name: string; login_slogan: string | null }>()
 
       if (!isMounted || error) {
         return
       }
 
       const normalizedName = data?.name?.trim()
+      const normalizedSlogan = data?.login_slogan?.trim()
       if (normalizedName) {
         cacheStoreName(normalizedName)
         setPublicStoreName(normalizedName)
+      }
+      if (normalizedSlogan) {
+        setPublicStoreSlogan(normalizedSlogan)
       }
     }
 
@@ -80,14 +88,11 @@ export function LoginPage() {
     <main className="mx-auto grid min-h-screen w-full max-w-6xl grid-cols-1 items-center gap-6 px-6 py-10 md:grid-cols-[1.2fr_1fr]">
       <section className="flex min-h-70 items-center justify-center rounded-3xl border border-zinc-800/70 bg-zinc-900/60 p-8 text-center backdrop-blur md:min-h-full md:p-10">
         <div className="mx-auto max-w-2xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-400">
-            Sistema POS
-          </p>
-          <h1 className="mt-4 text-4xl font-bold leading-tight text-zinc-100 md:text-5xl">
+          <h1 className="text-5xl font-black uppercase leading-tight tracking-[0.08em] text-amber-400 drop-shadow-[0_0_22px_rgba(251,191,36,0.28)] md:text-7xl">
             {displayStoreName}
           </h1>
           <p className="mt-4 text-xl font-medium text-zinc-200 md:text-2xl">
-            Cada venta cuenta, cada cliente vuelve
+            {displayStoreSlogan}
           </p>
           <p className="mt-4 text-zinc-300">
             Controla inventario, ventas y equipo desde un solo punto, con una experiencia rapida y clara.

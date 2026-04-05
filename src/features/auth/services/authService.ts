@@ -19,6 +19,13 @@ interface ProfileRow {
 
 interface StoreRow {
   name: string
+  login_slogan: string | null
+  receipt_legal_name: string | null
+  receipt_tax_id: string | null
+  receipt_tax_regime: string | null
+  receipt_address: string | null
+  receipt_city: string | null
+  receipt_phone: string | null
 }
 
 function isAppRole(value: string): value is AppRole {
@@ -83,20 +90,42 @@ async function getProfile(userId: string, fallbackEmail?: string | null) {
 async function getStoreName(storeId: string) {
   const { data, error } = await supabase
     .from('stores')
-    .select('name')
+    .select('name, login_slogan, receipt_legal_name, receipt_tax_id, receipt_tax_regime, receipt_address, receipt_city, receipt_phone')
     .eq('id', storeId)
     .maybeSingle<StoreRow>()
 
   if (error) {
-    return 'POS Retail'
+    return {
+      storeName: 'POS Retail',
+      storeSlogan: 'Cada venta cuenta, cada cliente vuelve',
+      storeReceipt: {
+        legalName: '',
+        taxId: '',
+        taxRegime: '',
+        address: '',
+        city: '',
+        phone: '',
+      },
+    }
   }
 
-  return data?.name ?? 'POS Retail'
+  return {
+    storeName: data?.name ?? 'POS Retail',
+    storeSlogan: data?.login_slogan?.trim() || 'Cada venta cuenta, cada cliente vuelve',
+    storeReceipt: {
+      legalName: data?.receipt_legal_name ?? '',
+      taxId: data?.receipt_tax_id ?? '',
+      taxRegime: data?.receipt_tax_regime ?? '',
+      address: data?.receipt_address ?? '',
+      city: data?.receipt_city ?? '',
+      phone: data?.receipt_phone ?? '',
+    },
+  }
 }
 
 export async function buildSessionUser(user: User): Promise<SessionUser> {
   const roleData = await getPrimaryRole(user.id)
-  const [profileData, storeName] = await Promise.all([
+  const [profileData, storeData] = await Promise.all([
     getProfile(user.id, user.email),
     getStoreName(roleData.storeId),
   ])
@@ -107,7 +136,9 @@ export async function buildSessionUser(user: User): Promise<SessionUser> {
     fullName: profileData.fullName,
     role: roleData.role,
     storeId: roleData.storeId,
-    storeName,
+    storeName: storeData.storeName,
+    storeSlogan: storeData.storeSlogan,
+    storeReceipt: storeData.storeReceipt,
   }
 
   cacheStoreName(sessionUser.storeName)

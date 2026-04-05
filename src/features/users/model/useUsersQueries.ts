@@ -4,6 +4,7 @@ import type {
   CreateUserInput,
   DeactivateUserInput,
   ReactivateUserInput,
+  StoreReceiptProfileInput,
   UpdateUserRoleInput,
 } from './users.types'
 import {
@@ -11,6 +12,7 @@ import {
   deactivatePosUser,
   listUsersByStore,
   reactivatePosUser,
+  updateStoreReceiptProfile,
   updateStoreName,
   updatePosUserRole,
 } from '../services/usersService'
@@ -75,6 +77,20 @@ export function useUpdateStoreNameMutation(storeId?: string) {
 
   return useMutation({
     mutationFn: (storeName: string) => updateStoreName(storeId as string, storeName),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['users', 'store', storeId] }),
+      ])
+    },
+  })
+}
+
+export function useUpdateStoreReceiptProfileMutation(storeId?: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: StoreReceiptProfileInput) => updateStoreReceiptProfile(storeId as string, input),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { SessionUser } from '../../../shared/types/auth'
+import type { SessionUser, StoreReceiptProfile } from '../../../shared/types/auth'
 import { cacheStoreName } from '../../../shared/utils/storeNameCache'
 import { getSessionUser, signInWithPassword, signOutSession } from '../services/authService'
 
@@ -13,6 +13,8 @@ interface AuthState {
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
   setStoreName: (storeName: string) => void
+  setStoreSlogan: (storeSlogan: string) => void
+  setStoreReceipt: (storeReceipt: StoreReceiptProfile) => void
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -87,6 +89,36 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: {
           ...state.user,
           storeName,
+        },
+      }
+    })
+  },
+  setStoreSlogan: (storeSlogan) => {
+    set((state) => {
+      if (!state.user) {
+        return state
+      }
+
+      return {
+        ...state,
+        user: {
+          ...state.user,
+          storeSlogan,
+        },
+      }
+    })
+  },
+  setStoreReceipt: (storeReceipt) => {
+    set((state) => {
+      if (!state.user) {
+        return state
+      }
+
+      return {
+        ...state,
+        user: {
+          ...state.user,
+          storeReceipt,
         },
       }
     })

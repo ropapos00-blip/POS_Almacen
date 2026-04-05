@@ -5,6 +5,7 @@ export interface UserListRow {
   userId: string
   fullName: string
   email: string
+  phone: string
   roleCode: UserRoleCode
   roleName: string
   isActive: boolean
@@ -13,8 +14,19 @@ export interface UserListRow {
 export interface CreateUserInput {
   fullName: string
   email: string
+  phone: string
   password: string
   roleCode: 'admin' | 'cashier'
+}
+
+export interface StoreReceiptProfileInput {
+  loginSlogan: string
+  legalName: string
+  taxId: string
+  taxRegime: string
+  address: string
+  city: string
+  phone: string
 }
 
 export interface UpdateUserRoleInput {
