@@ -4,6 +4,7 @@
 
 alter table public.stores
   add column if not exists login_slogan text,
+  add column if not exists login_support_text text,
   add column if not exists receipt_legal_name text,
   add column if not exists receipt_tax_id text,
   add column if not exists receipt_tax_regime text,
@@ -16,10 +17,12 @@ alter table public.profiles
 
 drop function if exists public.update_store_receipt_profile(uuid, text, text, text, text, text, text);
 drop function if exists public.update_store_receipt_profile(uuid, text, text, text, text, text, text, text);
+drop function if exists public.update_store_receipt_profile(uuid, text, text, text, text, text, text, text, text);
 
 create or replace function public.update_store_receipt_profile(
   p_store_id uuid,
   p_login_slogan text,
+  p_login_support_text text,
   p_receipt_legal_name text,
   p_receipt_tax_id text,
   p_receipt_tax_regime text,
@@ -30,6 +33,7 @@ create or replace function public.update_store_receipt_profile(
 returns table (
   out_store_id uuid,
   out_login_slogan text,
+  out_login_support_text text,
   out_receipt_legal_name text,
   out_receipt_tax_id text,
   out_receipt_tax_regime text,
@@ -43,6 +47,7 @@ set search_path = public, auth
 as $$
 declare
   v_login_slogan text := nullif(trim(coalesce(p_login_slogan, '')), '');
+  v_login_support_text text := nullif(trim(coalesce(p_login_support_text, '')), '');
   v_legal_name text := nullif(trim(coalesce(p_receipt_legal_name, '')), '');
   v_tax_id text := nullif(trim(coalesce(p_receipt_tax_id, '')), '');
   v_tax_regime text := nullif(trim(coalesce(p_receipt_tax_regime, '')), '');
@@ -60,6 +65,7 @@ begin
 
   update public.stores
     set login_slogan = v_login_slogan,
+      login_support_text = v_login_support_text,
       receipt_legal_name = v_legal_name,
       receipt_tax_id = v_tax_id,
       receipt_tax_regime = v_tax_regime,
@@ -88,6 +94,7 @@ begin
     p_store_id,
     jsonb_build_object(
       'login_slogan', v_login_slogan,
+      'login_support_text', v_login_support_text,
       'receipt_legal_name', v_legal_name,
       'receipt_tax_id', v_tax_id,
       'receipt_tax_regime', v_tax_regime,
@@ -101,6 +108,7 @@ begin
   select
     p_store_id,
     v_login_slogan,
+    v_login_support_text,
     v_legal_name,
     v_tax_id,
     v_tax_regime,
@@ -110,7 +118,7 @@ begin
 end;
 $$;
 
-grant execute on function public.update_store_receipt_profile(uuid, text, text, text, text, text, text, text) to authenticated;
+grant execute on function public.update_store_receipt_profile(uuid, text, text, text, text, text, text, text, text) to authenticated;
 
 drop function if exists public.create_pos_user(text, text, text, uuid, text, text);
 

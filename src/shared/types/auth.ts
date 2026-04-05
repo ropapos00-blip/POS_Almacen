@@ -17,5 +17,6 @@ export interface SessionUser {
   storeId: string
   storeName: string
   storeSlogan: string
+  storeLoginSupportText: string
   storeReceipt: StoreReceiptProfile
 }

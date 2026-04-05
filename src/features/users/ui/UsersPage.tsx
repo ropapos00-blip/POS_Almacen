@@ -37,6 +37,7 @@ export function UsersPage() {
   const user = useAuthStore((state) => state.user)
   const setStoreName = useAuthStore((state) => state.setStoreName)
   const setStoreSlogan = useAuthStore((state) => state.setStoreSlogan)
+  const setStoreLoginSupportText = useAuthStore((state) => state.setStoreLoginSupportText)
   const setStoreReceipt = useAuthStore((state) => state.setStoreReceipt)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [storeNameInput, setStoreNameInput] = useState('')
@@ -61,6 +62,7 @@ export function UsersPage() {
   const updateStoreReceiptProfileMutation = useUpdateStoreReceiptProfileMutation(user?.storeId)
   const [receiptProfileInput, setReceiptProfileInput] = useState({
     loginSlogan: '',
+    loginSupportText: '',
     legalName: '',
     taxId: '',
     taxRegime: '',
@@ -76,6 +78,7 @@ export function UsersPage() {
   useEffect(() => {
     setReceiptProfileInput({
       loginSlogan: user?.storeSlogan ?? '',
+      loginSupportText: user?.storeLoginSupportText ?? '',
       legalName: user?.storeReceipt.legalName ?? '',
       taxId: user?.storeReceipt.taxId ?? '',
       taxRegime: user?.storeReceipt.taxRegime ?? '',
@@ -85,6 +88,7 @@ export function UsersPage() {
     })
   }, [
     user?.storeSlogan,
+    user?.storeLoginSupportText,
     user?.storeReceipt.address,
     user?.storeReceipt.city,
     user?.storeReceipt.legalName,
@@ -232,6 +236,10 @@ export function UsersPage() {
       const updated = await updateStoreReceiptProfileMutation.mutateAsync(receiptProfileInput)
       setReceiptProfileInput(updated)
       setStoreSlogan(updated.loginSlogan || 'Cada venta cuenta, cada cliente vuelve')
+      setStoreLoginSupportText(
+        updated.loginSupportText ||
+          'Controla inventario, ventas y equipo desde un solo punto, con una experiencia rapida y clara.',
+      )
       setStoreReceipt(updated)
       setFeedback('Datos de factura/comanda actualizados correctamente.')
     } catch (error) {
@@ -285,6 +293,15 @@ export function UsersPage() {
                 setReceiptProfileInput((prev) => ({ ...prev, loginSlogan: event.target.value }))
               }
               placeholder="Eslogan del login (debajo del logo)"
+              rows={2}
+              className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm md:col-span-2"
+            />
+            <textarea
+              value={receiptProfileInput.loginSupportText}
+              onChange={(event) =>
+                setReceiptProfileInput((prev) => ({ ...prev, loginSupportText: event.target.value }))
+              }
+              placeholder="Texto descriptivo del login (parrafo inferior)"
               rows={2}
               className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm md:col-span-2"
             />

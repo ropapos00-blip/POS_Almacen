@@ -168,6 +168,7 @@ export async function updateStoreReceiptProfile(storeId: string, input: StoreRec
   const { data, error } = await supabase.rpc('update_store_receipt_profile', {
     p_store_id: storeId,
     p_login_slogan: input.loginSlogan.trim() || null,
+    p_login_support_text: input.loginSupportText.trim() || null,
     p_receipt_legal_name: input.legalName.trim() || null,
     p_receipt_tax_id: input.taxId.trim() || null,
     p_receipt_tax_regime: input.taxRegime.trim() || null,
@@ -193,6 +194,7 @@ export async function updateStoreReceiptProfile(storeId: string, input: StoreRec
 
   return {
     loginSlogan: (row?.out_login_slogan as string | null | undefined) ?? '',
+    loginSupportText: (row?.out_login_support_text as string | null | undefined) ?? '',
     legalName: (row?.out_receipt_legal_name as string | null | undefined) ?? '',
     taxId: (row?.out_receipt_tax_id as string | null | undefined) ?? '',
     taxRegime: (row?.out_receipt_tax_regime as string | null | undefined) ?? '',

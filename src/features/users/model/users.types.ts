@@ -21,6 +21,7 @@ export interface CreateUserInput {
 
 export interface StoreReceiptProfileInput {
   loginSlogan: string
+  loginSupportText: string
   legalName: string
   taxId: string
   taxRegime: string

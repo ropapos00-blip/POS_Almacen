@@ -20,6 +20,7 @@ interface ProfileRow {
 interface StoreRow {
   name: string
   login_slogan: string | null
+  login_support_text: string | null
   receipt_legal_name: string | null
   receipt_tax_id: string | null
   receipt_tax_regime: string | null
@@ -90,7 +91,7 @@ async function getProfile(userId: string, fallbackEmail?: string | null) {
 async function getStoreName(storeId: string) {
   const { data, error } = await supabase
     .from('stores')
-    .select('name, login_slogan, receipt_legal_name, receipt_tax_id, receipt_tax_regime, receipt_address, receipt_city, receipt_phone')
+    .select('name, login_slogan, login_support_text, receipt_legal_name, receipt_tax_id, receipt_tax_regime, receipt_address, receipt_city, receipt_phone')
     .eq('id', storeId)
     .maybeSingle<StoreRow>()
 
@@ -98,6 +99,8 @@ async function getStoreName(storeId: string) {
     return {
       storeName: 'POS Retail',
       storeSlogan: 'Cada venta cuenta, cada cliente vuelve',
+      storeLoginSupportText:
+        'Controla inventario, ventas y equipo desde un solo punto, con una experiencia rapida y clara.',
       storeReceipt: {
         legalName: '',
         taxId: '',
@@ -112,6 +115,9 @@ async function getStoreName(storeId: string) {
   return {
     storeName: data?.name ?? 'POS Retail',
     storeSlogan: data?.login_slogan?.trim() || 'Cada venta cuenta, cada cliente vuelve',
+    storeLoginSupportText:
+      data?.login_support_text?.trim() ||
+      'Controla inventario, ventas y equipo desde un solo punto, con una experiencia rapida y clara.',
     storeReceipt: {
       legalName: data?.receipt_legal_name ?? '',
       taxId: data?.receipt_tax_id ?? '',
@@ -138,6 +144,7 @@ export async function buildSessionUser(user: User): Promise<SessionUser> {
     storeId: roleData.storeId,
     storeName: storeData.storeName,
     storeSlogan: storeData.storeSlogan,
+    storeLoginSupportText: storeData.storeLoginSupportText,
     storeReceipt: storeData.storeReceipt,
   }
 

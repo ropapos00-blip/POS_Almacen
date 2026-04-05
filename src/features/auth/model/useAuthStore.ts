@@ -14,6 +14,7 @@ interface AuthState {
   signOut: () => Promise<void>
   setStoreName: (storeName: string) => void
   setStoreSlogan: (storeSlogan: string) => void
+  setStoreLoginSupportText: (storeLoginSupportText: string) => void
   setStoreReceipt: (storeReceipt: StoreReceiptProfile) => void
 }
 
@@ -104,6 +105,21 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: {
           ...state.user,
           storeSlogan,
+        },
+      }
+    })
+  },
+  setStoreLoginSupportText: (storeLoginSupportText) => {
+    set((state) => {
+      if (!state.user) {
+        return state
+      }
+
+      return {
+        ...state,
+        user: {
+          ...state.user,
+          storeLoginSupportText,
         },
       }
     })

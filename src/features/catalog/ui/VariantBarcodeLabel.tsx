@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { formatCop } from '../../../shared/utils/currency'
+import { useAuthStore } from '../../auth/model/useAuthStore'
 import type { ProductVariant } from '../model/catalog.types'
 
 export function VariantBarcodeLabel({
@@ -9,6 +10,7 @@ export function VariantBarcodeLabel({
   variant: ProductVariant | null
   labelRef: React.RefObject<HTMLDivElement | null>
 }) {
+  const storeName = useAuthStore((state) => state.user?.storeName)
   const barcodeSvgRef = useRef<SVGSVGElement>(null)
 
   useEffect(() => {
@@ -45,7 +47,10 @@ export function VariantBarcodeLabel({
   return (
     <div className="sr-only">
       <div ref={labelRef} className="w-75 bg-white p-3 text-black">
-        <h3 className="text-sm font-bold">Etiqueta POS Retail</h3>
+        <h3 className="store-logo-font text-base font-bold uppercase tracking-[0.12em] text-amber-600">
+          {storeName ?? 'POS Retail'}
+        </h3>
+        <p className="text-xs">Etiqueta</p>
         <p className="mt-1 text-xs">SKU: {variant.sku}</p>
         <p className="text-xs">Talla: {variant.size}</p>
         <p className="text-xs">Color: {variant.color}</p>

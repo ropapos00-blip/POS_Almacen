@@ -35,7 +35,12 @@ export function SalesReceipt({
   return (
     <div className="sr-only">
       <div ref={receiptRef} className="w-75 bg-white p-4 text-black">
-        <h1 className="text-center text-lg font-bold">{businessName}</h1>
+        <h1
+          className="store-logo-font text-center text-xl font-bold uppercase tracking-[0.08em]"
+          style={{ fontFamily: "'Dolce Vita', 'Space Grotesk', sans-serif" }}
+        >
+          {businessName}
+        </h1>
         {user?.storeReceipt.taxId ? <p className="text-center text-xs">NIT: {user.storeReceipt.taxId}</p> : null}
         {user?.storeReceipt.taxRegime ? (
           <p className="text-center text-xs">{user.storeReceipt.taxRegime}</p>

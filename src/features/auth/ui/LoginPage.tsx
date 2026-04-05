@@ -19,14 +19,20 @@ export function LoginPage() {
   const signIn = useAuthStore((state) => state.signIn)
   const storeName = useAuthStore((state) => state.user?.storeName)
   const storeSlogan = useAuthStore((state) => state.user?.storeSlogan)
+  const storeLoginSupportText = useAuthStore((state) => state.user?.storeLoginSupportText)
   const isLoading = useAuthStore((state) => state.isLoading)
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
   const authError = useAuthStore((state) => state.error)
   const [publicStoreName, setPublicStoreName] = useState<string | null>(null)
   const [publicStoreSlogan, setPublicStoreSlogan] = useState<string | null>(null)
+  const [publicStoreLoginSupportText, setPublicStoreLoginSupportText] = useState<string | null>(null)
   const displayStoreName = storeName ?? publicStoreName ?? getCachedStoreName() ?? 'POS Retail'
   const displayStoreSlogan =
     storeSlogan ?? publicStoreSlogan ?? 'Cada venta cuenta, cada cliente vuelve'
+  const displayStoreLoginSupportText =
+    storeLoginSupportText ??
+    publicStoreLoginSupportText ??
+    'Controla inventario, ventas y equipo desde un solo punto, con una experiencia rapida y clara.'
 
   const {
     register,
@@ -50,11 +56,11 @@ export function LoginPage() {
     async function loadPublicStoreName() {
       const { data, error } = await supabase
         .from('stores')
-        .select('name, login_slogan')
+        .select('name, login_slogan, login_support_text')
         .eq('is_active', true)
         .order('created_at', { ascending: true })
         .limit(1)
-        .maybeSingle<{ name: string; login_slogan: string | null }>()
+        .maybeSingle<{ name: string; login_slogan: string | null; login_support_text: string | null }>()
 
       if (!isMounted || error) {
         return
@@ -62,12 +68,16 @@ export function LoginPage() {
 
       const normalizedName = data?.name?.trim()
       const normalizedSlogan = data?.login_slogan?.trim()
+      const normalizedSupportText = data?.login_support_text?.trim()
       if (normalizedName) {
         cacheStoreName(normalizedName)
         setPublicStoreName(normalizedName)
       }
       if (normalizedSlogan) {
         setPublicStoreSlogan(normalizedSlogan)
+      }
+      if (normalizedSupportText) {
+        setPublicStoreLoginSupportText(normalizedSupportText)
       }
     }
 
@@ -88,14 +98,14 @@ export function LoginPage() {
     <main className="mx-auto grid min-h-screen w-full max-w-6xl grid-cols-1 items-center gap-6 px-6 py-10 md:grid-cols-[1.2fr_1fr]">
       <section className="flex min-h-70 items-center justify-center rounded-3xl border border-zinc-800/70 bg-zinc-900/60 p-8 text-center backdrop-blur md:min-h-full md:p-10">
         <div className="mx-auto max-w-2xl">
-          <h1 className="store-logo-font text-5xl font-black uppercase leading-tight tracking-[0.08em] text-amber-400 drop-shadow-[0_0_22px_rgba(251,191,36,0.28)] md:text-7xl">
+          <h1 className="store-logo-font text-6xl font-black uppercase leading-tight tracking-[0.08em] text-amber-400 drop-shadow-[0_0_22px_rgba(251,191,36,0.28)] md:text-8xl">
             {displayStoreName}
           </h1>
           <p className="mt-4 text-xl font-medium text-zinc-200 md:text-2xl">
             {displayStoreSlogan}
           </p>
           <p className="mt-4 text-zinc-300">
-            Controla inventario, ventas y equipo desde un solo punto, con una experiencia rapida y clara.
+            {displayStoreLoginSupportText}
           </p>
         </div>
       </section>
