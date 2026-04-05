@@ -1,6 +1,30 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 @import 'tailwindcss';
 
+@font-face {
+  font-family: 'Dolce Vita';
+  src: url('/fonts/DolceVita-Light.ttf') format('truetype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Dolce Vita';
+  src: url('/fonts/DolceVita-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Dolce Vita';
+  src: url('/fonts/DolceVita-HeavyBold.ttf') format('truetype');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --bg: #09090b;
   --fg: #f4f4f5;
@@ -30,4 +54,8 @@ body {
 code,
 pre {
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+.store-logo-font {
+  font-family: 'Dolce Vita', 'Space Grotesk', 'Segoe UI', sans-serif;
 }

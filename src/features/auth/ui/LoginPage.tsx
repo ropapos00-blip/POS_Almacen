@@ -88,7 +88,7 @@ export function LoginPage() {
     <main className="mx-auto grid min-h-screen w-full max-w-6xl grid-cols-1 items-center gap-6 px-6 py-10 md:grid-cols-[1.2fr_1fr]">
       <section className="flex min-h-70 items-center justify-center rounded-3xl border border-zinc-800/70 bg-zinc-900/60 p-8 text-center backdrop-blur md:min-h-full md:p-10">
         <div className="mx-auto max-w-2xl">
-          <h1 className="text-5xl font-black uppercase leading-tight tracking-[0.08em] text-amber-400 drop-shadow-[0_0_22px_rgba(251,191,36,0.28)] md:text-7xl">
+          <h1 className="store-logo-font text-5xl font-black uppercase leading-tight tracking-[0.08em] text-amber-400 drop-shadow-[0_0_22px_rgba(251,191,36,0.28)] md:text-7xl">
             {displayStoreName}
           </h1>
           <p className="mt-4 text-xl font-medium text-zinc-200 md:text-2xl">
