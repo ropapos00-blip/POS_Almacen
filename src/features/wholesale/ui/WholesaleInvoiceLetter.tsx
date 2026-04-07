@@ -1,6 +1,5 @@
 import type { RefObject } from 'react'
 import { formatCop } from '../../../shared/utils/currency'
-import { useAuthStore } from '../../auth/model/useAuthStore'
 import type { WholesaleInvoiceRow, WholesalePaymentMethod } from '../model/wholesale.types'
 
 function paymentLabel(method: WholesalePaymentMethod) {
@@ -18,13 +17,9 @@ export function WholesaleInvoiceLetter({
   invoice: WholesaleInvoiceRow | null
   printRef: RefObject<HTMLDivElement | null>
 }) {
-  const user = useAuthStore((state) => state.user)
-
   if (!invoice) {
     return null
   }
-
-  const businessName = user?.storeReceipt.legalName || user?.storeName || 'POS Retail'
 
   return (
     <div className="sr-only">
@@ -102,15 +97,19 @@ export function WholesaleInvoiceLetter({
 
         <header className="print-grid-head">
           <div>
-            <p className="store-logo-font" style={{ fontSize: 34, margin: 0 }}>{businessName}</p>
+            <p className="store-logo-font" style={{ fontSize: 34, margin: 0, fontFamily: "'Dolce Vita', 'Space Grotesk', sans-serif" }}>
+              Lickan42
+            </p>
           </div>
           <div style={{ textAlign: 'right' }}>
             <p style={{ fontSize: 34, margin: 0 }}>Factura</p>
-            <p style={{ margin: '6px 0 0 0', fontWeight: 700 }}>{businessName}</p>
-            {user?.storeReceipt.address ? <p style={{ margin: 0 }}>{user.storeReceipt.address}</p> : null}
-            {user?.storeReceipt.city ? <p style={{ margin: 0 }}>{user.storeReceipt.city}</p> : null}
-            {user?.storeReceipt.phone ? <p style={{ margin: 0 }}>{user.storeReceipt.phone}</p> : null}
-            {user?.email ? <p style={{ margin: 0 }}>{user.email}</p> : null}
+            <p style={{ margin: '6px 0 0 0', fontWeight: 700 }}>Lickan42</p>
+            <p style={{ margin: 0 }}>Cra 20 no 19 25</p>
+            <p style={{ margin: 0 }}>Centro</p>
+            <p style={{ margin: 0 }}>Manizales Caldas 170001</p>
+            <p style={{ margin: 0 }}>CO</p>
+            <p style={{ margin: 0 }}>3104115491</p>
+            <p style={{ margin: 0 }}>camisetalickan42@gmail.com</p>
           </div>
         </header>
 
