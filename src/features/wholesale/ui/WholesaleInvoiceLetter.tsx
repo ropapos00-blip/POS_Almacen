@@ -97,13 +97,15 @@ export function WholesaleInvoiceLetter({
 
         <header className="print-grid-head">
           <div>
-            <p className="store-logo-font" style={{ fontSize: 34, margin: 0, fontFamily: "'Dolce Vita', 'Space Grotesk', sans-serif" }}>
-              Lickan42
+            <p className="store-logo-font uppercase" style={{ fontSize: 34, margin: 0, fontFamily: "'Dolce Vita', 'Space Grotesk', sans-serif" }}>
+              LICKAN42
             </p>
           </div>
           <div style={{ textAlign: 'right' }}>
             <p style={{ fontSize: 34, margin: 0 }}>Factura</p>
-            <p style={{ margin: '6px 0 0 0', fontWeight: 700 }}>Lickan42</p>
+            <p className="store-logo-font uppercase" style={{ margin: '6px 0 0 0', fontWeight: 700, fontFamily: "'Dolce Vita', 'Space Grotesk', sans-serif" }}>
+              LICKAN42
+            </p>
             <p style={{ margin: 0 }}>Cra 20 no 19 25</p>
             <p style={{ margin: 0 }}>Centro</p>
             <p style={{ margin: 0 }}>Manizales Caldas 170001</p>
