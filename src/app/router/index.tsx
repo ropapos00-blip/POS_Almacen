@@ -12,6 +12,7 @@ import {
   ProductsPage,
   SalesPage,
   UsersPage,
+  WholesalePage,
 } from './lazyPages'
 
 function withFallback(node: React.ReactNode) {
@@ -104,6 +105,38 @@ export const appRouter = createBrowserRouter([
             <UsersPage />
           </ProtectedRoute>,
         ),
+      },
+      {
+        path: 'confeccion/dashboard',
+        element: withFallback(
+          <ProtectedRoute roles={['super_admin', 'admin']}>
+            <WholesalePage />
+          </ProtectedRoute>,
+        ),
+      },
+      {
+        path: 'confeccion/ventas',
+        element: withFallback(
+          <ProtectedRoute roles={['super_admin', 'admin']}>
+            <WholesalePage />
+          </ProtectedRoute>,
+        ),
+      },
+      {
+        path: 'confeccion/cartera',
+        element: withFallback(
+          <ProtectedRoute roles={['super_admin', 'admin']}>
+            <WholesalePage />
+          </ProtectedRoute>,
+        ),
+      },
+      {
+        path: 'confeccion',
+        element: <Navigate to="/confeccion/dashboard" replace />,
+      },
+      {
+        path: 'wholesale',
+        element: <Navigate to="/confeccion/dashboard" replace />,
       },
     ],
   },

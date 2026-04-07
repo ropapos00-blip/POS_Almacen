@@ -1,8 +1,8 @@
-import { FileText, LogOut, Package, ReceiptText, ShoppingCart, Store } from 'lucide-react'
+import { FileText, LayoutDashboard, LogOut, Package, ReceiptText, ShoppingCart, Store, Wallet } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuthStore } from '../../features/auth/model/useAuthStore'
 
-const navItems = [
+const storeNavItems = [
   { to: '/dashboard', label: 'Dashboard', icon: Store },
   { to: '/pos', label: 'POS', icon: ShoppingCart },
   { to: '/sales', label: 'Ventas', icon: ReceiptText },
@@ -13,11 +13,24 @@ const navItems = [
   { to: '/users', label: 'Usuarios', icon: Store, roles: ['super_admin', 'admin'] },
 ]
 
+const confeccionNavItems = [
+  { to: '/confeccion/dashboard', label: 'Dash Confeccion', icon: LayoutDashboard, roles: ['super_admin', 'admin'] },
+  { to: '/confeccion/ventas', label: 'Confeccion', icon: FileText, roles: ['super_admin', 'admin'] },
+  { to: '/confeccion/cartera', label: 'Cartera', icon: Wallet, roles: ['super_admin', 'admin'] },
+]
+
 export function AppShell() {
   const user = useAuthStore((state) => state.user)
   const signOut = useAuthStore((state) => state.signOut)
 
-  const visibleNavItems = navItems.filter((item) => {
+  const visibleStoreNavItems = storeNavItems.filter((item) => {
+    if (!('roles' in item) || !item.roles) {
+      return true
+    }
+    return user?.role ? item.roles.includes(user.role) : false
+  })
+
+  const visibleConfeccionNavItems = confeccionNavItems.filter((item) => {
     if (!('roles' in item) || !item.roles) {
       return true
     }
@@ -44,8 +57,9 @@ export function AppShell() {
             <p className="text-xs text-zinc-500">Rol: {user?.role}</p>
           </div>
 
+          <p className="mb-2 text-xs uppercase tracking-[0.14em] text-zinc-500">Tienda</p>
           <nav className="space-y-2">
-            {visibleNavItems.map((item) => {
+            {visibleStoreNavItems.map((item) => {
               const Icon = item.icon
               return (
                 <NavLink
@@ -76,6 +90,35 @@ export function AppShell() {
             <LogOut size={16} />
             Salir
           </button>
+
+          {visibleConfeccionNavItems.length > 0 ? (
+            <>
+              <div className="mt-6 border-t border-zinc-800 pt-4">
+                <p className="mb-2 text-xs uppercase tracking-[0.14em] text-zinc-500">Confeccion</p>
+                <nav className="space-y-2">
+                  {visibleConfeccionNavItems.map((item) => {
+                    const Icon = item.icon
+                    return (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition ${
+                            isActive
+                              ? 'bg-amber-400 text-zinc-950'
+                              : 'text-zinc-300 hover:bg-zinc-800'
+                          }`
+                        }
+                      >
+                        <Icon size={16} />
+                        <span>{item.label}</span>
+                      </NavLink>
+                    )
+                  })}
+                </nav>
+              </div>
+            </>
+          ) : null}
         </aside>
 
         <main className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-6 backdrop-blur">

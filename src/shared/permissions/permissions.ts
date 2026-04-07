@@ -8,6 +8,9 @@ export type Permission =
   | 'catalog:write'
   | 'sale:create'
   | 'sale:void'
+  | 'wholesale:read'
+  | 'wholesale:write'
+  | 'wholesale:credit'
   | 'users:read'
   | 'users:write'
   | 'audit:read'
@@ -21,6 +24,9 @@ const rolePermissions: Record<AppRole, Permission[]> = {
     'catalog:write',
     'sale:create',
     'sale:void',
+    'wholesale:read',
+    'wholesale:write',
+    'wholesale:credit',
     'users:read',
     'users:write',
     'audit:read',
@@ -33,6 +39,9 @@ const rolePermissions: Record<AppRole, Permission[]> = {
     'catalog:write',
     'sale:create',
     'sale:void',
+    'wholesale:read',
+    'wholesale:write',
+    'wholesale:credit',
     'users:read',
     'users:write',
     'audit:read',

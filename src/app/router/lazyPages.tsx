@@ -45,3 +45,9 @@ export const ManualInvoicesPage = lazy(() =>
     default: m.ManualInvoicesPage,
   })),
 )
+
+export const WholesalePage = lazy(() =>
+  import('../../features/wholesale/ui/WholesalePage').then((m) => ({
+    default: m.WholesalePage,
+  })),
+)

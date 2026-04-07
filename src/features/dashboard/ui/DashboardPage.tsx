@@ -103,38 +103,6 @@ export function DashboardPage() {
         </article>
       ) : null}
 
-      <div className="hidden grid gap-4 md:grid-cols-2">
-        <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-zinc-100">Top productos</h2>
-            <span className="text-xs text-zinc-500">Mes actual</span>
-          </div>
-          <ul className="mt-4 space-y-2">
-            {(data?.topProducts ?? []).map((row) => (
-              <li key={row.name} className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2">
-                <p className="text-sm font-medium text-zinc-200">{row.name}</p>
-                <p className="text-xs text-zinc-500">{row.quantity} uds · {formatCop(row.revenue)}</p>
-              </li>
-            ))}
-          </ul>
-        </article>
-
-        <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-zinc-100">Ventas por vendedor</h2>
-            <span className="text-xs text-zinc-500">Mes actual</span>
-          </div>
-          <ul className="mt-4 space-y-2">
-            {(data?.salesBySeller ?? []).map((row) => (
-              <li key={row.sellerId} className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2">
-                <p className="text-sm font-medium text-zinc-200">{row.sellerName}</p>
-                <p className="text-xs text-zinc-500">{row.totalSales} ventas · {formatCop(row.revenue)}</p>
-              </li>
-            ))}
-          </ul>
-        </article>
-      </div>
-
       {kpisQuery.isLoading ? <p className="text-sm text-zinc-500">Cargando KPI...</p> : null}
       {kpisQuery.error ? <p className="text-sm text-rose-400">No se pudieron cargar los KPI.</p> : null}
     </section>
