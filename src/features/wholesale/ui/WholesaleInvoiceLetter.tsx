@@ -148,7 +148,7 @@ export function WholesaleInvoiceLetter({
           <tbody>
             {(invoice.wholesale_invoice_items ?? []).map((item) => (
               <tr key={item.id}>
-                <td>{item.description}</td>
+                <td>{item.reference || item.description}</td>
                 <td className="num">{item.quantity}</td>
                 <td className="num">{formatCop(item.unit_price)}</td>
                 <td className="num">{formatCop(item.line_total)}</td>
@@ -180,8 +180,6 @@ export function WholesaleInvoiceLetter({
         <footer style={{ marginTop: 24 }}>
           <p style={{ margin: 0, fontSize: 25 }}>Instruccion de pago</p>
           <p style={{ margin: '6px 0 0 0' }}>Metodo: {paymentLabel(invoice.payment_method)}</p>
-          {invoice.payment_reference ? <p style={{ margin: '4px 0 0 0' }}>Referencia: {invoice.payment_reference}</p> : null}
-          {invoice.notes ? <p style={{ margin: '4px 0 0 0' }}>Notas: {invoice.notes}</p> : null}
         </footer>
       </div>
     </div>

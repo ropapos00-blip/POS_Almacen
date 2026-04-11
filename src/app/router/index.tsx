@@ -12,6 +12,7 @@ import {
   ProductsPage,
   SalesPage,
   UsersPage,
+  WholesaleInventoryPage,
   WholesalePage,
 } from './lazyPages'
 
@@ -127,6 +128,14 @@ export const appRouter = createBrowserRouter([
         element: withFallback(
           <ProtectedRoute roles={['super_admin', 'admin']}>
             <WholesalePage />
+          </ProtectedRoute>,
+        ),
+      },
+      {
+        path: 'confeccion/inventario',
+        element: withFallback(
+          <ProtectedRoute roles={['super_admin', 'admin']}>
+            <WholesaleInventoryPage />
           </ProtectedRoute>,
         ),
       },

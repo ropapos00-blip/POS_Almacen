@@ -17,6 +17,7 @@ const confeccionNavItems = [
   { to: '/confeccion/dashboard', label: 'Dash Confeccion', icon: LayoutDashboard, roles: ['super_admin', 'admin'] },
   { to: '/confeccion/ventas', label: 'Confeccion', icon: FileText, roles: ['super_admin', 'admin'] },
   { to: '/confeccion/cartera', label: 'Cartera', icon: Wallet, roles: ['super_admin', 'admin'] },
+  { to: '/confeccion/inventario', label: 'Inventario Confeccion', icon: Package, roles: ['super_admin', 'admin'] },
 ]
 
 export function AppShell() {

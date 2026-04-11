@@ -6,10 +6,49 @@ export type WholesaleInvoiceStatus = 'issued' | 'partial' | 'paid' | 'overdue' |
 
 export interface WholesaleInvoiceItem {
   id: string
+  wholesale_reference_id?: string | null
+  variant_id: string | null
+  reference: string
   description: string
   quantity: number
   unit_price: number
   line_total: number
+}
+
+export interface WholesaleReferenceOption {
+  variantId: string
+  reference: string
+  productName: string
+  unitPrice: number
+  quantityOnHand: number
+}
+
+export interface WholesaleInventoryRow {
+  variantId: string
+  reference: string
+  productName: string
+  unitPrice: number
+  quantityOnHand: number
+}
+
+export interface AdjustWholesaleInventoryInput {
+  variantId: string
+  currentQuantity: number
+  delta: number
+  reason: string
+}
+
+export interface CreateWholesaleReferenceInput {
+  reference: string
+  unitPrice: number
+  quantityOnHand: number
+}
+
+export interface UpdateWholesaleReferenceInput {
+  referenceId: string
+  reference: string
+  unitPrice: number
+  quantityOnHand: number
 }
 
 export interface WholesalePaymentRow {
@@ -47,17 +86,20 @@ export interface CreateWholesaleInvoiceInput {
   createdBy: string
   customerName: string
   customerPhone: string
-  notes: string
   discountTotal: number
   paymentMethod: WholesalePaymentMethod
-  paymentReference: string
   isCredit: boolean
   dueDate: string | null
   items: Array<{
-    description: string
+    variantId: string
     quantity: number
-    unitPrice: number
   }>
+}
+
+export interface UpdateWholesaleInvoiceHeaderInput {
+  invoiceId: string
+  customerName: string
+  customerPhone: string
 }
 
 export interface RegisterWholesalePaymentInput {

@@ -5,6 +5,9 @@ import { formatCop } from '../../../shared/utils/currency'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import {
   useCreateWholesaleInvoiceMutation,
+  useUpdateWholesaleInvoiceHeaderMutation,
+  useVoidWholesaleInvoiceMutation,
+  useWholesaleReferenceOptionsQuery,
   useRegisterWholesalePaymentMutation,
   useWholesaleInvoicesQuery,
 } from '../model/useWholesaleQueries'
@@ -17,7 +20,10 @@ import { WholesaleInvoiceLetter } from './WholesaleInvoiceLetter'
 
 interface DraftItem {
   id: string
-  description: string
+  variantId: string
+  reference: string
+  productName: string
+  stockAvailable: number
   quantity: number
   unitPrice: number
 }
@@ -25,10 +31,25 @@ interface DraftItem {
 function createDraftItem(): DraftItem {
   return {
     id: crypto.randomUUID(),
-    description: '',
-    quantity: 1,
+    variantId: '',
+    reference: '',
+    productName: '',
+    stockAvailable: 0,
+    quantity: 0,
     unitPrice: 0,
   }
+}
+
+function plusDaysIso(baseIsoDate: string, days: number) {
+  const date = new Date(`${baseIsoDate}T00:00:00`)
+  date.setDate(date.getDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
+function portfolioPriority(invoice: WholesaleInvoiceRow) {
+  if (invoice.status === 'overdue') return 0
+  if (invoice.balance_due > 0 && invoice.status !== 'void') return 1
+  return 2
 }
 
 function paymentLabel(method: WholesalePaymentMethod) {
@@ -37,6 +58,28 @@ function paymentLabel(method: WholesalePaymentMethod) {
   if (method === 'transfer') return 'Transferencia'
   if (method === 'mixed') return 'Mixto'
   return 'Credito'
+}
+
+function invoiceActionButtonClass(variant: 'print' | 'edit' | 'delete' | 'view' | 'pay') {
+  const base = 'inline-flex h-8 items-center justify-center rounded-lg border px-3 text-xs font-medium transition-colors'
+
+  if (variant === 'print') {
+    return `${base} border-amber-500/50 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20`
+  }
+
+  if (variant === 'edit') {
+    return `${base} border-sky-500/40 bg-sky-500/10 text-sky-200 hover:bg-sky-500/20`
+  }
+
+  if (variant === 'delete') {
+    return `${base} border-rose-500/50 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20`
+  }
+
+  if (variant === 'pay') {
+    return `${base} border-emerald-500/50 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20`
+  }
+
+  return `${base} border-zinc-700 bg-zinc-900/60 text-zinc-200 hover:bg-zinc-800`
 }
 
 export function WholesalePage() {
@@ -50,12 +93,7 @@ export function WholesalePage() {
   const user = useAuthStore((state) => state.user)
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
-  const [notes, setNotes] = useState('')
   const [discountTotal, setDiscountTotal] = useState(0)
-  const [paymentMethod, setPaymentMethod] = useState<WholesalePaymentMethod>('cash')
-  const [paymentReference, setPaymentReference] = useState('')
-  const [isCredit, setIsCredit] = useState(false)
-  const [dueDate, setDueDate] = useState('')
   const [feedback, setFeedback] = useState<string | null>(null)
   const [paymentFeedback, setPaymentFeedback] = useState<string | null>(null)
   const [selectedInvoice, setSelectedInvoice] = useState<WholesaleInvoiceRow | null>(null)
@@ -67,8 +105,12 @@ export function WholesalePage() {
   const [paymentNotes, setPaymentNotes] = useState('')
   const [searchText, setSearchText] = useState('')
   const [selectedCustomer, setSelectedCustomer] = useState('all')
-  const [portfolioFilter, setPortfolioFilter] = useState<'all' | 'receivable' | 'overdue' | 'paid'>('all')
+  const [portfolioFilter, setPortfolioFilter] = useState<'all' | 'receivable' | 'overdue' | 'paid'>('overdue')
   const [draftItems, setDraftItems] = useState<DraftItem[]>([createDraftItem()])
+  const [invoiceForEdit, setInvoiceForEdit] = useState<WholesaleInvoiceRow | null>(null)
+  const [editCustomerName, setEditCustomerName] = useState('')
+  const [editCustomerPhone, setEditCustomerPhone] = useState('')
+  const [invoiceForDelete, setInvoiceForDelete] = useState<WholesaleInvoiceRow | null>(null)
 
   useEffect(() => {
     if (!isCarteraView) {
@@ -86,8 +128,24 @@ export function WholesalePage() {
 
   const printRef = useRef<HTMLDivElement>(null)
   const invoicesQuery = useWholesaleInvoicesQuery(user?.storeId)
+  const referenceOptionsQuery = useWholesaleReferenceOptionsQuery(user?.storeId)
   const createMutation = useCreateWholesaleInvoiceMutation(user?.storeId)
+  const updateInvoiceMutation = useUpdateWholesaleInvoiceHeaderMutation(user?.storeId)
+  const voidInvoiceMutation = useVoidWholesaleInvoiceMutation(user?.storeId, user?.id)
   const paymentMutation = useRegisterWholesalePaymentMutation(user?.storeId)
+
+  const referenceByCode = useMemo(() => {
+    const map = new Map<string, { variantId: string; productName: string; unitPrice: number; quantityOnHand: number }>()
+    ;(referenceOptionsQuery.data ?? []).forEach((item) => {
+      map.set(item.reference.toLowerCase(), {
+        variantId: item.variantId,
+        productName: item.productName,
+        unitPrice: item.unitPrice,
+        quantityOnHand: item.quantityOnHand,
+      })
+    })
+    return map
+  }, [referenceOptionsQuery.data])
 
   useEffect(() => {
     if (!isCarteraView) {
@@ -241,7 +299,8 @@ export function WholesalePage() {
   const filteredInvoices = useMemo(() => {
     const rows = invoicesQuery.data ?? []
 
-    return rows.filter((invoice) => {
+    return rows
+      .filter((invoice) => {
       const query = searchText.trim().toLowerCase()
       const textMatch =
         query.length === 0 ||
@@ -270,8 +329,27 @@ export function WholesalePage() {
       }
 
       return true
-    })
+      })
+      .sort((a, b) => {
+        const priorityDiff = portfolioPriority(a) - portfolioPriority(b)
+        if (priorityDiff !== 0) {
+          return priorityDiff
+        }
+
+        const aDue = a.due_date ? new Date(`${a.due_date}T00:00:00`).getTime() : Number.MAX_SAFE_INTEGER
+        const bDue = b.due_date ? new Date(`${b.due_date}T00:00:00`).getTime() : Number.MAX_SAFE_INTEGER
+        if (aDue !== bDue) {
+          return aDue - bDue
+        }
+
+        return new Date(b.issued_at).getTime() - new Date(a.issued_at).getTime()
+      })
   }, [invoicesQuery.data, portfolioFilter, searchText, selectedCustomer])
+
+  const salesRecentInvoices = useMemo(() => {
+    const rows = invoicesQuery.data ?? []
+    return [...rows].sort((a, b) => new Date(b.issued_at).getTime() - new Date(a.issued_at).getTime())
+  }, [invoicesQuery.data])
 
   const currentPortfolioByCustomer = useMemo(() => {
     const map = new Map<
@@ -361,7 +439,7 @@ export function WholesalePage() {
     URL.revokeObjectURL(url)
   }
 
-  function updateDraftItem(id: string, field: keyof DraftItem, value: string | number) {
+  function updateDraftQuantity(id: string, quantity: number) {
     setDraftItems((prev) =>
       prev.map((item) => {
         if (item.id !== id) {
@@ -370,7 +448,41 @@ export function WholesalePage() {
 
         return {
           ...item,
-          [field]: value,
+          quantity: Math.max(0, quantity),
+        }
+      }),
+    )
+  }
+
+  function updateDraftReference(id: string, rawReference: string) {
+    const reference = rawReference.trim()
+    const selected = referenceByCode.get(reference.toLowerCase())
+
+    setDraftItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) {
+          return item
+        }
+
+        if (!selected) {
+          return {
+            ...item,
+            reference,
+            variantId: '',
+            productName: '',
+            stockAvailable: 0,
+            unitPrice: 0,
+          }
+        }
+
+        return {
+          ...item,
+          reference,
+          variantId: selected.variantId,
+          productName: selected.productName,
+          stockAvailable: selected.quantityOnHand,
+          unitPrice: selected.unitPrice,
+          quantity: item.quantity <= 0 ? 0 : Math.min(item.quantity, selected.quantityOnHand),
         }
       }),
     )
@@ -389,18 +501,25 @@ export function WholesalePage() {
 
   const cleanedItemsForValidation = draftItems
     .map((item) => ({
-      description: item.description.trim(),
+      variantId: item.variantId,
+      reference: item.reference,
+      productName: item.productName,
+      stockAvailable: item.stockAvailable,
       quantity: Math.max(0, Number(item.quantity || 0)),
       unitPrice: Math.max(0, Number(item.unitPrice || 0)),
     }))
-    .filter((item) => item.description && item.quantity > 0)
+    .filter((item) => item.variantId && item.quantity > 0)
+
+  const hasInvalidStockRequest = cleanedItemsForValidation.some(
+    (item) => item.quantity > item.stockAvailable,
+  )
 
   const canSubmit =
     Boolean(user?.storeId && user.id) &&
     cleanedItemsForValidation.length > 0 &&
+    !hasInvalidStockRequest &&
     discountTotal >= 0 &&
-    discountTotal <= subtotal &&
-    (!isCredit || Boolean(dueDate))
+    discountTotal <= subtotal
 
   async function saveInvoice(): Promise<WholesaleInvoiceRow | null> {
     setFeedback(null)
@@ -411,12 +530,12 @@ export function WholesalePage() {
     }
 
     if (cleanedItemsForValidation.length === 0) {
-      setFeedback('Agrega al menos un item valido para facturar.')
+      setFeedback('Agrega al menos una referencia valida para facturar.')
       return null
     }
 
-    if (isCredit && !dueDate) {
-      setFeedback('Selecciona fecha de vencimiento para factura a credito.')
+    if (hasInvalidStockRequest) {
+      setFeedback('Alguna referencia supera la cantidad disponible en inventario.')
       return null
     }
 
@@ -426,36 +545,40 @@ export function WholesalePage() {
         createdBy: user.id,
         customerName,
         customerPhone,
-        notes,
         discountTotal,
-        paymentMethod,
-        paymentReference,
-        isCredit,
-        dueDate: dueDate || null,
-        items: cleanedItemsForValidation,
+        paymentMethod: 'credit',
+        isCredit: true,
+        dueDate: null,
+        items: cleanedItemsForValidation.map((item) => ({
+          variantId: item.variantId,
+          quantity: item.quantity,
+        })),
       })
 
       const issuedAt = new Date().toISOString()
+      const dueDate = plusDaysIso(issuedAt.slice(0, 10), 30)
       const invoice: WholesaleInvoiceRow = {
         id: result.invoiceId,
         invoice_number: result.invoiceNumber,
         customer_name: customerName.trim() || null,
         customer_phone: customerPhone.trim() || null,
         issued_at: issuedAt,
-        due_date: isCredit ? dueDate : null,
+        due_date: dueDate,
         subtotal,
         discount_total: discountTotal,
         grand_total: total,
-        paid_total: isCredit ? 0 : total,
-        balance_due: isCredit ? total : 0,
-        is_credit: isCredit,
-        status: isCredit ? 'issued' : 'paid',
-        payment_method: isCredit ? 'credit' : paymentMethod,
-        payment_reference: paymentReference.trim() || null,
-        notes: notes.trim() || null,
+        paid_total: 0,
+        balance_due: total,
+        is_credit: true,
+        status: 'issued',
+        payment_method: 'credit',
+        payment_reference: null,
+        notes: null,
         wholesale_invoice_items: cleanedItemsForValidation.map((item, index) => ({
           id: `${result.invoiceId}-${index}`,
-          description: item.description,
+          variant_id: item.variantId,
+          reference: item.reference,
+          description: item.productName,
           quantity: item.quantity,
           unit_price: item.unitPrice,
           line_total: item.quantity * item.unitPrice,
@@ -467,12 +590,7 @@ export function WholesalePage() {
       setFeedback(`Factura de confeccion creada: ${result.invoiceNumber}`)
       setCustomerName('')
       setCustomerPhone('')
-      setNotes('')
       setDiscountTotal(0)
-      setPaymentMethod('cash')
-      setPaymentReference('')
-      setIsCredit(false)
-      setDueDate('')
       setDraftItems([createDraftItem()])
       return invoice
     } catch (error) {
@@ -517,6 +635,54 @@ export function WholesalePage() {
     setPaymentMethodForAbono('cash')
     setPaymentReferenceForAbono('')
     setPaymentNotes('')
+  }
+
+  function openEditInvoiceModal(invoice: WholesaleInvoiceRow) {
+    setInvoiceForEdit(invoice)
+    setEditCustomerName(invoice.customer_name ?? '')
+    setEditCustomerPhone(invoice.customer_phone ?? '')
+  }
+
+  function closeEditInvoiceModal() {
+    setInvoiceForEdit(null)
+    setEditCustomerName('')
+    setEditCustomerPhone('')
+  }
+
+  async function saveInvoiceHeaderEdit() {
+    if (!invoiceForEdit) {
+      return
+    }
+
+    try {
+      await updateInvoiceMutation.mutateAsync({
+        invoiceId: invoiceForEdit.id,
+        customerName: editCustomerName,
+        customerPhone: editCustomerPhone,
+      })
+      setFeedback(`Factura ${invoiceForEdit.invoice_number} actualizada.`)
+      closeEditInvoiceModal()
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : 'No se pudo editar la factura.')
+    }
+  }
+
+  async function confirmDeleteInvoice() {
+    if (!invoiceForDelete) {
+      return
+    }
+
+    const deletingInvoiceNumber = invoiceForDelete.invoice_number
+    const deletingInvoiceId = invoiceForDelete.id
+
+    try {
+      await voidInvoiceMutation.mutateAsync(deletingInvoiceId)
+      setFeedback(`Factura ${deletingInvoiceNumber} anulada.`)
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : 'No se pudo eliminar la factura.')
+    } finally {
+      setInvoiceForDelete(null)
+    }
   }
 
   async function confirmPayment() {
@@ -647,33 +813,38 @@ export function WholesalePage() {
           {draftItems.map((item, index) => (
             <div
               key={item.id}
-              className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1.5fr_90px_120px_auto]"
+              className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1.4fr_90px_120px_100px_auto]"
             >
               <input
-                value={item.description}
-                onChange={(event) => updateDraftItem(item.id, 'description', event.target.value)}
-                placeholder={`Articulo ${index + 1}`}
+                list="wholesale-reference-options"
+                value={item.reference}
+                onChange={(event) => updateDraftReference(item.id, event.target.value)}
+                placeholder={`Referencia ${index + 1}`}
                 className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
               />
               <input
                 type="number"
                 min={1}
-                value={item.quantity}
-                onChange={(event) =>
-                  updateDraftItem(item.id, 'quantity', Math.max(1, Number(event.target.value || 1)))
-                }
+                value={item.quantity === 0 ? '' : item.quantity}
+                placeholder="1"
+                max={Math.max(1, item.stockAvailable)}
+                onChange={(event) => updateDraftQuantity(item.id, Number(event.target.value || 0))}
                 className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
               />
               <input
                 type="number"
                 min={0}
-                step="0.01"
-                value={item.unitPrice === 0 ? '' : item.unitPrice}
-                placeholder="Precio"
-                onChange={(event) =>
-                  updateDraftItem(item.id, 'unitPrice', Math.max(0, Number(event.target.value || 0)))
-                }
-                className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                step={1}
+                value={item.unitPrice > 0 ? formatCop(item.unitPrice) : ''}
+                placeholder={formatCop(0)}
+                readOnly
+                className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
+              />
+              <input
+                type="number"
+                value={item.stockAvailable}
+                readOnly
+                className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
               />
               <button
                 type="button"
@@ -682,9 +853,30 @@ export function WholesalePage() {
               >
                 Quitar
               </button>
+              {item.productName ? (
+                <p className="md:col-span-5 text-xs text-zinc-500">{item.productName}</p>
+              ) : null}
+              {item.reference && !item.variantId ? (
+                <p className="md:col-span-5 text-xs text-rose-300">
+                  Referencia no encontrada. Selecciona una referencia existente.
+                </p>
+              ) : null}
+              {item.variantId && item.quantity > item.stockAvailable ? (
+                <p className="md:col-span-5 text-xs text-rose-300">
+                  Cantidad solicitada supera disponible ({item.stockAvailable}).
+                </p>
+              ) : null}
             </div>
           ))}
         </div>
+
+        <datalist id="wholesale-reference-options">
+          {(referenceOptionsQuery.data ?? []).map((item) => (
+            <option key={item.variantId} value={item.reference}>
+              {item.productName}
+            </option>
+          ))}
+        </datalist>
 
         <div className="mt-3 flex gap-2">
           <button
@@ -692,7 +884,7 @@ export function WholesalePage() {
             onClick={addDraftItem}
             className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200"
           >
-            Agregar articulo
+            Agregar referencia
           </button>
         </div>
 
@@ -717,74 +909,30 @@ export function WholesalePage() {
           </label>
 
           <label className="space-y-1">
-            <span className="text-xs text-zinc-400">Metodo de pago</span>
-            <select
-              value={paymentMethod}
-              onChange={(event) => setPaymentMethod(event.target.value as WholesalePaymentMethod)}
-              disabled={isCredit}
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm disabled:opacity-70"
-            >
-              <option value="cash">Efectivo</option>
-              <option value="card">Tarjeta</option>
-              <option value="transfer">Transferencia</option>
-              <option value="mixed">Mixto</option>
-            </select>
+            <span className="text-xs text-zinc-400">Condicion de pago</span>
+            <input
+              value="Credito automatico a 30 dias"
+              readOnly
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
+            />
           </label>
 
           <label className="space-y-1">
-            <span className="text-xs text-zinc-400">Descuento</span>
+            <span className="text-xs text-zinc-400">Descuento (COP)</span>
             <input
               type="number"
               min={0}
-              step="0.01"
+              step={1}
               value={discountTotal === 0 ? '' : discountTotal}
               placeholder="0"
-              onChange={(event) => setDiscountTotal(Number(event.target.value || 0))}
+              onChange={(event) => setDiscountTotal(Math.max(0, Math.round(Number(event.target.value || 0))))}
               className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
             />
           </label>
 
-          <label className="space-y-1 md:col-span-2">
-            <span className="text-xs text-zinc-400">Referencia de pago (opcional)</span>
-            <input
-              value={paymentReference}
-              onChange={(event) => setPaymentReference(event.target.value)}
-              placeholder="Transferencia, consignacion o datafono"
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-            />
-          </label>
-
-          <label className="inline-flex items-center gap-2 md:col-span-2">
-            <input
-              type="checkbox"
-              checked={isCredit}
-              onChange={(event) => setIsCredit(event.target.checked)}
-            />
-            <span className="text-sm text-zinc-300">Venta a credito</span>
-          </label>
-
-          {isCredit ? (
-            <label className="space-y-1 md:col-span-2">
-              <span className="text-xs text-zinc-400">Vencimiento del credito</span>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(event) => setDueDate(event.target.value)}
-                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-              />
-            </label>
-          ) : null}
-
-          <label className="space-y-1 md:col-span-2">
-            <span className="text-xs text-zinc-400">Instrucciones / notas</span>
-            <textarea
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              rows={2}
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-              placeholder="Ej. Cuenta de ahorros Bancolombia 725-854-498-91"
-            />
-          </label>
+          <p className="md:col-span-2 text-xs text-zinc-500">
+            La fecha de vencimiento se asigna automaticamente a 30 dias desde la emision.
+          </p>
         </div>
 
         <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 text-sm text-zinc-200">
@@ -802,9 +950,13 @@ export function WholesalePage() {
           </div>
           <div className="mt-1 flex justify-between text-xs text-zinc-400">
             <span>Saldo deudor</span>
-            <span>{formatCop(isCredit ? total : 0)}</span>
+            <span>{formatCop(total)}</span>
           </div>
         </div>
+
+        {referenceOptionsQuery.isLoading ? (
+          <p className="mt-2 text-xs text-zinc-500">Cargando referencias de inventario...</p>
+        ) : null}
 
         {feedback ? <p className="mt-3 text-sm text-amber-300">{feedback}</p> : null}
 
@@ -825,7 +977,7 @@ export function WholesalePage() {
         <h2 className="text-lg font-semibold text-zinc-100">Facturas confeccion recientes</h2>
         <p className="mt-1 text-xs text-zinc-500">Ultimas ventas creadas desde Confeccion</p>
         <ul className="mt-4 space-y-2">
-          {filteredInvoices.slice(0, 30).map((invoice) => (
+          {salesRecentInvoices.slice(0, 30).map((invoice) => (
             <li key={invoice.id} className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2">
               <div className="flex items-center justify-between gap-2">
                 <div>
@@ -836,14 +988,32 @@ export function WholesalePage() {
                 </div>
                 <p className="text-sm font-semibold text-emerald-300">{formatCop(invoice.grand_total)}</p>
               </div>
-              <div className="mt-2">
+              <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => reprint(invoice)}
-                  className="rounded-md border border-amber-500/40 px-2 py-1 text-xs text-amber-300"
+                  className={invoiceActionButtonClass('print')}
                 >
                   Reimprimir carta
                 </button>
+                {invoice.status !== 'void' ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => openEditInvoiceModal(invoice)}
+                      className={invoiceActionButtonClass('edit')}
+                    >
+                      Editar factura
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInvoiceForDelete(invoice)}
+                      className={invoiceActionButtonClass('delete')}
+                    >
+                      Eliminar factura
+                    </button>
+                  </>
+                ) : null}
               </div>
             </li>
           ))}
@@ -863,7 +1033,9 @@ export function WholesalePage() {
 
       <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
         <h2 className="text-lg font-semibold text-zinc-100">Facturas confeccion recientes</h2>
-        <p className="mt-1 text-xs text-zinc-500">Sub modulo separado del POS retail</p>
+        <p className="mt-1 text-xs text-zinc-500">
+          Sub modulo separado del POS retail. Se priorizan vencidas (rojo) para cobro.
+        </p>
 
         <div className="mt-3 grid gap-2 md:grid-cols-2">
           <input
@@ -929,7 +1101,14 @@ export function WholesalePage() {
 
         <ul className="mt-4 space-y-2">
           {filteredInvoices.map((invoice) => (
-            <li key={invoice.id} className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2">
+            <li
+              key={invoice.id}
+              className={`rounded-lg border px-3 py-2 ${
+                invoice.status === 'overdue'
+                  ? 'border-rose-500/50 bg-rose-950/25'
+                  : 'border-zinc-800 bg-zinc-950/60'
+              }`}
+            >
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-zinc-200">{invoice.invoice_number}</p>
@@ -940,31 +1119,49 @@ export function WholesalePage() {
                 <p className="text-sm font-semibold text-emerald-300">{formatCop(invoice.grand_total)}</p>
               </div>
 
-              <p className="mt-1 text-xs text-zinc-400">
+              <p className={`mt-1 text-xs ${invoice.status === 'overdue' ? 'text-rose-200' : 'text-zinc-400'}`}>
                 {paymentLabel(invoice.payment_method)} · Estado: {invoice.status} · Saldo:{' '}
                 {formatCop(invoice.balance_due)}
               </p>
 
-              <div className="mt-2">
+              <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => setSelectedPortfolioInvoice(invoice)}
-                  className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-200"
+                  className={invoiceActionButtonClass('view')}
                 >
                   Ver cartera
                 </button>
                 <button
                   type="button"
                   onClick={() => reprint(invoice)}
-                  className="ml-2 rounded-md border border-amber-500/40 px-2 py-1 text-xs text-amber-300"
+                  className={invoiceActionButtonClass('print')}
                 >
                   Reimprimir carta
                 </button>
+                {invoice.status !== 'void' ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => openEditInvoiceModal(invoice)}
+                      className={invoiceActionButtonClass('edit')}
+                    >
+                      Editar factura
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInvoiceForDelete(invoice)}
+                      className={invoiceActionButtonClass('delete')}
+                    >
+                      Eliminar factura
+                    </button>
+                  </>
+                ) : null}
                 {invoice.balance_due > 0 && invoice.status !== 'void' ? (
                   <button
                     type="button"
                     onClick={() => openPaymentModal(invoice)}
-                    className="ml-2 rounded-md border border-emerald-500/40 px-2 py-1 text-xs text-emerald-300"
+                    className={invoiceActionButtonClass('pay')}
                   >
                     Registrar abono
                   </button>
@@ -1029,6 +1226,87 @@ export function WholesalePage() {
       ) : null}
 
       <WholesaleInvoiceLetter invoice={selectedInvoice} printRef={printRef} />
+
+      {invoiceForEdit ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
+            <h3 className="text-lg font-semibold text-zinc-100">Editar factura</h3>
+            <p className="mt-2 text-sm text-zinc-400">Factura {invoiceForEdit.invoice_number}</p>
+
+            <div className="mt-4 grid gap-3">
+              <label className="space-y-1">
+                <span className="text-xs text-zinc-400">Cliente</span>
+                <input
+                  value={editCustomerName}
+                  onChange={(event) => setEditCustomerName(event.target.value)}
+                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                />
+              </label>
+
+              <label className="space-y-1">
+                <span className="text-xs text-zinc-400">Telefono cliente</span>
+                <input
+                  type="tel"
+                  value={editCustomerPhone}
+                  onChange={(event) => setEditCustomerPhone(event.target.value)}
+                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={closeEditInvoiceModal}
+                className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void saveInvoiceHeaderEdit()
+                }}
+                disabled={updateInvoiceMutation.isPending}
+                className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-zinc-900 disabled:opacity-70"
+              >
+                {updateInvoiceMutation.isPending ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {invoiceForDelete ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
+            <h3 className="text-lg font-semibold text-zinc-100">Eliminar factura</h3>
+            <p className="mt-2 text-sm text-zinc-400">
+              Seguro que deseas eliminar la factura {invoiceForDelete.invoice_number}? Esta accion anula la factura y devuelve el stock a confeccion.
+            </p>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setInvoiceForDelete(null)}
+                className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void confirmDeleteInvoice()
+                }}
+                disabled={voidInvoiceMutation.isPending}
+                className="rounded-lg bg-rose-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-70"
+              >
+                {voidInvoiceMutation.isPending ? 'Eliminando...' : 'Si, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {invoiceForPayment ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
