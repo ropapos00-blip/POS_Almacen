@@ -111,6 +111,7 @@ export function WholesalePage() {
   const [editCustomerName, setEditCustomerName] = useState('')
   const [editCustomerPhone, setEditCustomerPhone] = useState('')
   const [invoiceForDelete, setInvoiceForDelete] = useState<WholesaleInvoiceRow | null>(null)
+  const [showMissingProductModal, setShowMissingProductModal] = useState(false)
 
   useEffect(() => {
     if (!isCarteraView) {
@@ -137,7 +138,7 @@ export function WholesalePage() {
   const referenceByCode = useMemo(() => {
     const map = new Map<string, { variantId: string; productName: string; unitPrice: number; quantityOnHand: number }>()
     ;(referenceOptionsQuery.data ?? []).forEach((item) => {
-      map.set(item.reference.toLowerCase(), {
+      map.set(item.reference.trim().toLowerCase(), {
         variantId: item.variantId,
         productName: item.productName,
         unitPrice: item.unitPrice,
@@ -611,6 +612,15 @@ export function WholesalePage() {
     }, 0)
   }
 
+  function handleSaveAndPrintClick() {
+    if (cleanedItemsForValidation.length === 0 || total <= 0) {
+      setShowMissingProductModal(true)
+      return
+    }
+
+    void saveAndPrintInvoice()
+  }
+
   function reprint(invoice: WholesaleInvoiceRow) {
     setSelectedInvoice(invoice)
     setTimeout(() => {
@@ -824,19 +834,16 @@ export function WholesalePage() {
               />
               <input
                 type="number"
-                min={1}
+                min={0}
                 value={item.quantity === 0 ? '' : item.quantity}
-                placeholder="1"
+                placeholder="0"
                 max={Math.max(1, item.stockAvailable)}
                 onChange={(event) => updateDraftQuantity(item.id, Number(event.target.value || 0))}
                 className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
               />
               <input
-                type="number"
-                min={0}
-                step={1}
-                value={item.unitPrice > 0 ? formatCop(item.unitPrice) : ''}
-                placeholder={formatCop(0)}
+                type="text"
+                value={formatCop(item.unitPrice)}
                 readOnly
                 className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
               />
@@ -963,10 +970,8 @@ export function WholesalePage() {
         <div className="mt-4">
           <button
             type="button"
-            onClick={() => {
-              void saveAndPrintInvoice()
-            }}
-            disabled={createMutation.isPending || !canSubmit}
+            onClick={handleSaveAndPrintClick}
+            disabled={createMutation.isPending}
             className="w-full rounded-xl bg-amber-400 px-4 py-3 text-sm font-semibold text-zinc-900 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {createMutation.isPending ? 'Guardando...' : 'Guardar e imprimir factura carta'}
@@ -1382,6 +1387,27 @@ export function WholesalePage() {
                 className="rounded-lg bg-emerald-400 px-3 py-2 text-sm font-semibold text-zinc-900 disabled:opacity-70"
               >
                 {paymentMutation.isPending ? 'Guardando...' : 'Confirmar abono'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showMissingProductModal ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
+            <h3 className="text-lg font-semibold text-zinc-100">No se puede guardar</h3>
+            <p className="mt-2 text-sm text-zinc-400">
+              Debes agregar minimo un producto valido para generar la factura.
+            </p>
+
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setShowMissingProductModal(false)}
+                className="w-full rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-zinc-900"
+              >
+                Entendido
               </button>
             </div>
           </div>

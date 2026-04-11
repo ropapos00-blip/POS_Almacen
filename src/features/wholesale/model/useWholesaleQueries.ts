@@ -26,6 +26,8 @@ export function useWholesaleInvoicesQuery(storeId?: string) {
     queryKey: ['wholesale', 'invoices', 'list', storeId],
     queryFn: () => listWholesaleInvoices(storeId as string),
     enabled: Boolean(storeId),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: true,
   })
 }
 
@@ -92,6 +94,8 @@ export function useWholesaleReferenceOptionsQuery(storeId?: string) {
     queryKey: ['wholesale', 'reference-options', storeId],
     queryFn: () => listWholesaleReferenceOptions(storeId as string),
     enabled: Boolean(storeId),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: true,
   })
 }
 
@@ -100,6 +104,8 @@ export function useWholesaleInventoryStockQuery(storeId?: string) {
     queryKey: ['wholesale', 'inventory', storeId],
     queryFn: () => listWholesaleInventoryStock(storeId as string),
     enabled: Boolean(storeId),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: true,
   })
 }
 
