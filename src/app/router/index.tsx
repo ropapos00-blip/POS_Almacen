@@ -92,6 +92,10 @@ export const appRouter = createBrowserRouter([
         ),
       },
       {
+        path: 'ventas',
+        element: <Navigate to="/sales" replace />,
+      },
+      {
         path: 'manual-invoices',
         element: withFallback(
           <ProtectedRoute roles={['super_admin', 'admin', 'cashier']}>

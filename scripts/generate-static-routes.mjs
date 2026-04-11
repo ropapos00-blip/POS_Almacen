@@ -21,8 +21,14 @@ const staticRoutes = [
   'price-check',
   'inventory',
   'sales',
+  'ventas',
   'manual-invoices',
   'users',
+  'confeccion',
+  'confeccion/dashboard',
+  'confeccion/ventas',
+  'confeccion/cartera',
+  'confeccion/inventario',
 ]
 
 for (const route of staticRoutes) {
