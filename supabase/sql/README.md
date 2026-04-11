@@ -13,6 +13,7 @@
 10. `10_store_receipt_and_manual_invoice.sql`
 11. `11_wholesale_subpos.sql`
 12. `12_wholesale_inventory_credit_automation.sql`
+13. `13_manual_invoice_admin_actions.sql`
 
 ## Desde Supabase Dashboard
 1. Ir a `SQL Editor`.
@@ -29,6 +30,7 @@
 12. Repetir con `10_store_receipt_and_manual_invoice.sql`.
 13. Repetir con `11_wholesale_subpos.sql`.
 14. Repetir con `12_wholesale_inventory_credit_automation.sql`.
+15. Repetir con `13_manual_invoice_admin_actions.sql`.
 
 ## Si aparece error
 - Revisar la linea exacta que marca el editor.

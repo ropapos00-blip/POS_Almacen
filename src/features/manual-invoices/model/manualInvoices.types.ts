@@ -36,3 +36,18 @@ export interface CreateManualInvoiceInput {
     unitPrice: number
   }>
 }
+
+export interface UpdateManualInvoiceHeaderInput {
+  invoiceId: string
+  actorUserId: string
+  customerName: string
+  customerPhone: string
+  paymentMethod: ManualPaymentMethod
+  paymentReference: string
+}
+
+export interface VoidManualInvoiceInput {
+  invoiceId: string
+  actorUserId: string
+  reason?: string
+}

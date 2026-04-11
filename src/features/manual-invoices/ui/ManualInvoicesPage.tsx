@@ -7,6 +7,8 @@ import { useAuthStore } from '../../auth/model/useAuthStore'
 import {
   useCreateManualInvoiceMutation,
   useManualInvoicesQuery,
+  useUpdateManualInvoiceMutation,
+  useVoidManualInvoiceMutation,
 } from '../model/useManualInvoicesQueries'
 import type { ManualInvoiceRow, ManualPaymentMethod } from '../model/manualInvoices.types'
 import { ManualInvoiceReceipt } from './ManualInvoiceReceipt'
@@ -34,8 +36,24 @@ function createDraftItem(): DraftItem {
   }
 }
 
+function invoiceActionButtonClass(variant: 'print' | 'edit' | 'delete') {
+  const base =
+    'inline-flex h-8 w-full items-center justify-center rounded-lg border px-3 text-xs font-medium transition-colors'
+
+  if (variant === 'print') {
+    return `${base} border-amber-500/50 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20`
+  }
+
+  if (variant === 'edit') {
+    return `${base} border-sky-500/40 bg-sky-500/10 text-sky-200 hover:bg-sky-500/20`
+  }
+
+  return `${base} border-rose-500/50 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20`
+}
+
 export function ManualInvoicesPage() {
   const user = useAuthStore((state) => state.user)
+  const isAdminUser = user?.role === 'admin' || user?.role === 'super_admin'
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [discountTotal, setDiscountTotal] = useState(0)
@@ -44,10 +62,18 @@ export function ManualInvoicesPage() {
   const [feedback, setFeedback] = useState<string | null>(null)
   const [draftItems, setDraftItems] = useState<DraftItem[]>([createDraftItem()])
   const [selectedInvoice, setSelectedInvoice] = useState<ManualInvoiceRow | null>(null)
+  const [invoiceForEdit, setInvoiceForEdit] = useState<ManualInvoiceRow | null>(null)
+  const [editCustomerName, setEditCustomerName] = useState('')
+  const [editCustomerPhone, setEditCustomerPhone] = useState('')
+  const [editPaymentMethod, setEditPaymentMethod] = useState<ManualPaymentMethod>('cash')
+  const [editPaymentReference, setEditPaymentReference] = useState('')
+  const [invoiceForDelete, setInvoiceForDelete] = useState<ManualInvoiceRow | null>(null)
   const receiptRef = useRef<HTMLDivElement>(null)
 
   const invoicesQuery = useManualInvoicesQuery(user?.storeId)
   const createMutation = useCreateManualInvoiceMutation(user?.storeId)
+  const updateMutation = useUpdateManualInvoiceMutation(user?.storeId)
+  const voidMutation = useVoidManualInvoiceMutation(user?.storeId)
 
   const handlePrint = useReactToPrint({
     contentRef: receiptRef,
@@ -63,12 +89,20 @@ export function ManualInvoicesPage() {
   }, [discountTotal, subtotal])
 
   const allowsPaymentReference = paymentMethod === 'card' || paymentMethod === 'transfer'
+  const editAllowsPaymentReference =
+    editPaymentMethod === 'card' || editPaymentMethod === 'transfer'
 
   useEffect(() => {
     if (!allowsPaymentReference && paymentReference) {
       setPaymentReference('')
     }
   }, [allowsPaymentReference, paymentReference])
+
+  useEffect(() => {
+    if (!editAllowsPaymentReference && editPaymentReference) {
+      setEditPaymentReference('')
+    }
+  }, [editAllowsPaymentReference, editPaymentReference])
 
   function updateDraftItem(id: string, field: keyof DraftItem, value: string | number) {
     setDraftItems((prev) =>
@@ -199,6 +233,70 @@ export function ManualInvoicesPage() {
     setTimeout(() => {
       void handlePrint()
     }, 0)
+  }
+
+  function openEditInvoiceModal(invoice: ManualInvoiceRow) {
+    setInvoiceForEdit(invoice)
+    setEditCustomerName(invoice.customer_name ?? '')
+    setEditCustomerPhone(invoice.customer_phone ?? '')
+    setEditPaymentMethod(invoice.payment_method)
+    setEditPaymentReference(invoice.payment_reference ?? '')
+  }
+
+  function closeEditInvoiceModal() {
+    setInvoiceForEdit(null)
+    setEditCustomerName('')
+    setEditCustomerPhone('')
+    setEditPaymentMethod('cash')
+    setEditPaymentReference('')
+  }
+
+  async function saveInvoiceHeaderEdit() {
+    if (!invoiceForEdit || !user?.id) {
+      return
+    }
+
+    try {
+      await updateMutation.mutateAsync({
+        invoiceId: invoiceForEdit.id,
+        actorUserId: user.id,
+        customerName: editCustomerName,
+        customerPhone: editCustomerPhone,
+        paymentMethod: editPaymentMethod,
+        paymentReference: editAllowsPaymentReference ? editPaymentReference : '',
+      })
+
+      setFeedback(`Factura ${invoiceForEdit.invoice_number} actualizada.`)
+      closeEditInvoiceModal()
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : 'No se pudo editar la factura manual.')
+    }
+  }
+
+  async function confirmDeleteInvoice() {
+    if (!invoiceForDelete || !user?.id) {
+      return
+    }
+
+    const deletingInvoice = invoiceForDelete
+
+    try {
+      await voidMutation.mutateAsync({
+        invoiceId: deletingInvoice.id,
+        actorUserId: user.id,
+        reason: 'Anulada manualmente desde admin',
+      })
+
+      if (selectedInvoice?.id === deletingInvoice.id) {
+        setSelectedInvoice(null)
+      }
+
+      setFeedback(`Factura ${deletingInvoice.invoice_number} eliminada.`)
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : 'No se pudo eliminar la factura manual.')
+    } finally {
+      setInvoiceForDelete(null)
+    }
   }
 
   return (
@@ -373,14 +471,14 @@ export function ManualInvoicesPage() {
             <li key={invoice.id} className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2">
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold text-zinc-200">{invoice.invoice_number}</p>
-                  <p className="text-xs text-zinc-500">
+                  <p className="break-all text-sm font-semibold text-zinc-200">{invoice.invoice_number}</p>
+                  <p className="wrap-break-word text-xs text-zinc-500">
                     {new Date(invoice.created_at).toLocaleString()} ·{' '}
                     {invoice.customer_name ?? 'Cliente general'}
                     {invoice.customer_phone ? ` · ${invoice.customer_phone}` : ''}
                   </p>
                 </div>
-                <p className="text-sm font-semibold text-emerald-300">{formatCop(invoice.grand_total)}</p>
+                <p className="shrink-0 text-sm font-semibold text-emerald-300">{formatCop(invoice.grand_total)}</p>
               </div>
 
               <p className="mt-1 text-xs text-zinc-400">
@@ -388,14 +486,32 @@ export function ManualInvoicesPage() {
                 {invoice.payment_reference ? ` · Ref ${invoice.payment_reference}` : ''}
               </p>
 
-              <div className="mt-2">
+              <div className={`mt-3 grid gap-2 ${isAdminUser ? 'sm:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
                 <button
                   type="button"
                   onClick={() => selectAndReprint(invoice)}
-                  className="rounded-md border border-amber-500/40 px-2 py-1 text-xs text-amber-300"
+                  className={invoiceActionButtonClass('print')}
                 >
-                  Reimprimir ticket
+                  Reimprimir
                 </button>
+                {isAdminUser ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => openEditInvoiceModal(invoice)}
+                      className={invoiceActionButtonClass('edit')}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInvoiceForDelete(invoice)}
+                      className={invoiceActionButtonClass('delete')}
+                    >
+                      Eliminar
+                    </button>
+                  </>
+                ) : null}
               </div>
             </li>
           ))}
@@ -403,6 +519,113 @@ export function ManualInvoicesPage() {
       </article>
 
       <ManualInvoiceReceipt invoice={selectedInvoice} receiptRef={receiptRef} />
+
+      {invoiceForEdit ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
+            <h3 className="text-lg font-semibold text-zinc-100">Editar factura manual</h3>
+            <p className="mt-2 text-sm text-zinc-400">Factura {invoiceForEdit.invoice_number}</p>
+
+            <div className="mt-4 grid gap-3">
+              <label className="space-y-1">
+                <span className="text-xs text-zinc-400">Cliente</span>
+                <input
+                  value={editCustomerName}
+                  onChange={(event) => setEditCustomerName(event.target.value)}
+                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                />
+              </label>
+
+              <label className="space-y-1">
+                <span className="text-xs text-zinc-400">Telefono cliente</span>
+                <input
+                  type="tel"
+                  value={editCustomerPhone}
+                  onChange={(event) => setEditCustomerPhone(event.target.value)}
+                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                />
+              </label>
+
+              <label className="space-y-1">
+                <span className="text-xs text-zinc-400">Metodo de pago</span>
+                <select
+                  value={editPaymentMethod}
+                  onChange={(event) => setEditPaymentMethod(event.target.value as ManualPaymentMethod)}
+                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                >
+                  <option value="cash">Efectivo</option>
+                  <option value="card">Tarjeta</option>
+                  <option value="transfer">Transferencia</option>
+                  <option value="mixed">Mixto</option>
+                </select>
+              </label>
+
+              {editAllowsPaymentReference ? (
+                <label className="space-y-1">
+                  <span className="text-xs text-zinc-400">Referencia pago (opcional)</span>
+                  <input
+                    value={editPaymentReference}
+                    onChange={(event) => setEditPaymentReference(event.target.value)}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  />
+                </label>
+              ) : null}
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={closeEditInvoiceModal}
+                className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void saveInvoiceHeaderEdit()
+                }}
+                disabled={updateMutation.isPending}
+                className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-zinc-900 disabled:opacity-70"
+              >
+                {updateMutation.isPending ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {invoiceForDelete ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
+            <h3 className="text-lg font-semibold text-zinc-100">Eliminar factura manual</h3>
+            <p className="mt-2 text-sm text-zinc-400">
+              Seguro que deseas eliminar la factura {invoiceForDelete.invoice_number}? Esta accion la
+              deja en cero y no afecta inventario.
+            </p>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setInvoiceForDelete(null)}
+                className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void confirmDeleteInvoice()
+                }}
+                disabled={voidMutation.isPending}
+                className="rounded-lg bg-rose-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-70"
+              >
+                {voidMutation.isPending ? 'Eliminando...' : 'Si, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }
