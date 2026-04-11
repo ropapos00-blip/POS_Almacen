@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { formatCop } from '../../../shared/utils/currency'
+import { createClientId } from '../../../shared/utils/id'
+import { parseDecimalInput, parseIntegerInput } from '../../../shared/utils/numberInput'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import {
   useCreateManualInvoiceMutation,
@@ -25,7 +27,7 @@ function paymentLabel(method: ManualPaymentMethod) {
 
 function createDraftItem(): DraftItem {
   return {
-    id: crypto.randomUUID(),
+    id: createClientId(),
     description: '',
     quantity: 1,
     unitPrice: 0,
@@ -221,21 +223,31 @@ export function ManualInvoicesPage() {
               />
               <input
                 type="number"
+                inputMode="numeric"
                 min={1}
                 value={item.quantity}
                 onChange={(event) =>
-                  updateDraftItem(item.id, 'quantity', Math.max(1, Number(event.target.value || 1)))
+                  updateDraftItem(
+                    item.id,
+                    'quantity',
+                    Math.max(1, parseIntegerInput(event.target.value, 1)),
+                  )
                 }
                 className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
               />
               <input
                 type="number"
+                inputMode="decimal"
                 min={0}
                 step="0.01"
                 value={item.unitPrice === 0 ? '' : item.unitPrice}
                 placeholder="Precio"
                 onChange={(event) =>
-                  updateDraftItem(item.id, 'unitPrice', Math.max(0, Number(event.target.value || 0)))
+                  updateDraftItem(
+                    item.id,
+                    'unitPrice',
+                    Math.max(0, parseDecimalInput(event.target.value, 0)),
+                  )
                 }
                 className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
               />
@@ -298,11 +310,12 @@ export function ManualInvoicesPage() {
             <span className="text-xs text-zinc-400">Descuento</span>
             <input
               type="number"
+              inputMode="decimal"
               min={0}
               step="0.01"
               value={discountTotal === 0 ? '' : discountTotal}
               placeholder="0"
-              onChange={(event) => setDiscountTotal(Number(event.target.value || 0))}
+              onChange={(event) => setDiscountTotal(parseDecimalInput(event.target.value, 0))}
               className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
             />
           </label>

@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { formatCop } from '../../../shared/utils/currency'
+import { parseDecimalInput, parseIntegerInput } from '../../../shared/utils/numberInput'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import { useCreatePosSaleMutation, usePosVariantsQuery } from '../model/usePosQueries'
 import type { PaymentMethod, PosCartItem } from '../model/pos.types'
@@ -281,11 +282,12 @@ export function PosPage() {
               <div className="mt-2 flex items-center justify-between gap-2">
                 <input
                   type="number"
+                  inputMode="numeric"
                   min={1}
                   max={item.stockAvailable}
                   value={item.quantity}
                   onChange={(event) =>
-                    updateCartQty(item.variantId, Number(event.target.value || 1))
+                    updateCartQty(item.variantId, parseIntegerInput(event.target.value, 1))
                   }
                   className="w-20 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm"
                 />
@@ -311,12 +313,13 @@ export function PosPage() {
             <span className="text-xs text-zinc-400">Descuento</span>
             <input
               type="number"
+              inputMode="decimal"
               min={0}
               step="0.01"
               value={discount === 0 ? '' : discount}
               placeholder="0"
               onChange={(event) => {
-                const nextDiscount = Number(event.target.value || 0)
+                const nextDiscount = parseDecimalInput(event.target.value, 0)
                 setDiscount(nextDiscount)
                 if (nextDiscount <= 0) {
                   setDiscountAuthorizedBy(null)

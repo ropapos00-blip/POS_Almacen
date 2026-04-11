@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { formatCop } from '../../../shared/utils/currency'
+import { createClientId } from '../../../shared/utils/id'
+import { parseDecimalInput, parseIntegerInput } from '../../../shared/utils/numberInput'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import {
   useCreateWholesaleInvoiceMutation,
@@ -30,7 +32,7 @@ interface DraftItem {
 
 function createDraftItem(): DraftItem {
   return {
-    id: crypto.randomUUID(),
+    id: createClientId(),
     variantId: '',
     reference: '',
     productName: '',
@@ -700,7 +702,7 @@ export function WholesalePage() {
       return
     }
 
-    const amount = Number(paymentAmount)
+    const amount = parseDecimalInput(paymentAmount, 0)
 
     if (!Number.isFinite(amount) || amount <= 0) {
       setPaymentFeedback('El valor del abono debe ser mayor a cero.')
@@ -834,11 +836,14 @@ export function WholesalePage() {
               />
               <input
                 type="number"
+                inputMode="numeric"
                 min={0}
                 value={item.quantity === 0 ? '' : item.quantity}
                 placeholder="0"
                 max={Math.max(1, item.stockAvailable)}
-                onChange={(event) => updateDraftQuantity(item.id, Number(event.target.value || 0))}
+                onChange={(event) =>
+                  updateDraftQuantity(item.id, parseIntegerInput(event.target.value, 0))
+                }
                 className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
               />
               <input
@@ -928,11 +933,14 @@ export function WholesalePage() {
             <span className="text-xs text-zinc-400">Descuento (COP)</span>
             <input
               type="number"
+              inputMode="numeric"
               min={0}
               step={1}
               value={discountTotal === 0 ? '' : discountTotal}
               placeholder="0"
-              onChange={(event) => setDiscountTotal(Math.max(0, Math.round(Number(event.target.value || 0))))}
+              onChange={(event) =>
+                setDiscountTotal(Math.max(0, parseIntegerInput(event.target.value, 0)))
+              }
               className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
             />
           </label>
@@ -971,7 +979,7 @@ export function WholesalePage() {
           <button
             type="button"
             onClick={handleSaveAndPrintClick}
-            disabled={createMutation.isPending}
+            disabled={createMutation.isPending || !canSubmit}
             className="w-full rounded-xl bg-amber-400 px-4 py-3 text-sm font-semibold text-zinc-900 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {createMutation.isPending ? 'Guardando...' : 'Guardar e imprimir factura carta'}
@@ -1326,6 +1334,7 @@ export function WholesalePage() {
                 <span className="text-xs text-zinc-400">Valor del abono</span>
                 <input
                   type="number"
+                  inputMode="decimal"
                   min={0}
                   step="0.01"
                   value={paymentAmount}
