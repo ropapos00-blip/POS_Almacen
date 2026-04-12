@@ -1,8 +1,11 @@
 import { supabase } from '../../../integrations/supabase/client/supabaseClient'
 import type {
+  CreateWholesaleFinanceMovementInput,
   CreateWholesaleInvoiceInput,
   RegisterWholesalePaymentInput,
+  UpdateWholesaleInvoiceInput,
   UpdateWholesaleInvoiceHeaderInput,
+  WholesaleFinanceMovementRow,
   WholesaleReferenceOption,
   WholesaleInvoiceRow,
 } from '../model/wholesale.types'
@@ -117,6 +120,44 @@ export async function updateWholesaleInvoiceHeader(input: UpdateWholesaleInvoice
   }
 }
 
+export async function updateWholesaleInvoice(input: UpdateWholesaleInvoiceInput) {
+  const { data, error } = await supabase.rpc('update_wholesale_invoice_transaction', {
+    p_invoice_id: input.invoiceId,
+    p_actor_user_id: input.actorUserId,
+    p_invoice_number: input.invoiceNumber.trim(),
+    p_customer_name: input.customerName.trim() || null,
+    p_customer_phone: input.customerPhone.trim() || null,
+    p_discount_total: input.discountTotal,
+    p_items: input.items.map((item) => ({
+      reference_id: item.variantId,
+      quantity: item.quantity,
+    })),
+  })
+
+  if (error) {
+    if (
+      error.code === 'PGRST202' ||
+      error.message.toLowerCase().includes('update_wholesale_invoice_transaction')
+    ) {
+      throw new Error(
+        'No existe la funcion RPC update_wholesale_invoice_transaction en Supabase. Ejecuta el script 14_wholesale_edit_and_finance.sql y reintenta.',
+      )
+    }
+
+    throw new Error(error.message)
+  }
+
+  const first = Array.isArray(data) ? data[0] : null
+  if (!first?.invoice_id) {
+    throw new Error('No se pudo actualizar la factura de confeccion.')
+  }
+
+  return {
+    invoiceId: first.invoice_id as string,
+    invoiceNumber: first.invoice_number as string,
+  }
+}
+
 export async function voidWholesaleInvoice(invoiceId: string, actorUserId: string) {
   const { data, error } = await supabase.rpc('void_wholesale_invoice_transaction', {
     p_invoice_id: invoiceId,
@@ -149,8 +190,8 @@ export async function registerWholesalePayment(input: RegisterWholesalePaymentIn
     p_actor_user_id: input.actorUserId,
     p_amount: input.amount,
     p_payment_method: input.paymentMethod,
-    p_payment_reference: input.paymentReference.trim() || null,
-    p_notes: input.notes.trim() || null,
+    p_payment_reference: null,
+    p_notes: null,
   })
 
   if (error) {
@@ -174,5 +215,55 @@ export async function registerWholesalePayment(input: RegisterWholesalePaymentIn
     paidTotal: Number(first.paid_total ?? 0),
     balanceDue: Number(first.balance_due ?? 0),
     status: String(first.status ?? 'issued'),
+  }
+}
+
+export async function listWholesaleFinanceMovements(storeId: string) {
+  const { data, error } = await supabase
+    .from('wholesale_finance_movements')
+    .select('id, store_id, kind, amount, movement_date, category, notes, created_by, created_at')
+    .eq('store_id', storeId)
+    .order('movement_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(400)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return (data ?? []) as WholesaleFinanceMovementRow[]
+}
+
+export async function createWholesaleFinanceMovement(input: CreateWholesaleFinanceMovementInput) {
+  const { data, error } = await supabase.rpc('create_wholesale_finance_movement', {
+    p_store_id: input.storeId,
+    p_actor_user_id: input.actorUserId,
+    p_kind: input.kind,
+    p_amount: input.amount,
+    p_movement_date: input.movementDate,
+    p_category: input.category.trim() || null,
+    p_notes: input.notes.trim() || null,
+  })
+
+  if (error) {
+    if (
+      error.code === 'PGRST202' ||
+      error.message.toLowerCase().includes('create_wholesale_finance_movement')
+    ) {
+      throw new Error(
+        'No existe la funcion RPC create_wholesale_finance_movement en Supabase. Ejecuta el script 14_wholesale_edit_and_finance.sql y reintenta.',
+      )
+    }
+
+    throw new Error(error.message)
+  }
+
+  const first = Array.isArray(data) ? data[0] : null
+  if (!first?.movement_id) {
+    throw new Error('No se pudo registrar el movimiento financiero de confeccion.')
+  }
+
+  return {
+    movementId: first.movement_id as string,
   }
 }

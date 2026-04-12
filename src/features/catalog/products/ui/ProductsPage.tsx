@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMemo, useRef, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { useReactToPrint } from 'react-to-print'
 import {
   categorySchema,
@@ -18,6 +18,7 @@ import {
 import { CatalogCrudSection } from '../../ui/CatalogCrudSection'
 import { VariantBarcodeLabel } from '../../ui/VariantBarcodeLabel'
 import { useAuthStore } from '../../../auth/model/useAuthStore'
+import { formatCopInput, parseCopIntegerInput } from '../../../../shared/utils/numberInput'
 import type {
   Category,
   CategoryInput,
@@ -375,19 +376,33 @@ export function ProductsPage() {
               {...variantForm.register('color')}
               className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm"
             />
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Costo"
-              {...variantForm.register('costPrice', { valueAsNumber: true })}
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm"
+            <Controller
+              control={variantForm.control}
+              name="costPrice"
+              render={({ field }) => (
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Costo"
+                  value={field.value > 0 ? formatCopInput(field.value) : ''}
+                  onChange={(event) => field.onChange(parseCopIntegerInput(event.target.value, 0))}
+                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm"
+                />
+              )}
             />
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Precio venta"
-              {...variantForm.register('salePrice', { valueAsNumber: true })}
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm"
+            <Controller
+              control={variantForm.control}
+              name="salePrice"
+              render={({ field }) => (
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Precio venta"
+                  value={field.value > 0 ? formatCopInput(field.value) : ''}
+                  onChange={(event) => field.onChange(parseCopIntegerInput(event.target.value, 0))}
+                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm"
+                />
+              )}
             />
             <input
               placeholder="SKU (opcional)"

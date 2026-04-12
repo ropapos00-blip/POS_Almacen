@@ -14,6 +14,9 @@
 11. `11_wholesale_subpos.sql`
 12. `12_wholesale_inventory_credit_automation.sql`
 13. `13_manual_invoice_admin_actions.sql`
+14. `14_wholesale_edit_and_finance.sql`
+15. `15_fix_register_wholesale_payment_ambiguity.sql`
+16. `16_restore_wholesale_create_invoice_rpc.sql`
 
 ## Desde Supabase Dashboard
 1. Ir a `SQL Editor`.
@@ -31,6 +34,9 @@
 13. Repetir con `11_wholesale_subpos.sql`.
 14. Repetir con `12_wholesale_inventory_credit_automation.sql`.
 15. Repetir con `13_manual_invoice_admin_actions.sql`.
+16. Repetir con `14_wholesale_edit_and_finance.sql`.
+17. Repetir con `15_fix_register_wholesale_payment_ambiguity.sql`.
+18. Repetir con `16_restore_wholesale_create_invoice_rpc.sql`.
 
 ## Si aparece error
 - Revisar la linea exacta que marca el editor.

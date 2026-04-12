@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { formatCop } from '../../../shared/utils/currency'
+import { formatCopInput, parseCopIntegerInput } from '../../../shared/utils/numberInput'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import {
   useCreateWholesaleReferenceMutation,
@@ -20,6 +21,7 @@ export function WholesaleInventoryPage() {
   const [reference, setReference] = useState('')
   const [quantityOnHand, setQuantityOnHand] = useState('')
   const [unitPrice, setUnitPrice] = useState('')
+  const [investmentAmount, setInvestmentAmount] = useState('')
   const [editingRow, setEditingRow] = useState<WholesaleInventoryRow | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<WholesaleInventoryRow | null>(null)
 
@@ -50,13 +52,15 @@ export function WholesaleInventoryPage() {
     setReference('')
     setQuantityOnHand('')
     setUnitPrice('')
+    setInvestmentAmount('')
   }
 
   function startEdit(row: WholesaleInventoryRow) {
     setEditingRow(row)
     setReference(row.reference)
     setQuantityOnHand(String(row.quantityOnHand))
-    setUnitPrice(String(row.unitPrice))
+    setUnitPrice(formatCopInput(row.unitPrice))
+    setInvestmentAmount('')
     setFeedback(null)
   }
 
@@ -67,7 +71,8 @@ export function WholesaleInventoryPage() {
     }
 
     const parsedQty = Math.max(0, Math.trunc(Number(quantityOnHand || 0)))
-    const parsedUnitPrice = Math.max(0, Math.round(Number(unitPrice || 0)))
+    const parsedUnitPrice = Math.max(0, parseCopIntegerInput(unitPrice, 0))
+    const parsedInvestmentAmount = Math.max(0, parseCopIntegerInput(investmentAmount, 0))
 
     if (!reference.trim()) {
       setFeedback('La referencia es obligatoria.')
@@ -84,6 +89,16 @@ export function WholesaleInventoryPage() {
       return
     }
 
+    if (!Number.isFinite(parsedInvestmentAmount)) {
+      setFeedback('Inversion invalida.')
+      return
+    }
+
+    if (!editingRow && parsedQty > 0 && parsedInvestmentAmount <= 0) {
+      setFeedback('Debes indicar la inversion de esta entrada de inventario.')
+      return
+    }
+
     try {
       setFeedback(null)
 
@@ -92,13 +107,16 @@ export function WholesaleInventoryPage() {
           reference,
           quantityOnHand: parsedQty,
           unitPrice: parsedUnitPrice,
+          investmentAmount: parsedInvestmentAmount,
         })
         if (result?.action === 'restocked') {
           setFeedback(
-            `Referencia ${result.reference} ya existia. Se agregaron unidades. Nuevo stock: ${result.finalQuantity}.`,
+            `Referencia ${result.reference} ya existia. Se agregaron unidades. Nuevo stock: ${result.finalQuantity}. Inversion registrada: ${formatCop(parsedInvestmentAmount)}.`,
           )
         } else {
-          setFeedback(`Referencia ${reference.trim().toUpperCase()} creada en inventario de confeccion.`)
+          setFeedback(
+            `Referencia ${reference.trim().toUpperCase()} creada en inventario de confeccion. Inversion registrada: ${formatCop(parsedInvestmentAmount)}.`,
+          )
         }
       } else {
         const payload: UpdateWholesaleReferenceInput = {
@@ -165,7 +183,7 @@ export function WholesaleInventoryPage() {
           Cada referencia inicia en cero por defecto y es exclusiva de confeccion.
         </p>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
           <label className="space-y-1">
             <span className="text-xs text-zinc-400">Referencia</span>
             <input
@@ -191,12 +209,23 @@ export function WholesaleInventoryPage() {
           <label className="space-y-1">
             <span className="text-xs text-zinc-400">Valor unitario (COP)</span>
             <input
-              type="number"
-              min={0}
-              step={1}
+              type="text"
+              inputMode="numeric"
               value={unitPrice}
               placeholder="0"
-              onChange={(event) => setUnitPrice(event.target.value)}
+              onChange={(event) => setUnitPrice(formatCopInput(event.target.value))}
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+            />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-xs text-zinc-400">Inversion entrada (COP)</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={investmentAmount}
+              placeholder="0"
+              onChange={(event) => setInvestmentAmount(formatCopInput(event.target.value))}
               className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
             />
           </label>

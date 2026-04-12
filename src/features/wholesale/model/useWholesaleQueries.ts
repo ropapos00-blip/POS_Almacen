@@ -1,9 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  createWholesaleFinanceMovement,
   createWholesaleInvoice,
+  listWholesaleFinanceMovements,
   listWholesaleReferenceOptions,
   listWholesaleInvoices,
   registerWholesalePayment,
+  updateWholesaleInvoice,
   updateWholesaleInvoiceHeader,
   voidWholesaleInvoice,
 } from '../services/wholesaleService'
@@ -15,8 +18,10 @@ import {
 } from '../services/wholesaleInventoryService'
 import type {
   CreateWholesaleInvoiceInput,
+  CreateWholesaleFinanceMovementInput,
   CreateWholesaleReferenceInput,
   RegisterWholesalePaymentInput,
+  UpdateWholesaleInvoiceInput,
   UpdateWholesaleInvoiceHeaderInput,
   UpdateWholesaleReferenceInput,
 } from './wholesale.types'
@@ -73,6 +78,22 @@ export function useUpdateWholesaleInvoiceHeaderMutation(storeId?: string) {
   })
 }
 
+export function useUpdateWholesaleInvoiceMutation(storeId?: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: UpdateWholesaleInvoiceInput) => updateWholesaleInvoice(input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['wholesale', 'invoices', 'list', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['wholesale', 'inventory', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['wholesale', 'reference-options', storeId] }),
+      ])
+    },
+  })
+}
+
 export function useVoidWholesaleInvoiceMutation(storeId?: string, userId?: string) {
   const queryClient = useQueryClient()
 
@@ -96,6 +117,30 @@ export function useWholesaleReferenceOptionsQuery(storeId?: string) {
     enabled: Boolean(storeId),
     refetchInterval: 10_000,
     refetchIntervalInBackground: true,
+  })
+}
+
+export function useWholesaleFinanceMovementsQuery(storeId?: string) {
+  return useQuery({
+    queryKey: ['wholesale', 'finance-movements', storeId],
+    queryFn: () => listWholesaleFinanceMovements(storeId as string),
+    enabled: Boolean(storeId),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: true,
+  })
+}
+
+export function useCreateWholesaleFinanceMovementMutation(storeId?: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: CreateWholesaleFinanceMovementInput) => createWholesaleFinanceMovement(input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['wholesale', 'finance-movements', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),
+      ])
+    },
   })
 }
 

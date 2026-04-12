@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { formatCop } from '../../../shared/utils/currency'
-import { parseDecimalInput, parseIntegerInput } from '../../../shared/utils/numberInput'
+import { formatCopInput, parseCopIntegerInput, parseIntegerInput } from '../../../shared/utils/numberInput'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import { useCreatePosSaleMutation, usePosVariantsQuery } from '../model/usePosQueries'
 import type { PaymentMethod, PosCartItem } from '../model/pos.types'
@@ -312,14 +312,13 @@ export function PosPage() {
           <label className="block space-y-1">
             <span className="text-xs text-zinc-400">Descuento</span>
             <input
-              type="number"
-              inputMode="decimal"
+              type="text"
+              inputMode="numeric"
               min={0}
-              step="0.01"
-              value={discount === 0 ? '' : discount}
+              value={discount === 0 ? '' : formatCopInput(discount)}
               placeholder="0"
               onChange={(event) => {
-                const nextDiscount = parseDecimalInput(event.target.value, 0)
+                const nextDiscount = parseCopIntegerInput(event.target.value, 0)
                 setDiscount(nextDiscount)
                 if (nextDiscount <= 0) {
                   setDiscountAuthorizedBy(null)

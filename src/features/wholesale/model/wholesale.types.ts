@@ -42,6 +42,7 @@ export interface CreateWholesaleReferenceInput {
   reference: string
   unitPrice: number
   quantityOnHand: number
+  investmentAmount: number
 }
 
 export interface UpdateWholesaleReferenceInput {
@@ -102,11 +103,46 @@ export interface UpdateWholesaleInvoiceHeaderInput {
   customerPhone: string
 }
 
+export interface UpdateWholesaleInvoiceInput {
+  invoiceId: string
+  actorUserId: string
+  invoiceNumber: string
+  customerName: string
+  customerPhone: string
+  discountTotal: number
+  items: Array<{
+    variantId: string
+    quantity: number
+  }>
+}
+
+export type WholesaleFinanceKind = 'income' | 'expense' | 'investment'
+
+export interface WholesaleFinanceMovementRow {
+  id: string
+  store_id: string
+  kind: WholesaleFinanceKind
+  amount: number
+  movement_date: string
+  category: string | null
+  notes: string | null
+  created_by: string
+  created_at: string
+}
+
+export interface CreateWholesaleFinanceMovementInput {
+  storeId: string
+  actorUserId: string
+  kind: WholesaleFinanceKind
+  amount: number
+  movementDate: string
+  category: string
+  notes: string
+}
+
 export interface RegisterWholesalePaymentInput {
   invoiceId: string
   actorUserId: string
   amount: number
   paymentMethod: WholesalePaymentChannel
-  paymentReference: string
-  notes: string
 }

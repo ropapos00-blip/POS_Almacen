@@ -159,6 +159,7 @@ with check (
   )
 );
 
+drop trigger if exists trg_sync_wholesale_invoice_status on public.wholesale_invoices;
 drop function if exists public.sync_wholesale_invoice_status();
 create or replace function public.sync_wholesale_invoice_status()
 returns trigger
@@ -193,7 +194,6 @@ begin
 end;
 $$;
 
-drop trigger if exists trg_sync_wholesale_invoice_status on public.wholesale_invoices;
 create trigger trg_sync_wholesale_invoice_status
 before insert or update of grand_total, paid_total, balance_due, is_credit, due_date, status
 on public.wholesale_invoices
@@ -460,10 +460,10 @@ begin
     raise exception 'Metodo de abono invalido.';
   end if;
 
-  select store_id, paid_total, grand_total, status
+  select wi.store_id, wi.paid_total, wi.grand_total, wi.status
   into v_store_id, v_current_paid, v_grand_total, v_status
-  from public.wholesale_invoices
-  where id = p_invoice_id
+  from public.wholesale_invoices wi
+  where wi.id = p_invoice_id
   for update;
 
   if v_store_id is null then
@@ -539,9 +539,9 @@ begin
   );
 
   return query
-  select id, paid_total, balance_due, status
-  from public.wholesale_invoices
-  where id = p_invoice_id;
+  select wi.id, wi.paid_total, wi.balance_due, wi.status
+  from public.wholesale_invoices wi
+  where wi.id = p_invoice_id;
 end;
 $$;
 

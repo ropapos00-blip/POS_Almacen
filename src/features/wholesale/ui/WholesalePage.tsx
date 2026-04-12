@@ -3,17 +3,20 @@ import { useReactToPrint } from 'react-to-print'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { formatCop } from '../../../shared/utils/currency'
 import { createClientId } from '../../../shared/utils/id'
-import { parseDecimalInput, parseIntegerInput } from '../../../shared/utils/numberInput'
+import { formatCopInput, parseCopIntegerInput, parseIntegerInput } from '../../../shared/utils/numberInput'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import {
+  useCreateWholesaleFinanceMovementMutation,
   useCreateWholesaleInvoiceMutation,
-  useUpdateWholesaleInvoiceHeaderMutation,
+  useUpdateWholesaleInvoiceMutation,
   useVoidWholesaleInvoiceMutation,
+  useWholesaleFinanceMovementsQuery,
   useWholesaleReferenceOptionsQuery,
   useRegisterWholesalePaymentMutation,
   useWholesaleInvoicesQuery,
 } from '../model/useWholesaleQueries'
 import type {
+  WholesaleFinanceKind,
   WholesalePaymentChannel,
   WholesaleInvoiceRow,
   WholesalePaymentMethod,
@@ -30,6 +33,18 @@ interface DraftItem {
   unitPrice: number
 }
 
+interface EditDraftItem {
+  id: string
+  variantId: string
+  reference: string
+  productName: string
+  stockAvailable: number
+  quantity: number
+  unitPrice: number
+  originalQuantity: number
+  initialVariantId: string
+}
+
 function createDraftItem(): DraftItem {
   return {
     id: createClientId(),
@@ -40,6 +55,28 @@ function createDraftItem(): DraftItem {
     quantity: 0,
     unitPrice: 0,
   }
+}
+
+function createEditDraftItem(): EditDraftItem {
+  return {
+    id: createClientId(),
+    variantId: '',
+    reference: '',
+    productName: '',
+    stockAvailable: 0,
+    quantity: 0,
+    unitPrice: 0,
+    originalQuantity: 0,
+    initialVariantId: '',
+  }
+}
+
+function startOfWeekIso(baseIsoDate: string) {
+  const date = new Date(`${baseIsoDate}T00:00:00`)
+  const day = date.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  date.setDate(date.getDate() + diff)
+  return date.toISOString().slice(0, 10)
 }
 
 function plusDaysIso(baseIsoDate: string, days: number) {
@@ -91,6 +128,7 @@ export function WholesalePage() {
   const isDashboardView = location.pathname === '/confeccion/dashboard'
   const isSalesView = location.pathname === '/confeccion/ventas'
   const isCarteraView = location.pathname === '/confeccion/cartera'
+  const isExpensesView = location.pathname === '/confeccion/gastos'
   const today = new Date().toISOString().slice(0, 10)
   const user = useAuthStore((state) => state.user)
   const [customerName, setCustomerName] = useState('')
@@ -103,17 +141,24 @@ export function WholesalePage() {
   const [invoiceForPayment, setInvoiceForPayment] = useState<WholesaleInvoiceRow | null>(null)
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentMethodForAbono, setPaymentMethodForAbono] = useState<WholesalePaymentChannel>('cash')
-  const [paymentReferenceForAbono, setPaymentReferenceForAbono] = useState('')
-  const [paymentNotes, setPaymentNotes] = useState('')
   const [searchText, setSearchText] = useState('')
   const [selectedCustomer, setSelectedCustomer] = useState('all')
   const [portfolioFilter, setPortfolioFilter] = useState<'all' | 'receivable' | 'overdue' | 'paid'>('overdue')
   const [draftItems, setDraftItems] = useState<DraftItem[]>([createDraftItem()])
   const [invoiceForEdit, setInvoiceForEdit] = useState<WholesaleInvoiceRow | null>(null)
+  const [editInvoiceNumber, setEditInvoiceNumber] = useState('')
   const [editCustomerName, setEditCustomerName] = useState('')
   const [editCustomerPhone, setEditCustomerPhone] = useState('')
+  const [editDiscountTotal, setEditDiscountTotal] = useState(0)
+  const [editItems, setEditItems] = useState<EditDraftItem[]>([createEditDraftItem()])
   const [invoiceForDelete, setInvoiceForDelete] = useState<WholesaleInvoiceRow | null>(null)
   const [showMissingProductModal, setShowMissingProductModal] = useState(false)
+  const [financeAmount, setFinanceAmount] = useState('')
+  const [financeDate, setFinanceDate] = useState(today)
+  const [expenseMonth, setExpenseMonth] = useState(today.slice(0, 7))
+  const [financeCategory, setFinanceCategory] = useState('')
+  const [financeNotes, setFinanceNotes] = useState('')
+  const [financeFeedback, setFinanceFeedback] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isCarteraView) {
@@ -131,17 +176,32 @@ export function WholesalePage() {
 
   const printRef = useRef<HTMLDivElement>(null)
   const invoicesQuery = useWholesaleInvoicesQuery(user?.storeId)
+  const financeMovementsQuery = useWholesaleFinanceMovementsQuery(user?.storeId)
   const referenceOptionsQuery = useWholesaleReferenceOptionsQuery(user?.storeId)
   const createMutation = useCreateWholesaleInvoiceMutation(user?.storeId)
-  const updateInvoiceMutation = useUpdateWholesaleInvoiceHeaderMutation(user?.storeId)
+  const updateInvoiceMutation = useUpdateWholesaleInvoiceMutation(user?.storeId)
   const voidInvoiceMutation = useVoidWholesaleInvoiceMutation(user?.storeId, user?.id)
   const paymentMutation = useRegisterWholesalePaymentMutation(user?.storeId)
+  const createFinanceMovementMutation = useCreateWholesaleFinanceMovementMutation(user?.storeId)
 
   const referenceByCode = useMemo(() => {
     const map = new Map<string, { variantId: string; productName: string; unitPrice: number; quantityOnHand: number }>()
     ;(referenceOptionsQuery.data ?? []).forEach((item) => {
       map.set(item.reference.trim().toLowerCase(), {
         variantId: item.variantId,
+        productName: item.productName,
+        unitPrice: item.unitPrice,
+        quantityOnHand: item.quantityOnHand,
+      })
+    })
+    return map
+  }, [referenceOptionsQuery.data])
+
+  const referenceByVariantId = useMemo(() => {
+    const map = new Map<string, { reference: string; productName: string; unitPrice: number; quantityOnHand: number }>()
+    ;(referenceOptionsQuery.data ?? []).forEach((item) => {
+      map.set(item.variantId, {
+        reference: item.reference,
         productName: item.productName,
         unitPrice: item.unitPrice,
         quantityOnHand: item.quantityOnHand,
@@ -236,6 +296,62 @@ export function WholesalePage() {
       dueSoonTotal: dueSoonRows.reduce((acc, row) => acc + row.balance_due, 0),
     }
   }, [invoicesQuery.data, today])
+
+  const financeKpis = useMemo(() => {
+    const invoices = (invoicesQuery.data ?? []).filter((row) => row.status !== 'void')
+    const movements = financeMovementsQuery.data ?? []
+
+    const nowIsoDate = today
+    const weekStart = startOfWeekIso(nowIsoDate)
+    const monthStart = nowIsoDate.slice(0, 8) + '01'
+    const yearStart = `${nowIsoDate.slice(0, 4)}-01-01`
+
+    const totalsByRange = (startDate: string) => {
+      const immediateSalesIncome = invoices
+        .filter((row) => !row.is_credit && row.issued_at.slice(0, 10) >= startDate)
+        .reduce((acc, row) => acc + row.grand_total, 0)
+
+      const creditCollectionsIncome = invoices
+        .filter((row) => row.is_credit)
+        .reduce((acc, row) => {
+          const collected = (row.wholesale_payments ?? [])
+            .filter((payment) => payment.paid_at.slice(0, 10) >= startDate)
+            .reduce((sum, payment) => sum + Number(payment.amount), 0)
+
+          return acc + collected
+        }, 0)
+
+      const salesIncome = immediateSalesIncome + creditCollectionsIncome
+
+      const movementRows = movements.filter((row) => row.movement_date >= startDate)
+      const extraIncome = movementRows
+        .filter((row) => row.kind === 'income')
+        .reduce((acc, row) => acc + Number(row.amount), 0)
+      const expenses = movementRows
+        .filter((row) => row.kind === 'expense')
+        .reduce((acc, row) => acc + Number(row.amount), 0)
+      const investment = movementRows
+        .filter((row) => row.kind === 'investment')
+        .reduce((acc, row) => acc + Number(row.amount), 0)
+
+      const totalIncome = salesIncome + extraIncome
+      const profit = totalIncome - expenses - investment
+
+      return {
+        income: totalIncome,
+        expenses,
+        investment,
+        profit,
+      }
+    }
+
+    return {
+      day: totalsByRange(nowIsoDate),
+      week: totalsByRange(weekStart),
+      month: totalsByRange(monthStart),
+      year: totalsByRange(yearStart),
+    }
+  }, [financeMovementsQuery.data, invoicesQuery.data, today])
 
   const dashboardFollowUpCustomers = useMemo(() => {
     const rows = invoicesQuery.data ?? []
@@ -543,6 +659,9 @@ export function WholesalePage() {
     }
 
     try {
+      const issuedDate = new Date().toISOString().slice(0, 10)
+      const creditDueDate = plusDaysIso(issuedDate, 30)
+
       const result = await createMutation.mutateAsync({
         storeId: user.storeId,
         createdBy: user.id,
@@ -551,7 +670,7 @@ export function WholesalePage() {
         discountTotal,
         paymentMethod: 'credit',
         isCredit: true,
-        dueDate: null,
+        dueDate: creditDueDate,
         items: cleanedItemsForValidation.map((item) => ({
           variantId: item.variantId,
           quantity: item.quantity,
@@ -634,10 +753,8 @@ export function WholesalePage() {
     setSelectedPortfolioInvoice(invoice)
     setInvoiceForPayment(invoice)
     setPaymentFeedback(null)
-    setPaymentAmount(invoice.balance_due > 0 ? String(invoice.balance_due) : '')
+    setPaymentAmount(invoice.balance_due > 0 ? formatCopInput(invoice.balance_due) : '')
     setPaymentMethodForAbono('cash')
-    setPaymentReferenceForAbono('')
-    setPaymentNotes('')
   }
 
   function closePaymentModal() {
@@ -645,37 +762,209 @@ export function WholesalePage() {
     setPaymentFeedback(null)
     setPaymentAmount('')
     setPaymentMethodForAbono('cash')
-    setPaymentReferenceForAbono('')
-    setPaymentNotes('')
   }
 
   function openEditInvoiceModal(invoice: WholesaleInvoiceRow) {
+    const invoiceItems = invoice.wholesale_invoice_items ?? []
+    const mappedItems: EditDraftItem[] = invoiceItems.map((item) => {
+      const variantId = item.wholesale_reference_id ?? item.variant_id ?? ''
+      const refOption = variantId ? referenceByVariantId.get(variantId) : undefined
+
+      return {
+        id: item.id,
+        variantId,
+        reference: refOption?.reference ?? item.reference ?? item.description,
+        productName: refOption?.productName ?? item.description,
+        stockAvailable: refOption?.quantityOnHand ?? 0,
+        quantity: item.quantity,
+        unitPrice: refOption?.unitPrice ?? item.unit_price,
+        originalQuantity: item.quantity,
+        initialVariantId: variantId,
+      }
+    })
+
     setInvoiceForEdit(invoice)
+    setEditInvoiceNumber(invoice.invoice_number)
     setEditCustomerName(invoice.customer_name ?? '')
     setEditCustomerPhone(invoice.customer_phone ?? '')
+    setEditDiscountTotal(invoice.discount_total)
+    setEditItems(mappedItems.length > 0 ? mappedItems : [createEditDraftItem()])
   }
 
   function closeEditInvoiceModal() {
     setInvoiceForEdit(null)
+    setEditInvoiceNumber('')
     setEditCustomerName('')
     setEditCustomerPhone('')
+    setEditDiscountTotal(0)
+    setEditItems([createEditDraftItem()])
   }
 
-  async function saveInvoiceHeaderEdit() {
-    if (!invoiceForEdit) {
+  function updateEditItemQuantity(id: string, quantity: number) {
+    setEditItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) {
+          return item
+        }
+
+        return {
+          ...item,
+          quantity: Math.max(0, quantity),
+        }
+      }),
+    )
+  }
+
+  function updateEditItemReference(id: string, rawReference: string) {
+    const reference = rawReference.trim()
+    const selected = referenceByCode.get(reference.toLowerCase())
+
+    setEditItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) {
+          return item
+        }
+
+        if (!selected) {
+          return {
+            ...item,
+            reference,
+            variantId: '',
+            productName: '',
+            stockAvailable: 0,
+            unitPrice: 0,
+            originalQuantity: item.initialVariantId ? item.originalQuantity : 0,
+          }
+        }
+
+        const keepsOriginalQty = selected.variantId === item.initialVariantId
+        return {
+          ...item,
+          reference,
+          variantId: selected.variantId,
+          productName: selected.productName,
+          stockAvailable: selected.quantityOnHand,
+          unitPrice: selected.unitPrice,
+          originalQuantity: keepsOriginalQty ? item.originalQuantity : 0,
+          quantity:
+            item.quantity <= 0
+              ? 0
+              : Math.min(item.quantity, selected.quantityOnHand + (keepsOriginalQty ? item.originalQuantity : 0)),
+        }
+      }),
+    )
+  }
+
+  function addEditItem() {
+    setEditItems((prev) => [...prev, createEditDraftItem()])
+  }
+
+  function removeEditItem(id: string) {
+    setEditItems((prev) => {
+      const next = prev.filter((item) => item.id !== id)
+      return next.length === 0 ? [createEditDraftItem()] : next
+    })
+  }
+
+  const cleanedEditItemsForValidation = editItems
+    .map((item) => ({
+      variantId: item.variantId,
+      quantity: Math.max(0, Number(item.quantity || 0)),
+      unitPrice: Math.max(0, Number(item.unitPrice || 0)),
+      stockAvailable: Math.max(0, Number(item.stockAvailable || 0)),
+      originalQuantity: Math.max(0, Number(item.originalQuantity || 0)),
+    }))
+    .filter((item) => item.variantId && item.quantity > 0)
+
+  const hasInvalidEditStockRequest = cleanedEditItemsForValidation.some(
+    (item) => item.quantity > item.stockAvailable + item.originalQuantity,
+  )
+
+  const editSubtotal = useMemo(() => {
+    return editItems.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0)
+  }, [editItems])
+
+  const editGrandTotal = useMemo(() => {
+    return Math.max(0, editSubtotal - editDiscountTotal)
+  }, [editDiscountTotal, editSubtotal])
+
+  async function saveInvoiceFullEdit() {
+    if (!invoiceForEdit || !user?.id) {
+      return
+    }
+
+    const nextInvoiceNumber = editInvoiceNumber.trim()
+    if (!nextInvoiceNumber) {
+      setFeedback('El numero de factura es obligatorio.')
+      return
+    }
+
+    if (cleanedEditItemsForValidation.length === 0) {
+      setFeedback('Agrega al menos una referencia valida para guardar la edicion.')
+      return
+    }
+
+    if (hasInvalidEditStockRequest) {
+      setFeedback('Alguna referencia supera la cantidad disponible para guardar la edicion.')
+      return
+    }
+
+    if (editDiscountTotal < 0 || editDiscountTotal > editSubtotal) {
+      setFeedback('El descuento editado no es valido frente al subtotal.')
       return
     }
 
     try {
       await updateInvoiceMutation.mutateAsync({
         invoiceId: invoiceForEdit.id,
+        actorUserId: user.id,
+        invoiceNumber: nextInvoiceNumber,
         customerName: editCustomerName,
         customerPhone: editCustomerPhone,
+        discountTotal: editDiscountTotal,
+        items: cleanedEditItemsForValidation.map((item) => ({
+          variantId: item.variantId,
+          quantity: item.quantity,
+        })),
       })
       setFeedback(`Factura ${invoiceForEdit.invoice_number} actualizada.`)
       closeEditInvoiceModal()
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : 'No se pudo editar la factura.')
+    }
+  }
+
+  async function saveFinanceMovement() {
+    if (!user?.storeId || !user.id) {
+      setFinanceFeedback('Usuario sin tienda activa.')
+      return
+    }
+
+    const amount = parseCopIntegerInput(financeAmount, 0)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setFinanceFeedback('El monto debe ser mayor a cero.')
+      return
+    }
+
+    try {
+      await createFinanceMovementMutation.mutateAsync({
+        storeId: user.storeId,
+        actorUserId: user.id,
+        kind: 'expense',
+        amount,
+        movementDate: financeDate,
+        category: financeCategory,
+        notes: financeNotes,
+      })
+
+      setFinanceFeedback('Movimiento financiero registrado.')
+      setFinanceAmount('')
+      setFinanceCategory('')
+      setFinanceNotes('')
+    } catch (error) {
+      setFinanceFeedback(
+        error instanceof Error ? error.message : 'No se pudo registrar el movimiento financiero.',
+      )
     }
   }
 
@@ -702,7 +991,7 @@ export function WholesalePage() {
       return
     }
 
-    const amount = parseDecimalInput(paymentAmount, 0)
+    const amount = parseCopIntegerInput(paymentAmount, 0)
 
     if (!Number.isFinite(amount) || amount <= 0) {
       setPaymentFeedback('El valor del abono debe ser mayor a cero.')
@@ -720,8 +1009,6 @@ export function WholesalePage() {
         actorUserId: user.id,
         amount,
         paymentMethod: paymentMethodForAbono,
-        paymentReference: paymentReferenceForAbono,
-        notes: paymentNotes,
       })
 
       setFeedback(`Abono registrado para factura ${invoiceForPayment.invoice_number}.`)
@@ -932,14 +1219,14 @@ export function WholesalePage() {
           <label className="space-y-1">
             <span className="text-xs text-zinc-400">Descuento (COP)</span>
             <input
-              type="number"
+              type="text"
               inputMode="numeric"
               min={0}
               step={1}
-              value={discountTotal === 0 ? '' : discountTotal}
+              value={discountTotal === 0 ? '' : formatCopInput(discountTotal)}
               placeholder="0"
               onChange={(event) =>
-                setDiscountTotal(Math.max(0, parseIntegerInput(event.target.value, 0)))
+                setDiscountTotal(Math.max(0, parseCopIntegerInput(event.target.value, 0)))
               }
               className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
             />
@@ -1229,7 +1516,154 @@ export function WholesalePage() {
       </>
       ) : null}
 
-      {!isDashboardView && !isSalesView && !isCarteraView ? (
+      {isExpensesView ? (
+      <>
+      <header className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+        <h1 className="text-2xl font-semibold text-zinc-100">Gastos Confeccion</h1>
+        <p className="mt-2 text-sm text-zinc-400">
+          Registro diario de gastos y seguimiento de indicadores con calendario mensual.
+        </p>
+      </header>
+
+      <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+        <h2 className="text-lg font-semibold text-zinc-100">Indicadores por periodo</h2>
+        <p className="mt-1 text-xs text-zinc-500">Ganancia = Ingresos - Gastos - Inversion.</p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+            <p className="text-xs text-zinc-500">Hoy</p>
+            <p className="mt-1 text-xs text-zinc-500">Ingresos {formatCop(financeKpis.day.income)}</p>
+            <p className="text-xs text-zinc-500">Gastos {formatCop(financeKpis.day.expenses)}</p>
+            <p className="text-xs text-zinc-500">Inversion {formatCop(financeKpis.day.investment)}</p>
+            <p className={`mt-1 text-sm font-semibold ${financeKpis.day.profit >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+              Ganancia {formatCop(financeKpis.day.profit)}
+            </p>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+            <p className="text-xs text-zinc-500">Semana</p>
+            <p className="mt-1 text-xs text-zinc-500">Ingresos {formatCop(financeKpis.week.income)}</p>
+            <p className="text-xs text-zinc-500">Gastos {formatCop(financeKpis.week.expenses)}</p>
+            <p className="text-xs text-zinc-500">Inversion {formatCop(financeKpis.week.investment)}</p>
+            <p className={`mt-1 text-sm font-semibold ${financeKpis.week.profit >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+              Ganancia {formatCop(financeKpis.week.profit)}
+            </p>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+            <p className="text-xs text-zinc-500">Mes</p>
+            <p className="mt-1 text-xs text-zinc-500">Ingresos {formatCop(financeKpis.month.income)}</p>
+            <p className="text-xs text-zinc-500">Gastos {formatCop(financeKpis.month.expenses)}</p>
+            <p className="text-xs text-zinc-500">Inversion {formatCop(financeKpis.month.investment)}</p>
+            <p className={`mt-1 text-sm font-semibold ${financeKpis.month.profit >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+              Ganancia {formatCop(financeKpis.month.profit)}
+            </p>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+            <p className="text-xs text-zinc-500">Ano</p>
+            <p className="mt-1 text-xs text-zinc-500">Ingresos {formatCop(financeKpis.year.income)}</p>
+            <p className="text-xs text-zinc-500">Gastos {formatCop(financeKpis.year.expenses)}</p>
+            <p className="text-xs text-zinc-500">Inversion {formatCop(financeKpis.year.investment)}</p>
+            <p className={`mt-1 text-sm font-semibold ${financeKpis.year.profit >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+              Ganancia {formatCop(financeKpis.year.profit)}
+            </p>
+          </div>
+        </div>
+      </article>
+
+      <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+        <h2 className="text-lg font-semibold text-zinc-100">Gasto diario</h2>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="space-y-1">
+            <span className="text-xs text-zinc-400">Fecha</span>
+            <input
+              type="date"
+              value={financeDate}
+              onChange={(event) => setFinanceDate(event.target.value)}
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs text-zinc-400">Monto</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              min={0}
+              value={financeAmount}
+              onChange={(event) => setFinanceAmount(formatCopInput(event.target.value))}
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs text-zinc-400">Categoria</span>
+            <input
+              value={financeCategory}
+              onChange={(event) => setFinanceCategory(event.target.value)}
+              placeholder="Ej. transporte"
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs text-zinc-400">Nota</span>
+            <input
+              value={financeNotes}
+              onChange={(event) => setFinanceNotes(event.target.value)}
+              placeholder="Detalle opcional"
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+            />
+          </label>
+        </div>
+        {financeFeedback ? <p className="mt-2 text-xs text-amber-300">{financeFeedback}</p> : null}
+        <button
+          type="button"
+          onClick={() => {
+            void saveFinanceMovement()
+          }}
+          disabled={createFinanceMovementMutation.isPending}
+          className="mt-3 rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-900 disabled:opacity-70"
+        >
+          {createFinanceMovementMutation.isPending ? 'Guardando...' : 'Guardar gasto'}
+        </button>
+      </article>
+
+      <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+        <h2 className="text-lg font-semibold text-zinc-100">Calendario de gastos (mes a mes)</h2>
+        <label className="mt-3 block max-w-xs space-y-1">
+          <span className="text-xs text-zinc-400">Mes</span>
+          <input
+            type="month"
+            value={expenseMonth}
+            onChange={(event) => setExpenseMonth(event.target.value)}
+            className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+          />
+        </label>
+
+        <div className="mt-4 space-y-2">
+          {Object.entries(
+            (financeMovementsQuery.data ?? [])
+              .filter((row) => row.kind === 'expense' && row.movement_date.startsWith(expenseMonth))
+              .reduce<Record<string, number>>((acc, row) => {
+                const key = row.movement_date
+                acc[key] = (acc[key] ?? 0) + Number(row.amount)
+                return acc
+              }, {}),
+          )
+            .sort((a, b) => b[0].localeCompare(a[0]))
+            .map(([date, total]) => (
+              <div key={date} className="flex items-center justify-between rounded-md border border-zinc-800 px-3 py-2 text-sm">
+                <span className="text-zinc-300">{date}</span>
+                <span className="font-semibold text-rose-300">{formatCop(total)}</span>
+              </div>
+            ))}
+
+          {(financeMovementsQuery.data ?? []).filter(
+            (row) => row.kind === 'expense' && row.movement_date.startsWith(expenseMonth),
+          ).length === 0 ? (
+            <p className="text-sm text-zinc-500">No hay gastos registrados para el mes seleccionado.</p>
+          ) : null}
+        </div>
+      </article>
+      </>
+      ) : null}
+
+      {!isDashboardView && !isSalesView && !isCarteraView && !isExpensesView ? (
         <header className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
           <h1 className="text-2xl font-semibold text-zinc-100">Confeccion</h1>
           <p className="mt-2 text-sm text-zinc-400">
@@ -1242,11 +1676,20 @@ export function WholesalePage() {
 
       {invoiceForEdit ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
+          <div className="w-full max-w-5xl rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
             <h3 className="text-lg font-semibold text-zinc-100">Editar factura</h3>
             <p className="mt-2 text-sm text-zinc-400">Factura {invoiceForEdit.invoice_number}</p>
 
-            <div className="mt-4 grid gap-3">
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="space-y-1">
+                <span className="text-xs text-zinc-400">Numero factura</span>
+                <input
+                  value={editInvoiceNumber}
+                  onChange={(event) => setEditInvoiceNumber(event.target.value)}
+                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                />
+              </label>
+
               <label className="space-y-1">
                 <span className="text-xs text-zinc-400">Cliente</span>
                 <input
@@ -1265,6 +1708,114 @@ export function WholesalePage() {
                   className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
                 />
               </label>
+
+              <label className="space-y-1">
+                <span className="text-xs text-zinc-400">Descuento (COP)</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  min={0}
+                  step={1}
+                  value={editDiscountTotal === 0 ? '' : formatCopInput(editDiscountTotal)}
+                  placeholder="0"
+                  onChange={(event) =>
+                    setEditDiscountTotal(Math.max(0, parseCopIntegerInput(event.target.value, 0)))
+                  }
+                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {editItems.map((item, index) => (
+                <div
+                  key={item.id}
+                  className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1.4fr_90px_120px_100px_auto]"
+                >
+                  <input
+                    list="edit-wholesale-reference-options"
+                    value={item.reference}
+                    onChange={(event) => updateEditItemReference(item.id, event.target.value)}
+                    placeholder={`Referencia ${index + 1}`}
+                    className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={item.quantity === 0 ? '' : item.quantity}
+                    placeholder="0"
+                    max={Math.max(1, item.stockAvailable + item.originalQuantity)}
+                    onChange={(event) =>
+                      updateEditItemQuantity(item.id, parseIntegerInput(event.target.value, 0))
+                    }
+                    className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={formatCop(item.unitPrice)}
+                    readOnly
+                    className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
+                  />
+                  <input
+                    type="number"
+                    value={item.stockAvailable + item.originalQuantity}
+                    readOnly
+                    className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeEditItem(item.id)}
+                    className="rounded-lg border border-rose-500/40 px-3 py-2 text-xs text-rose-300"
+                  >
+                    Quitar
+                  </button>
+                  {item.productName ? (
+                    <p className="text-xs text-zinc-500 md:col-span-5">{item.productName}</p>
+                  ) : null}
+                  {item.reference && !item.variantId ? (
+                    <p className="text-xs text-rose-300 md:col-span-5">
+                      Referencia no encontrada. Selecciona una referencia existente.
+                    </p>
+                  ) : null}
+                  {item.variantId && item.quantity > item.stockAvailable + item.originalQuantity ? (
+                    <p className="text-xs text-rose-300 md:col-span-5">
+                      Cantidad solicitada supera disponible ({item.stockAvailable + item.originalQuantity}).
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+
+              <datalist id="edit-wholesale-reference-options">
+                {(referenceOptionsQuery.data ?? []).map((item) => (
+                  <option key={item.variantId} value={item.reference}>
+                    {item.productName}
+                  </option>
+                ))}
+              </datalist>
+            </div>
+
+            <button
+              type="button"
+              onClick={addEditItem}
+              className="mt-3 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200"
+            >
+              Agregar referencia
+            </button>
+
+            <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 text-sm text-zinc-200">
+              <div className="flex justify-between">
+                <span>Subtotal</span>
+                <span>{formatCop(editSubtotal)}</span>
+              </div>
+              <div className="mt-1 flex justify-between">
+                <span>Descuento</span>
+                <span>{formatCop(editDiscountTotal)}</span>
+              </div>
+              <div className="mt-1 flex justify-between font-semibold text-zinc-100">
+                <span>Total</span>
+                <span>{formatCop(editGrandTotal)}</span>
+              </div>
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-2">
@@ -1278,7 +1829,7 @@ export function WholesalePage() {
               <button
                 type="button"
                 onClick={() => {
-                  void saveInvoiceHeaderEdit()
+                  void saveInvoiceFullEdit()
                 }}
                 disabled={updateInvoiceMutation.isPending}
                 className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-zinc-900 disabled:opacity-70"
@@ -1333,12 +1884,11 @@ export function WholesalePage() {
               <label className="space-y-1">
                 <span className="text-xs text-zinc-400">Valor del abono</span>
                 <input
-                  type="number"
-                  inputMode="decimal"
+                  type="text"
+                  inputMode="numeric"
                   min={0}
-                  step="0.01"
                   value={paymentAmount}
-                  onChange={(event) => setPaymentAmount(event.target.value)}
+                  onChange={(event) => setPaymentAmount(formatCopInput(event.target.value))}
                   className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
                 />
               </label>
@@ -1357,24 +1907,6 @@ export function WholesalePage() {
                 </select>
               </label>
 
-              <label className="space-y-1">
-                <span className="text-xs text-zinc-400">Referencia (opcional)</span>
-                <input
-                  value={paymentReferenceForAbono}
-                  onChange={(event) => setPaymentReferenceForAbono(event.target.value)}
-                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-                />
-              </label>
-
-              <label className="space-y-1">
-                <span className="text-xs text-zinc-400">Nota (opcional)</span>
-                <textarea
-                  rows={2}
-                  value={paymentNotes}
-                  onChange={(event) => setPaymentNotes(event.target.value)}
-                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-                />
-              </label>
             </div>
 
             {paymentFeedback ? <p className="mt-3 text-sm text-amber-300">{paymentFeedback}</p> : null}

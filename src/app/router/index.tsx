@@ -136,6 +136,14 @@ export const appRouter = createBrowserRouter([
         ),
       },
       {
+        path: 'confeccion/gastos',
+        element: withFallback(
+          <ProtectedRoute roles={['super_admin', 'admin']}>
+            <WholesalePage />
+          </ProtectedRoute>,
+        ),
+      },
+      {
         path: 'confeccion/inventario',
         element: withFallback(
           <ProtectedRoute roles={['super_admin', 'admin']}>

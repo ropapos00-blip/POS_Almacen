@@ -48,6 +48,10 @@ export async function createWholesaleReference(
     throw new Error('El valor unitario no puede ser negativo.')
   }
 
+  if (input.investmentAmount < 0) {
+    throw new Error('La inversion no puede ser negativa.')
+  }
+
   const { data: existing, error: existingError } = await supabase
     .from('wholesale_references')
     .select('id, quantity_on_hand, is_active')
@@ -83,6 +87,7 @@ export async function createWholesaleReference(
         wholesale_reference_id: existing.id,
         type: 'in',
         quantity: input.quantityOnHand,
+        investment_amount: input.investmentAmount,
         reason: 'Carga adicional de referencia existente',
         reference_type: 'reference_restock',
         performed_by: userId,
@@ -126,6 +131,7 @@ export async function createWholesaleReference(
     wholesale_reference_id: data.id,
     type: 'in',
     quantity: input.quantityOnHand,
+    investment_amount: input.investmentAmount,
     reason: 'Carga inicial de referencia',
     reference_type: 'reference_create',
     performed_by: userId,
