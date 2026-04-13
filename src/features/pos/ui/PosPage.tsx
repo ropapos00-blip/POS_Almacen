@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { formatCop } from '../../../shared/utils/currency'
+import { formatDateTimeColombia } from '../../../shared/utils/dateTime'
 import { formatCopInput, parseCopIntegerInput, parseIntegerInput } from '../../../shared/utils/numberInput'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import { useCreatePosSaleMutation, usePosVariantsQuery } from '../model/usePosQueries'
@@ -164,7 +165,7 @@ export function PosPage() {
       setFeedback(`Venta confirmada: ${result.saleNumber}`)
       setLastSale({
         saleNumber: result.saleNumber,
-        soldAt: new Date().toLocaleString(),
+          soldAt: formatDateTimeColombia(new Date()),
         cashierName: user.fullName,
         customerName: customerName.trim(),
         paymentMethod,

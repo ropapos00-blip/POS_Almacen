@@ -2,12 +2,20 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { formatCop } from '../../../shared/utils/currency'
+import {
+  addDaysToIsoDate,
+  formatDateColombia,
+  formatDateTimeColombia,
+  getTodayIsoDateColombia,
+  startOfWeekIsoDate,
+} from '../../../shared/utils/dateTime'
 import { createClientId } from '../../../shared/utils/id'
 import { formatCopInput, parseCopIntegerInput, parseIntegerInput } from '../../../shared/utils/numberInput'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import {
   useCreateWholesaleFinanceMovementMutation,
   useCreateWholesaleInvoiceMutation,
+  useDeleteWholesaleFinanceMovementMutation,
   useUpdateWholesaleInvoiceMutation,
   useVoidWholesaleInvoiceMutation,
   useWholesaleFinanceMovementsQuery,
@@ -16,7 +24,7 @@ import {
   useWholesaleInvoicesQuery,
 } from '../model/useWholesaleQueries'
 import type {
-  WholesaleFinanceKind,
+  WholesaleFinanceMovementRow,
   WholesalePaymentChannel,
   WholesaleInvoiceRow,
   WholesalePaymentMethod,
@@ -71,20 +79,6 @@ function createEditDraftItem(): EditDraftItem {
   }
 }
 
-function startOfWeekIso(baseIsoDate: string) {
-  const date = new Date(`${baseIsoDate}T00:00:00`)
-  const day = date.getDay()
-  const diff = day === 0 ? -6 : 1 - day
-  date.setDate(date.getDate() + diff)
-  return date.toISOString().slice(0, 10)
-}
-
-function plusDaysIso(baseIsoDate: string, days: number) {
-  const date = new Date(`${baseIsoDate}T00:00:00`)
-  date.setDate(date.getDate() + days)
-  return date.toISOString().slice(0, 10)
-}
-
 function portfolioPriority(invoice: WholesaleInvoiceRow) {
   if (invoice.status === 'overdue') return 0
   if (invoice.balance_due > 0 && invoice.status !== 'void') return 1
@@ -129,7 +123,7 @@ export function WholesalePage() {
   const isSalesView = location.pathname === '/confeccion/ventas'
   const isCarteraView = location.pathname === '/confeccion/cartera'
   const isExpensesView = location.pathname === '/confeccion/gastos'
-  const today = new Date().toISOString().slice(0, 10)
+  const today = getTodayIsoDateColombia()
   const user = useAuthStore((state) => state.user)
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
@@ -152,6 +146,8 @@ export function WholesalePage() {
   const [editDiscountTotal, setEditDiscountTotal] = useState(0)
   const [editItems, setEditItems] = useState<EditDraftItem[]>([createEditDraftItem()])
   const [invoiceForDelete, setInvoiceForDelete] = useState<WholesaleInvoiceRow | null>(null)
+  const [financeMovementForDelete, setFinanceMovementForDelete] =
+    useState<WholesaleFinanceMovementRow | null>(null)
   const [showMissingProductModal, setShowMissingProductModal] = useState(false)
   const [financeAmount, setFinanceAmount] = useState('')
   const [financeDate, setFinanceDate] = useState(today)
@@ -174,6 +170,23 @@ export function WholesalePage() {
     setSearchText(customerFromQuery)
   }, [isCarteraView, searchParams])
 
+  useEffect(() => {
+    if (!financeMovementForDelete) {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setFinanceMovementForDelete(null)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [financeMovementForDelete])
+
   const printRef = useRef<HTMLDivElement>(null)
   const invoicesQuery = useWholesaleInvoicesQuery(user?.storeId)
   const financeMovementsQuery = useWholesaleFinanceMovementsQuery(user?.storeId)
@@ -183,6 +196,7 @@ export function WholesalePage() {
   const voidInvoiceMutation = useVoidWholesaleInvoiceMutation(user?.storeId, user?.id)
   const paymentMutation = useRegisterWholesalePaymentMutation(user?.storeId)
   const createFinanceMovementMutation = useCreateWholesaleFinanceMovementMutation(user?.storeId)
+  const deleteFinanceMovementMutation = useDeleteWholesaleFinanceMovementMutation(user?.storeId)
 
   const referenceByCode = useMemo(() => {
     const map = new Map<string, { variantId: string; productName: string; unitPrice: number; quantityOnHand: number }>()
@@ -302,7 +316,7 @@ export function WholesalePage() {
     const movements = financeMovementsQuery.data ?? []
 
     const nowIsoDate = today
-    const weekStart = startOfWeekIso(nowIsoDate)
+    const weekStart = startOfWeekIsoDate(nowIsoDate)
     const monthStart = nowIsoDate.slice(0, 8) + '01'
     const yearStart = `${nowIsoDate.slice(0, 4)}-01-01`
 
@@ -352,6 +366,30 @@ export function WholesalePage() {
       year: totalsByRange(yearStart),
     }
   }, [financeMovementsQuery.data, invoicesQuery.data, today])
+
+  const monthlyExpenseMovements = useMemo(() => {
+    return (financeMovementsQuery.data ?? [])
+      .filter((row) => row.kind === 'expense' && row.movement_date.startsWith(expenseMonth))
+      .sort((a, b) => {
+        if (a.movement_date !== b.movement_date) {
+          return b.movement_date.localeCompare(a.movement_date)
+        }
+
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      })
+  }, [expenseMonth, financeMovementsQuery.data])
+
+  const monthlyInvestmentMovements = useMemo(() => {
+    return (financeMovementsQuery.data ?? [])
+      .filter((row) => row.kind === 'investment' && row.movement_date.startsWith(expenseMonth))
+      .sort((a, b) => {
+        if (a.movement_date !== b.movement_date) {
+          return b.movement_date.localeCompare(a.movement_date)
+        }
+
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      })
+  }, [expenseMonth, financeMovementsQuery.data])
 
   const dashboardFollowUpCustomers = useMemo(() => {
     const rows = invoicesQuery.data ?? []
@@ -549,7 +587,7 @@ export function WholesalePage() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
-    const stamp = new Date().toISOString().slice(0, 10)
+    const stamp = getTodayIsoDateColombia()
     link.href = url
     link.download = `cartera-confeccion-${stamp}.csv`
     document.body.appendChild(link)
@@ -659,8 +697,8 @@ export function WholesalePage() {
     }
 
     try {
-      const issuedDate = new Date().toISOString().slice(0, 10)
-      const creditDueDate = plusDaysIso(issuedDate, 30)
+      const issuedDate = getTodayIsoDateColombia()
+      const creditDueDate = addDaysToIsoDate(issuedDate, 30)
 
       const result = await createMutation.mutateAsync({
         storeId: user.storeId,
@@ -678,7 +716,7 @@ export function WholesalePage() {
       })
 
       const issuedAt = new Date().toISOString()
-      const dueDate = plusDaysIso(issuedAt.slice(0, 10), 30)
+      const dueDate = addDaysToIsoDate(issuedAt.slice(0, 10), 30)
       const invoice: WholesaleInvoiceRow = {
         id: result.invoiceId,
         invoice_number: result.invoiceNumber,
@@ -965,6 +1003,36 @@ export function WholesalePage() {
       setFinanceFeedback(
         error instanceof Error ? error.message : 'No se pudo registrar el movimiento financiero.',
       )
+    }
+  }
+
+  async function confirmDeleteFinanceMovement() {
+    if (!financeMovementForDelete) {
+      return
+    }
+
+    const deletingMovement = financeMovementForDelete
+
+    try {
+      await deleteFinanceMovementMutation.mutateAsync({
+        movementId: deletingMovement.id,
+        kind: deletingMovement.kind === 'investment' ? 'investment' : 'expense',
+      })
+      setFinanceFeedback(
+        deletingMovement.kind === 'investment'
+          ? 'Inversion eliminada correctamente.'
+          : 'Gasto eliminado correctamente.',
+      )
+    } catch (error) {
+      setFinanceFeedback(
+        error instanceof Error
+          ? error.message
+          : deletingMovement.kind === 'investment'
+            ? 'No se pudo eliminar la inversion.'
+            : 'No se pudo eliminar el gasto.',
+      )
+    } finally {
+      setFinanceMovementForDelete(null)
     }
   }
 
@@ -1283,7 +1351,7 @@ export function WholesalePage() {
                 <div>
                   <p className="text-sm font-semibold text-zinc-200">{invoice.invoice_number}</p>
                   <p className="text-xs text-zinc-500">
-                    {new Date(invoice.issued_at).toLocaleString()} · {invoice.customer_name ?? 'Cliente general'}
+                    {formatDateTimeColombia(invoice.issued_at)} · {invoice.customer_name ?? 'Cliente general'}
                   </p>
                 </div>
                 <p className="text-sm font-semibold text-emerald-300">{formatCop(invoice.grand_total)}</p>
@@ -1413,7 +1481,7 @@ export function WholesalePage() {
                 <div>
                   <p className="text-sm font-semibold text-zinc-200">{invoice.invoice_number}</p>
                   <p className="text-xs text-zinc-500">
-                    {new Date(invoice.issued_at).toLocaleString()} · {invoice.customer_name ?? 'Cliente general'}
+                    {formatDateTimeColombia(invoice.issued_at)} · {invoice.customer_name ?? 'Cliente general'}
                   </p>
                 </div>
                 <p className="text-sm font-semibold text-emerald-300">{formatCop(invoice.grand_total)}</p>
@@ -1471,7 +1539,7 @@ export function WholesalePage() {
               {invoice.wholesale_payments && invoice.wholesale_payments.length > 0 ? (
                 <p className="mt-2 text-[11px] text-zinc-500">
                   Ultimo abono: {formatCop(invoice.wholesale_payments[0].amount)} el{' '}
-                  {new Date(invoice.wholesale_payments[0].paid_at).toLocaleDateString()}
+                  {formatDateColombia(invoice.wholesale_payments[0].paid_at)}
                 </p>
               ) : null}
             </li>
@@ -1499,7 +1567,7 @@ export function WholesalePage() {
                 (selectedPortfolioInvoice.wholesale_payments ?? []).map((payment) => (
                   <div key={payment.id} className="rounded-md border border-zinc-800 px-2 py-2 text-xs">
                     <p className="text-zinc-200">
-                      {new Date(payment.paid_at).toLocaleString()} · {payment.payment_method}
+                      {formatDateTimeColombia(payment.paid_at)} · {payment.payment_method}
                     </p>
                     <p className="text-emerald-300">{formatCop(payment.amount)}</p>
                     {payment.payment_reference ? (
@@ -1637,8 +1705,7 @@ export function WholesalePage() {
 
         <div className="mt-4 space-y-2">
           {Object.entries(
-            (financeMovementsQuery.data ?? [])
-              .filter((row) => row.kind === 'expense' && row.movement_date.startsWith(expenseMonth))
+            monthlyExpenseMovements
               .reduce<Record<string, number>>((acc, row) => {
                 const key = row.movement_date
                 acc[key] = (acc[key] ?? 0) + Number(row.amount)
@@ -1653,11 +1720,77 @@ export function WholesalePage() {
               </div>
             ))}
 
-          {(financeMovementsQuery.data ?? []).filter(
-            (row) => row.kind === 'expense' && row.movement_date.startsWith(expenseMonth),
-          ).length === 0 ? (
+          {monthlyExpenseMovements.length === 0 ? (
             <p className="text-sm text-zinc-500">No hay gastos registrados para el mes seleccionado.</p>
           ) : null}
+        </div>
+
+        <div className="mt-5 space-y-2">
+          <h3 className="text-sm font-semibold text-zinc-200">Detalle de gastos</h3>
+          {monthlyExpenseMovements.map((movement) => (
+            <div
+              key={movement.id}
+              className="rounded-md border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-medium text-zinc-200">
+                    {movement.movement_date} · {formatCop(Number(movement.amount))}
+                  </p>
+                  <p className="text-xs text-zinc-500">
+                    {movement.category?.trim() || 'Sin categoria'}
+                    {movement.notes?.trim() ? ` · ${movement.notes.trim()}` : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFinanceMovementForDelete(movement)
+                  }}
+                  disabled={deleteFinanceMovementMutation.isPending}
+                  className="rounded-md border border-rose-500/50 bg-rose-500/10 px-2 py-1 text-xs font-medium text-rose-200 hover:bg-rose-500/20 disabled:opacity-70"
+                >
+                  {deleteFinanceMovementMutation.isPending ? 'Eliminando...' : 'Eliminar'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-5 space-y-2">
+          <h3 className="text-sm font-semibold text-zinc-200">Detalle de inversiones</h3>
+          {monthlyInvestmentMovements.length === 0 ? (
+            <p className="text-sm text-zinc-500">No hay inversiones registradas para el mes seleccionado.</p>
+          ) : (
+            monthlyInvestmentMovements.map((movement) => (
+              <div
+                key={movement.id}
+                className="rounded-md border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-zinc-200">
+                      {movement.movement_date} · {formatCop(Number(movement.amount))}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      {movement.category?.trim() || 'Sin categoria'}
+                      {movement.notes?.trim() ? ` · ${movement.notes.trim()}` : ''}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFinanceMovementForDelete(movement)
+                    }}
+                    disabled={deleteFinanceMovementMutation.isPending}
+                    className="rounded-md border border-rose-500/50 bg-rose-500/10 px-2 py-1 text-xs font-medium text-rose-200 hover:bg-rose-500/20 disabled:opacity-70"
+                  >
+                    {deleteFinanceMovementMutation.isPending ? 'Eliminando...' : 'Eliminar'}
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </article>
       </>
@@ -1866,6 +1999,61 @@ export function WholesalePage() {
                 className="rounded-lg bg-rose-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-70"
               >
                 {voidInvoiceMutation.isPending ? 'Eliminando...' : 'Si, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {financeMovementForDelete ? (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
+          onClick={() => {
+            if (!deleteFinanceMovementMutation.isPending) {
+              setFinanceMovementForDelete(null)
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5"
+            onClick={(event) => {
+              event.stopPropagation()
+            }}
+          >
+            <h3 className="text-lg font-semibold text-zinc-100">
+              {financeMovementForDelete.kind === 'investment' ? 'Eliminar inversion' : 'Eliminar gasto'}
+            </h3>
+            <p className="mt-2 text-sm text-zinc-400">
+              Seguro que deseas eliminar
+              {financeMovementForDelete.kind === 'investment' ? ' la inversion ' : ' el gasto '}
+              de {formatCop(Number(financeMovementForDelete.amount))} del dia {financeMovementForDelete.movement_date}?
+            </p>
+
+            {financeMovementForDelete.category?.trim() || financeMovementForDelete.notes?.trim() ? (
+              <p className="mt-2 text-xs text-zinc-500">
+                {financeMovementForDelete.category?.trim() || 'Sin categoria'}
+                {financeMovementForDelete.notes?.trim() ? ` · ${financeMovementForDelete.notes.trim()}` : ''}
+              </p>
+            ) : null}
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setFinanceMovementForDelete(null)}
+                disabled={deleteFinanceMovementMutation.isPending}
+                className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200 disabled:opacity-70"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void confirmDeleteFinanceMovement()
+                }}
+                disabled={deleteFinanceMovementMutation.isPending}
+                className="rounded-lg bg-rose-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-70"
+              >
+                {deleteFinanceMovementMutation.isPending ? 'Eliminando...' : 'Si, eliminar'}
               </button>
             </div>
           </div>

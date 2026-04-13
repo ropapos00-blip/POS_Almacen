@@ -1,5 +1,6 @@
 import type { RefObject } from 'react'
 import { formatCop } from '../../../shared/utils/currency'
+import { formatDateTimeColombia } from '../../../shared/utils/dateTime'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import type { ManualInvoiceRow, ManualPaymentMethod } from '../model/manualInvoices.types'
 
@@ -44,7 +45,7 @@ export function ManualInvoiceReceipt({
 
         <p className="mt-2 text-center text-xs">Ticket de venta</p>
         <p className="mt-3 text-xs">Venta: {invoice.invoice_number}</p>
-        <p className="text-xs">Fecha: {new Date(invoice.created_at).toLocaleString()}</p>
+        <p className="text-xs">Fecha: {formatDateTimeColombia(invoice.created_at)}</p>
         {invoice.customer_name ? <p className="text-xs">Cliente: {invoice.customer_name}</p> : null}
         {invoice.customer_phone ? <p className="text-xs">Telefono: {invoice.customer_phone}</p> : null}
 

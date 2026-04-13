@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { formatCop } from '../../../shared/utils/currency'
+import {
+  formatDateColombia,
+  formatDateTimeColombia,
+  getTodayIsoDateColombia,
+} from '../../../shared/utils/dateTime'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import { useSalesQuery, useVoidSaleMutation } from '../model/useSalesQueries'
 import type { SaleRow, SalesFilters } from '../model/sales.types'
@@ -15,7 +20,7 @@ function statusBadge(status: string) {
 
 export function SalesPage() {
   const user = useAuthStore((state) => state.user)
-  const today = new Date().toISOString().slice(0, 10)
+  const today = getTodayIsoDateColombia()
   const isCashier = user?.role === 'cashier'
   const [saleToVoid, setSaleToVoid] = useState<SaleRow | null>(null)
   const [voidReason, setVoidReason] = useState('')
@@ -112,7 +117,7 @@ export function SalesPage() {
           />
           {isCashier ? (
             <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-300">
-              Fecha fija: {new Date().toLocaleDateString()}
+              Fecha fija: {formatDateColombia(new Date())}
             </div>
           ) : (
             <>
@@ -175,7 +180,7 @@ export function SalesPage() {
                   <div>
                     <p className="text-sm font-semibold text-zinc-200">{sale.sale_number}</p>
                     <p className="text-xs text-zinc-500">
-                      {new Date(sale.sold_at).toLocaleString()} · {sale.customer_name ?? 'Cliente general'}
+                      {formatDateTimeColombia(sale.sold_at)} · {sale.customer_name ?? 'Cliente general'}
                     </p>
                   </div>
                   <span
@@ -233,7 +238,7 @@ export function SalesPage() {
             <div className="mt-3 space-y-3">
               <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
                 <p className="text-sm font-semibold text-zinc-200">{selectedSale.sale_number}</p>
-                <p className="text-xs text-zinc-500">{new Date(selectedSale.sold_at).toLocaleString()}</p>
+                <p className="text-xs text-zinc-500">{formatDateTimeColombia(selectedSale.sold_at)}</p>
               </div>
 
               <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">

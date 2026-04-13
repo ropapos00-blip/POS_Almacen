@@ -1,5 +1,6 @@
 import type { RefObject } from 'react'
 import { formatCop } from '../../../shared/utils/currency'
+import { formatDateColombia } from '../../../shared/utils/dateTime'
 import type { WholesaleInvoiceRow, WholesalePaymentMethod } from '../model/wholesale.types'
 
 function paymentLabel(method: WholesalePaymentMethod) {
@@ -126,11 +127,11 @@ export function WholesaleInvoiceLetter({
               <strong>Factura #</strong> {invoice.invoice_number}
             </p>
             <p style={{ margin: 0 }}>
-              <strong>Fecha</strong> {new Date(invoice.issued_at).toLocaleDateString()}
+              <strong>Fecha</strong> {formatDateColombia(invoice.issued_at)}
             </p>
             {invoice.due_date ? (
               <p style={{ margin: 0 }}>
-                <strong>Vencimiento</strong> {new Date(invoice.due_date).toLocaleDateString()}
+                <strong>Vencimiento</strong> {formatDateColombia(invoice.due_date)}
               </p>
             ) : null}
           </div>

@@ -267,3 +267,20 @@ export async function createWholesaleFinanceMovement(input: CreateWholesaleFinan
     movementId: first.movement_id as string,
   }
 }
+
+export async function deleteWholesaleFinanceMovement(
+  storeId: string,
+  movementId: string,
+  kind: 'expense' | 'investment',
+) {
+  const { error } = await supabase
+    .from('wholesale_finance_movements')
+    .delete()
+    .eq('id', movementId)
+    .eq('store_id', storeId)
+    .eq('kind', kind)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+}

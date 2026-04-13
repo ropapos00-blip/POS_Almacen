@@ -1,16 +1,21 @@
 import { supabase } from '../../../integrations/supabase/client/supabaseClient'
+import {
+  getTodayIsoDateColombia,
+  toUtcIsoEndOfColombiaDay,
+  toUtcIsoStartOfColombiaDay,
+} from '../../../shared/utils/dateTime'
 import type { SaleRow, SalesFilters } from '../model/sales.types'
 
 function startOfDayIso(date: string) {
-  return new Date(`${date}T00:00:00`).toISOString()
+  return toUtcIsoStartOfColombiaDay(date)
 }
 
 function endOfDayIso(date: string) {
-  return new Date(`${date}T23:59:59`).toISOString()
+  return toUtcIsoEndOfColombiaDay(date)
 }
 
 export async function listSales(storeId: string, filters: SalesFilters) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = getTodayIsoDateColombia()
   const effectiveFilters =
     filters.viewerRole === 'cashier'
       ? {

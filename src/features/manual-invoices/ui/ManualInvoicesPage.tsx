@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { formatCop } from '../../../shared/utils/currency'
+import { formatDateTimeColombia } from '../../../shared/utils/dateTime'
 import { createClientId } from '../../../shared/utils/id'
 import { formatCopInput, parseCopIntegerInput, parseIntegerInput } from '../../../shared/utils/numberInput'
 import { useAuthStore } from '../../auth/model/useAuthStore'
@@ -471,7 +472,7 @@ export function ManualInvoicesPage() {
                 <div>
                   <p className="break-all text-sm font-semibold text-zinc-200">{invoice.invoice_number}</p>
                   <p className="wrap-break-word text-xs text-zinc-500">
-                    {new Date(invoice.created_at).toLocaleString()} ·{' '}
+                    {formatDateTimeColombia(invoice.created_at)} ·{' '}
                     {invoice.customer_name ?? 'Cliente general'}
                     {invoice.customer_phone ? ` · ${invoice.customer_phone}` : ''}
                   </p>

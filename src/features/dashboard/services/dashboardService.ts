@@ -1,4 +1,9 @@
 import { supabase } from '../../../integrations/supabase/client/supabaseClient'
+import {
+  addDaysToIsoDate,
+  getTodayIsoDateColombia,
+  toUtcIsoStartOfColombiaDay,
+} from '../../../shared/utils/dateTime'
 import type {
   DashboardKpis,
   DashboardSellerMetric,
@@ -6,21 +11,18 @@ import type {
 } from '../model/dashboard.types'
 
 function startOfTodayIso() {
-  const now = new Date()
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  return start.toISOString()
+  return toUtcIsoStartOfColombiaDay(getTodayIsoDateColombia())
 }
 
 function startOfMonthIso() {
-  const now = new Date()
-  const start = new Date(now.getFullYear(), now.getMonth(), 1)
-  return start.toISOString()
+  const today = getTodayIsoDateColombia()
+  const monthStart = `${today.slice(0, 7)}-01`
+  return toUtcIsoStartOfColombiaDay(monthStart)
 }
 
 function daysAgoIso(days: number) {
-  const now = new Date()
-  now.setDate(now.getDate() - days)
-  return now.toISOString()
+  const date = addDaysToIsoDate(getTodayIsoDateColombia(), -days)
+  return toUtcIsoStartOfColombiaDay(date)
 }
 
 export async function getDashboardKpis(storeId: string): Promise<DashboardKpis> {

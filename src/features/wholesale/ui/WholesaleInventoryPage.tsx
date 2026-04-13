@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { formatCop } from '../../../shared/utils/currency'
 import { formatCopInput, parseCopIntegerInput } from '../../../shared/utils/numberInput'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import {
   useCreateWholesaleReferenceMutation,
+  useDeleteAllWholesaleReferencesMutation,
   useDeleteWholesaleReferenceMutation,
   useUpdateWholesaleReferenceMutation,
   useWholesaleInventoryStockQuery,
@@ -24,11 +25,31 @@ export function WholesaleInventoryPage() {
   const [investmentAmount, setInvestmentAmount] = useState('')
   const [editingRow, setEditingRow] = useState<WholesaleInventoryRow | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<WholesaleInventoryRow | null>(null)
+  const [showResetInventoryModal, setShowResetInventoryModal] = useState(false)
 
   const inventoryQuery = useWholesaleInventoryStockQuery(user?.storeId)
   const createMutation = useCreateWholesaleReferenceMutation(user?.storeId, user?.id)
   const updateMutation = useUpdateWholesaleReferenceMutation(user?.storeId, user?.id)
   const deleteMutation = useDeleteWholesaleReferenceMutation(user?.storeId)
+  const deleteAllMutation = useDeleteAllWholesaleReferencesMutation(user?.storeId)
+
+  useEffect(() => {
+    if (!deleteTarget && !showResetInventoryModal) {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setDeleteTarget(null)
+        setShowResetInventoryModal(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [deleteTarget, showResetInventoryModal])
 
   const filteredRows = useMemo(() => {
     const query = searchText.trim().toLowerCase()
@@ -156,6 +177,22 @@ export function WholesaleInventoryPage() {
     }
   }
 
+  async function confirmDeleteAllInventory() {
+    try {
+      const result = await deleteAllMutation.mutateAsync()
+      resetForm()
+      setDeleteTarget(null)
+      setShowResetInventoryModal(false)
+      setFeedback(
+        result.affectedRows > 0
+          ? `Inventario de confeccion reiniciado. Referencias eliminadas: ${result.affectedRows}.`
+          : 'No habia referencias activas para eliminar.',
+      )
+    } catch (error) {
+      setFeedback(getErrorMessage(error))
+    }
+  }
+
   if (!user?.storeId) {
     return (
       <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
@@ -266,6 +303,14 @@ export function WholesaleInventoryPage() {
             placeholder="Buscar por referencia"
             className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
           />
+          <button
+            type="button"
+            onClick={() => setShowResetInventoryModal(true)}
+            disabled={filteredRows.length === 0 || deleteAllMutation.isPending}
+            className="rounded-lg border border-rose-500/40 px-3 py-2 text-sm font-medium text-rose-300 disabled:opacity-60"
+          >
+            Reiniciar inventario
+          </button>
         </div>
 
         <ul className="mt-4 space-y-2">
@@ -307,8 +352,16 @@ export function WholesaleInventoryPage() {
       </article>
 
       {deleteTarget ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
+          onClick={() => setDeleteTarget(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5"
+            onClick={(event) => {
+              event.stopPropagation()
+            }}
+          >
             <h3 className="text-lg font-semibold text-zinc-100">Confirmar eliminacion</h3>
             <p className="mt-2 text-sm text-zinc-400">
               Seguro que deseas eliminar la referencia {deleteTarget.reference}? Esta accion la oculta del inventario de confeccion.
@@ -331,6 +384,46 @@ export function WholesaleInventoryPage() {
                 className="rounded-lg bg-rose-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-70"
               >
                 {deleteMutation.isPending ? 'Eliminando...' : 'Si, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showResetInventoryModal ? (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
+          onClick={() => setShowResetInventoryModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5"
+            onClick={(event) => {
+              event.stopPropagation()
+            }}
+          >
+            <h3 className="text-lg font-semibold text-zinc-100">Reiniciar inventario de confeccion</h3>
+            <p className="mt-2 text-sm text-zinc-400">
+              Esta accion eliminara todas las referencias activas del inventario y lo dejara en cero para iniciar de nuevo.
+            </p>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setShowResetInventoryModal(false)}
+                disabled={deleteAllMutation.isPending}
+                className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200 disabled:opacity-70"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void confirmDeleteAllInventory()
+                }}
+                disabled={deleteAllMutation.isPending}
+                className="rounded-lg bg-rose-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-70"
+              >
+                {deleteAllMutation.isPending ? 'Eliminando...' : 'Si, reiniciar'}
               </button>
             </div>
           </div>

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createWholesaleFinanceMovement,
   createWholesaleInvoice,
+  deleteWholesaleFinanceMovement,
   listWholesaleFinanceMovements,
   listWholesaleReferenceOptions,
   listWholesaleInvoices,
@@ -12,6 +13,7 @@ import {
 } from '../services/wholesaleService'
 import {
   createWholesaleReference,
+  deleteAllWholesaleReferences,
   deleteWholesaleReference,
   listWholesaleInventoryStock,
   updateWholesaleReference,
@@ -144,6 +146,21 @@ export function useCreateWholesaleFinanceMovementMutation(storeId?: string) {
   })
 }
 
+export function useDeleteWholesaleFinanceMovementMutation(storeId?: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ movementId, kind }: { movementId: string; kind: 'expense' | 'investment' }) =>
+      deleteWholesaleFinanceMovement(storeId as string, movementId, kind),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['wholesale', 'finance-movements', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),
+      ])
+    },
+  })
+}
+
 export function useWholesaleInventoryStockQuery(storeId?: string) {
   return useQuery({
     queryKey: ['wholesale', 'inventory', storeId],
@@ -193,6 +210,24 @@ export function useDeleteWholesaleReferenceMutation(storeId?: string) {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['wholesale', 'inventory', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['wholesale', 'reference-options', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['wholesale', 'finance-movements', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),
+      ])
+    },
+  })
+}
+
+export function useDeleteAllWholesaleReferencesMutation(storeId?: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => deleteAllWholesaleReferences(storeId as string),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['wholesale', 'inventory', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['wholesale', 'reference-options', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['wholesale', 'finance-movements', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),
       ])
     },
   })

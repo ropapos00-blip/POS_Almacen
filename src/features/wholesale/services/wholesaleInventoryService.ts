@@ -212,6 +212,31 @@ export async function updateWholesaleReference(
 }
 
 export async function deleteWholesaleReference(storeId: string, referenceId: string) {
+  const { data: referenceMovements, error: referenceMovementsError } = await supabase
+    .from('wholesale_reference_movements')
+    .select('id')
+    .eq('store_id', storeId)
+    .eq('wholesale_reference_id', referenceId)
+
+  if (referenceMovementsError) {
+    throw new Error(referenceMovementsError.message)
+  }
+
+  const movementIds = (referenceMovements ?? []).map((row) => String(row.id))
+
+  if (movementIds.length > 0) {
+    const { error: deleteInvestmentsError } = await supabase
+      .from('wholesale_finance_movements')
+      .delete()
+      .eq('store_id', storeId)
+      .eq('kind', 'investment')
+      .in('source_reference_movement_id', movementIds)
+
+    if (deleteInvestmentsError) {
+      throw new Error(deleteInvestmentsError.message)
+    }
+  }
+
   const { error } = await supabase
     .from('wholesale_references')
     .update({
@@ -224,5 +249,65 @@ export async function deleteWholesaleReference(storeId: string, referenceId: str
 
   if (error) {
     throw new Error(error.message)
+  }
+}
+
+export async function deleteAllWholesaleReferences(storeId: string) {
+  const { data: activeReferences, error: activeReferencesError } = await supabase
+    .from('wholesale_references')
+    .select('id')
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+
+  if (activeReferencesError) {
+    throw new Error(activeReferencesError.message)
+  }
+
+  const activeReferenceIds = (activeReferences ?? []).map((row) => String(row.id))
+
+  if (activeReferenceIds.length > 0) {
+    const { data: referenceMovements, error: referenceMovementsError } = await supabase
+      .from('wholesale_reference_movements')
+      .select('id')
+      .eq('store_id', storeId)
+      .in('wholesale_reference_id', activeReferenceIds)
+
+    if (referenceMovementsError) {
+      throw new Error(referenceMovementsError.message)
+    }
+
+    const movementIds = (referenceMovements ?? []).map((row) => String(row.id))
+
+    if (movementIds.length > 0) {
+      const { error: deleteInvestmentsError } = await supabase
+        .from('wholesale_finance_movements')
+        .delete()
+        .eq('store_id', storeId)
+        .eq('kind', 'investment')
+        .in('source_reference_movement_id', movementIds)
+
+      if (deleteInvestmentsError) {
+        throw new Error(deleteInvestmentsError.message)
+      }
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('wholesale_references')
+    .update({
+      is_active: false,
+      quantity_on_hand: 0,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+    .select('id')
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return {
+    affectedRows: (data ?? []).length,
   }
 }

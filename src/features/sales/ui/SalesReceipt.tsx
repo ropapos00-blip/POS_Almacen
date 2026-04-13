@@ -1,5 +1,6 @@
 import type { RefObject } from 'react'
 import { formatCop } from '../../../shared/utils/currency'
+import { formatDateTimeColombia } from '../../../shared/utils/dateTime'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import type { SaleRow } from '../model/sales.types'
 
@@ -51,7 +52,7 @@ export function SalesReceipt({
         {hasBusinessDetails ? <p className="my-1 border-t border-dashed border-black" /> : null}
         <p className="text-center text-xs">Reimpresion de ticket</p>
         <p className="mt-3 text-xs">Venta: {sale.sale_number}</p>
-        <p className="text-xs">Fecha: {new Date(sale.sold_at).toLocaleString()}</p>
+        <p className="text-xs">Fecha: {formatDateTimeColombia(sale.sold_at)}</p>
         {sale.customer_name ? <p className="text-xs">Cliente: {sale.customer_name}</p> : null}
 
         <div className="mt-3 border-t border-dashed border-black pt-2">
