@@ -28,7 +28,7 @@ export function LoginPage() {
   const [publicStoreLoginSupportText, setPublicStoreLoginSupportText] = useState<string | null>(null)
   const displayStoreName = storeName ?? publicStoreName ?? getCachedStoreName() ?? 'LICKAN42'
   const displayStoreSlogan =
-    storeSlogan ?? publicStoreSlogan ?? 'Cada venta cuenta, cada cliente vuelve'
+    storeSlogan ?? publicStoreSlogan ?? 'Cada venta cuenta'
   const displayStoreLoginSupportText =
     storeLoginSupportText ??
     publicStoreLoginSupportText ??
