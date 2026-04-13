@@ -1,8 +1,10 @@
 import { supabase } from '../../../integrations/supabase/client/supabaseClient'
 import type {
   CreateWholesaleReferenceInput,
+  UpdateWholesaleReferenceInvestmentMovementInput,
   UpdateWholesaleReferenceInput,
   WholesaleInventoryRow,
+  WholesaleReferenceInvestmentMovementRow,
 } from '../model/wholesale.types'
 
 export async function listWholesaleInventoryStock(storeId: string) {
@@ -309,5 +311,117 @@ export async function deleteAllWholesaleReferences(storeId: string) {
 
   return {
     affectedRows: (data ?? []).length,
+  }
+}
+
+export async function listWholesaleReferenceInvestmentMovements(storeId: string, referenceId: string) {
+  const { data: referenceMovements, error: referenceMovementsError } = await supabase
+    .from('wholesale_reference_movements')
+    .select('id, quantity, investment_amount, reason, created_at')
+    .eq('store_id', storeId)
+    .eq('wholesale_reference_id', referenceId)
+    .order('created_at', { ascending: false })
+    .limit(200)
+
+  if (referenceMovementsError) {
+    throw new Error(referenceMovementsError.message)
+  }
+
+  const movementIds = (referenceMovements ?? []).map((row) => String(row.id))
+  if (movementIds.length === 0) {
+    return [] as WholesaleReferenceInvestmentMovementRow[]
+  }
+
+  const referenceMovementById = new Map(
+    (referenceMovements ?? []).map((row) => [String(row.id), row]),
+  )
+
+  const { data: financeMovements, error: financeMovementsError } = await supabase
+    .from('wholesale_finance_movements')
+    .select('id, source_reference_movement_id, amount, movement_date, category, notes, created_at')
+    .eq('store_id', storeId)
+    .eq('kind', 'investment')
+    .in('source_reference_movement_id', movementIds)
+    .order('movement_date', { ascending: false })
+    .order('created_at', { ascending: false })
+
+  if (financeMovementsError) {
+    throw new Error(financeMovementsError.message)
+  }
+
+  return (financeMovements ?? []).map((row) => {
+    const sourceId = row.source_reference_movement_id ? String(row.source_reference_movement_id) : null
+    const sourceRow = sourceId ? referenceMovementById.get(sourceId) : null
+
+    return {
+      id: String(row.id),
+      source_reference_movement_id: sourceId,
+      amount: Number(row.amount ?? 0),
+      movement_date: String(row.movement_date ?? ''),
+      category: row.category ? String(row.category) : null,
+      notes: row.notes ? String(row.notes) : null,
+      created_at: String(row.created_at ?? ''),
+      reference_movement_quantity: Number(sourceRow?.quantity ?? 0),
+      reference_movement_investment_amount: Number(sourceRow?.investment_amount ?? 0),
+      reference_movement_reason: sourceRow?.reason ? String(sourceRow.reason) : null,
+      reference_movement_created_at: String(sourceRow?.created_at ?? ''),
+    } satisfies WholesaleReferenceInvestmentMovementRow
+  })
+}
+
+export async function updateWholesaleReferenceInvestmentMovement(
+  storeId: string,
+  input: UpdateWholesaleReferenceInvestmentMovementInput,
+) {
+  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    throw new Error('El monto de inversion debe ser mayor a cero.')
+  }
+
+  const { data: financeMovement, error: financeMovementError } = await supabase
+    .from('wholesale_finance_movements')
+    .select('id, source_reference_movement_id')
+    .eq('id', input.movementId)
+    .eq('store_id', storeId)
+    .eq('kind', 'investment')
+    .maybeSingle()
+
+  if (financeMovementError) {
+    throw new Error(financeMovementError.message)
+  }
+
+  if (!financeMovement?.id) {
+    throw new Error('Movimiento de inversion no encontrado.')
+  }
+
+  const { error: updateFinanceError } = await supabase
+    .from('wholesale_finance_movements')
+    .update({
+      amount: input.amount,
+      notes: 'Ajuste manual de inversion desde inventario de confeccion',
+    })
+    .eq('id', input.movementId)
+    .eq('store_id', storeId)
+    .eq('kind', 'investment')
+
+  if (updateFinanceError) {
+    throw new Error(updateFinanceError.message)
+  }
+
+  const sourceReferenceMovementId = financeMovement.source_reference_movement_id
+    ? String(financeMovement.source_reference_movement_id)
+    : null
+
+  if (sourceReferenceMovementId) {
+    const { error: updateReferenceMovementError } = await supabase
+      .from('wholesale_reference_movements')
+      .update({
+        investment_amount: input.amount,
+      })
+      .eq('id', sourceReferenceMovementId)
+      .eq('store_id', storeId)
+
+    if (updateReferenceMovementError) {
+      throw new Error(updateReferenceMovementError.message)
+    }
   }
 }

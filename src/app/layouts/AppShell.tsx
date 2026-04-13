@@ -1,4 +1,5 @@
 import { FileText, LayoutDashboard, LogOut, Package, ReceiptText, ShoppingCart, Store, Wallet } from 'lucide-react'
+import { useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuthStore } from '../../features/auth/model/useAuthStore'
 
@@ -24,6 +25,11 @@ const confeccionNavItems = [
 export function AppShell() {
   const user = useAuthStore((state) => state.user)
   const signOut = useAuthStore((state) => state.signOut)
+
+  useEffect(() => {
+    const storeName = user?.storeName?.trim() || 'LICKAN42'
+    document.title = storeName
+  }, [user?.storeName])
 
   const visibleStoreNavItems = storeNavItems.filter((item) => {
     if (!('roles' in item) || !item.roles) {
@@ -53,7 +59,7 @@ export function AppShell() {
         <aside className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4 backdrop-blur">
           <div className="mb-6 border-b border-zinc-800 pb-4">
             <p className="store-logo-font text-base uppercase tracking-[0.16em] text-amber-400 md:text-lg">
-              {user?.storeName ?? 'POS Retail'}
+              {user?.storeName ?? 'LICKAN42'}
             </p>
             <p className="mt-2 text-sm font-medium text-zinc-300">{user?.fullName}</p>
             <p className="text-xs text-zinc-500">Rol: {user?.role}</p>

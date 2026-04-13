@@ -16,13 +16,16 @@ import {
   deleteAllWholesaleReferences,
   deleteWholesaleReference,
   listWholesaleInventoryStock,
+  listWholesaleReferenceInvestmentMovements,
   updateWholesaleReference,
+  updateWholesaleReferenceInvestmentMovement,
 } from '../services/wholesaleInventoryService'
 import type {
   CreateWholesaleInvoiceInput,
   CreateWholesaleFinanceMovementInput,
   CreateWholesaleReferenceInput,
   RegisterWholesalePaymentInput,
+  UpdateWholesaleReferenceInvestmentMovementInput,
   UpdateWholesaleInvoiceInput,
   UpdateWholesaleInvoiceHeaderInput,
   UpdateWholesaleReferenceInput,
@@ -226,6 +229,32 @@ export function useDeleteAllWholesaleReferencesMutation(storeId?: string) {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['wholesale', 'inventory', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['wholesale', 'reference-options', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['wholesale', 'finance-movements', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),
+      ])
+    },
+  })
+}
+
+export function useWholesaleReferenceInvestmentMovementsQuery(storeId?: string, referenceId?: string) {
+  return useQuery({
+    queryKey: ['wholesale', 'reference-investments', storeId, referenceId],
+    queryFn: () => listWholesaleReferenceInvestmentMovements(storeId as string, referenceId as string),
+    enabled: Boolean(storeId && referenceId),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: true,
+  })
+}
+
+export function useUpdateWholesaleReferenceInvestmentMovementMutation(storeId?: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: UpdateWholesaleReferenceInvestmentMovementInput) =>
+      updateWholesaleReferenceInvestmentMovement(storeId as string, input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['wholesale', 'reference-investments', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['wholesale', 'finance-movements', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),
       ])

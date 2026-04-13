@@ -26,7 +26,7 @@ export function LoginPage() {
   const [publicStoreName, setPublicStoreName] = useState<string | null>(null)
   const [publicStoreSlogan, setPublicStoreSlogan] = useState<string | null>(null)
   const [publicStoreLoginSupportText, setPublicStoreLoginSupportText] = useState<string | null>(null)
-  const displayStoreName = storeName ?? publicStoreName ?? getCachedStoreName() ?? 'POS Retail'
+  const displayStoreName = storeName ?? publicStoreName ?? getCachedStoreName() ?? 'LICKAN42'
   const displayStoreSlogan =
     storeSlogan ?? publicStoreSlogan ?? 'Cada venta cuenta, cada cliente vuelve'
   const displayStoreLoginSupportText =
@@ -93,6 +93,10 @@ export function LoginPage() {
       navigate('/dashboard', { replace: true })
     }
   }, [isAuthenticated, navigate])
+
+  useEffect(() => {
+    document.title = displayStoreName
+  }, [displayStoreName])
 
   return (
     <main className="mx-auto grid min-h-screen w-full max-w-6xl grid-cols-1 items-center gap-6 px-6 py-10 md:grid-cols-[1.2fr_1fr]">

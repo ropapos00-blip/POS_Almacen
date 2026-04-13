@@ -140,6 +140,25 @@ export interface CreateWholesaleFinanceMovementInput {
   notes: string
 }
 
+export interface WholesaleReferenceInvestmentMovementRow {
+  id: string
+  source_reference_movement_id: string | null
+  amount: number
+  movement_date: string
+  category: string | null
+  notes: string | null
+  created_at: string
+  reference_movement_quantity: number
+  reference_movement_investment_amount: number
+  reference_movement_reason: string | null
+  reference_movement_created_at: string
+}
+
+export interface UpdateWholesaleReferenceInvestmentMovementInput {
+  movementId: string
+  amount: number
+}
+
 export interface RegisterWholesalePaymentInput {
   invoiceId: string
   actorUserId: string
