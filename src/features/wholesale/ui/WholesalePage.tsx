@@ -35,8 +35,13 @@ interface DraftItem {
   id: string
   variantId: string
   reference: string
+  color: string
+  size: string
   productName: string
   stockAvailable: number
+  sizeQuantities: Record<string, number>
+  colorQuantities: Record<string, Record<string, number>>
+  availableColors: string[]
   quantity: number
   unitPrice: number
 }
@@ -45,12 +50,19 @@ interface EditDraftItem {
   id: string
   variantId: string
   reference: string
+  color: string
+  size: string
   productName: string
   stockAvailable: number
+  sizeQuantities: Record<string, number>
+  colorQuantities: Record<string, Record<string, number>>
+  availableColors: string[]
   quantity: number
   unitPrice: number
   originalQuantity: number
   initialVariantId: string
+  initialColor: string
+  initialSize: string
 }
 
 function createDraftItem(): DraftItem {
@@ -58,8 +70,13 @@ function createDraftItem(): DraftItem {
     id: createClientId(),
     variantId: '',
     reference: '',
+    color: '',
+    size: '',
     productName: '',
     stockAvailable: 0,
+    sizeQuantities: {},
+    colorQuantities: {},
+    availableColors: [],
     quantity: 0,
     unitPrice: 0,
   }
@@ -70,12 +87,19 @@ function createEditDraftItem(): EditDraftItem {
     id: createClientId(),
     variantId: '',
     reference: '',
+    color: '',
+    size: '',
     productName: '',
     stockAvailable: 0,
+    sizeQuantities: {},
+    colorQuantities: {},
+    availableColors: [],
     quantity: 0,
     unitPrice: 0,
     originalQuantity: 0,
     initialVariantId: '',
+    initialColor: '',
+    initialSize: '',
   }
 }
 
@@ -91,6 +115,87 @@ function paymentLabel(method: WholesalePaymentMethod) {
   if (method === 'transfer') return 'Transferencia'
   if (method === 'mixed') return 'Mixto'
   return 'Credito'
+}
+
+function normalizeSizeValue(raw: string) {
+  return raw.trim().toUpperCase()
+}
+
+function normalizeColorValue(raw: string) {
+  return raw.trim().toUpperCase()
+}
+
+function getStockForSize(sizeQuantities: Record<string, number>, size: string) {
+  const normalized = normalizeSizeValue(size)
+  if (!normalized) {
+    return 0
+  }
+
+  return Math.max(0, Number(sizeQuantities[normalized] ?? 0))
+}
+
+function getStockForColorSize(
+  colorQuantities: Record<string, Record<string, number>>,
+  sizeQuantities: Record<string, number>,
+  color: string,
+  size: string,
+) {
+  const normalizedColor = normalizeColorValue(color)
+  const normalizedSize = normalizeSizeValue(size)
+
+  if (!normalizedSize) {
+    return 0
+  }
+
+  if (!normalizedColor) {
+    return getStockForSize(sizeQuantities, normalizedSize)
+  }
+
+  const sizeMap = colorQuantities[normalizedColor] ?? {}
+  return Math.max(0, Number(sizeMap[normalizedSize] ?? 0))
+}
+
+function getColorOptions(
+  availableColors: string[],
+  colorQuantities: Record<string, Record<string, number>>,
+  currentColor = '',
+) {
+  const fromMap = Object.keys(colorQuantities)
+    .map((color) => normalizeColorValue(color))
+    .filter((color) => color.length > 0)
+  const fromAvailable = availableColors
+    .map((color) => normalizeColorValue(color))
+    .filter((color) => color.length > 0)
+  const current = normalizeColorValue(currentColor)
+
+  return Array.from(new Set([...fromMap, ...fromAvailable, ...(current ? [current] : [])])).sort((a, b) =>
+    a.localeCompare(b, 'es'),
+  )
+}
+
+function getSizeOptions(
+  sizeQuantities: Record<string, number>,
+  colorQuantities: Record<string, Record<string, number>>,
+  selectedColor: string,
+  currentSize = '',
+) {
+  const normalizedColor = normalizeColorValue(selectedColor)
+
+  let sizes: string[] = []
+  if (normalizedColor && colorQuantities[normalizedColor]) {
+    sizes = Object.keys(colorQuantities[normalizedColor] ?? {})
+  } else if (Object.keys(colorQuantities).length > 0) {
+    sizes = Object.values(colorQuantities).flatMap((sizeMap) => Object.keys(sizeMap ?? {}))
+  } else {
+    sizes = Object.keys(sizeQuantities)
+  }
+
+  const normalizedSizes = sizes.map((size) => normalizeSizeValue(size)).filter((size) => size.length > 0)
+  const normalizedCurrent = normalizeSizeValue(currentSize)
+
+  return Array.from(
+    new Set([...normalizedSizes, ...(normalizedCurrent ? [normalizedCurrent] : [])]),
+  ).sort((a, b) => a.localeCompare(b, 'es'))
 }
 
 function invoiceActionButtonClass(variant: 'print' | 'edit' | 'delete' | 'view' | 'pay') {
@@ -199,26 +304,48 @@ export function WholesalePage() {
   const deleteFinanceMovementMutation = useDeleteWholesaleFinanceMovementMutation(user?.storeId)
 
   const referenceByCode = useMemo(() => {
-    const map = new Map<string, { variantId: string; productName: string; unitPrice: number; quantityOnHand: number }>()
+    const map = new Map<string, {
+      variantId: string
+      productName: string
+      unitPrice: number
+      quantityOnHand: number
+      sizeQuantities: Record<string, number>
+      colorQuantities: Record<string, Record<string, number>>
+      availableColors: string[]
+    }>()
     ;(referenceOptionsQuery.data ?? []).forEach((item) => {
       map.set(item.reference.trim().toLowerCase(), {
         variantId: item.variantId,
         productName: item.productName,
         unitPrice: item.unitPrice,
         quantityOnHand: item.quantityOnHand,
+        sizeQuantities: item.sizeQuantities,
+        colorQuantities: item.colorQuantities,
+        availableColors: item.availableColors,
       })
     })
     return map
   }, [referenceOptionsQuery.data])
 
   const referenceByVariantId = useMemo(() => {
-    const map = new Map<string, { reference: string; productName: string; unitPrice: number; quantityOnHand: number }>()
+    const map = new Map<string, {
+      reference: string
+      productName: string
+      unitPrice: number
+      quantityOnHand: number
+      sizeQuantities: Record<string, number>
+      colorQuantities: Record<string, Record<string, number>>
+      availableColors: string[]
+    }>()
     ;(referenceOptionsQuery.data ?? []).forEach((item) => {
       map.set(item.variantId, {
         reference: item.reference,
         productName: item.productName,
         unitPrice: item.unitPrice,
         quantityOnHand: item.quantityOnHand,
+        sizeQuantities: item.sizeQuantities,
+        colorQuantities: item.colorQuantities,
+        availableColors: item.availableColors,
       })
     })
     return map
@@ -603,9 +730,67 @@ export function WholesalePage() {
           return item
         }
 
+        const sizeStock = getStockForColorSize(
+          item.colorQuantities,
+          item.sizeQuantities,
+          item.color,
+          item.size,
+        )
+
         return {
           ...item,
-          quantity: Math.max(0, quantity),
+          quantity: Math.max(0, Math.min(quantity, sizeStock || item.stockAvailable)),
+        }
+      }),
+    )
+  }
+
+  function updateDraftSize(id: string, rawSize: string) {
+    const size = normalizeSizeValue(rawSize)
+
+    setDraftItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) {
+          return item
+        }
+
+        const sizeStock = getStockForColorSize(
+          item.colorQuantities,
+          item.sizeQuantities,
+          item.color,
+          size,
+        )
+        return {
+          ...item,
+          size,
+          stockAvailable: sizeStock,
+          quantity: item.quantity <= 0 ? 0 : Math.min(item.quantity, sizeStock),
+        }
+      }),
+    )
+  }
+
+  function updateDraftColor(id: string, rawColor: string) {
+    const color = normalizeColorValue(rawColor)
+
+    setDraftItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) {
+          return item
+        }
+
+        const sizeStock = getStockForColorSize(
+          item.colorQuantities,
+          item.sizeQuantities,
+          color,
+          item.size,
+        )
+
+        return {
+          ...item,
+          color,
+          stockAvailable: sizeStock,
+          quantity: item.quantity <= 0 ? 0 : Math.min(item.quantity, sizeStock),
         }
       }),
     )
@@ -628,18 +813,65 @@ export function WholesalePage() {
             variantId: '',
             productName: '',
             stockAvailable: 0,
+            color: '',
+            size: '',
+            sizeQuantities: {},
+            colorQuantities: {},
+            availableColors: [],
             unitPrice: 0,
           }
         }
+
+        const availableColorOptions = getColorOptions(
+          selected.availableColors,
+          selected.colorQuantities,
+          item.color,
+        )
+        const currentColor = normalizeColorValue(item.color)
+        const nextColor =
+          currentColor ||
+          availableColorOptions.find((color) => {
+            const sizeMap = selected.colorQuantities[normalizeColorValue(color)] ?? {}
+            return Object.values(sizeMap).some((qty) => qty > 0)
+          }) ||
+          availableColorOptions[0] ||
+          ''
+        const currentSize = normalizeSizeValue(item.size)
+        const sizeOptions = getSizeOptions(
+          selected.sizeQuantities,
+          selected.colorQuantities,
+          nextColor,
+          item.size,
+        )
+        const nextSize =
+          currentSize ||
+          sizeOptions.find((size) =>
+            nextColor
+              ? Number((selected.colorQuantities[nextColor] ?? {})[size] ?? 0) > 0
+              : selected.sizeQuantities[size] > 0,
+          ) ||
+          sizeOptions[0] ||
+          ''
+        const sizeStock = getStockForColorSize(
+          selected.colorQuantities,
+          selected.sizeQuantities,
+          nextColor,
+          nextSize,
+        )
 
         return {
           ...item,
           reference,
           variantId: selected.variantId,
           productName: selected.productName,
-          stockAvailable: selected.quantityOnHand,
+          color: nextColor,
+          size: nextSize,
+          sizeQuantities: selected.sizeQuantities,
+          colorQuantities: selected.colorQuantities,
+          availableColors: selected.availableColors,
+          stockAvailable: sizeStock,
           unitPrice: selected.unitPrice,
-          quantity: item.quantity <= 0 ? 0 : Math.min(item.quantity, selected.quantityOnHand),
+          quantity: item.quantity <= 0 ? 0 : Math.min(item.quantity, sizeStock),
         }
       }),
     )
@@ -660,12 +892,15 @@ export function WholesalePage() {
     .map((item) => ({
       variantId: item.variantId,
       reference: item.reference,
+      color: normalizeColorValue(item.color),
+      size: normalizeSizeValue(item.size),
+      requiresColor: item.availableColors.length > 0 || Object.keys(item.colorQuantities).length > 0,
       productName: item.productName,
       stockAvailable: item.stockAvailable,
       quantity: Math.max(0, Number(item.quantity || 0)),
       unitPrice: Math.max(0, Number(item.unitPrice || 0)),
     }))
-    .filter((item) => item.variantId && item.quantity > 0)
+    .filter((item) => item.variantId && item.size && item.quantity > 0 && (!item.requiresColor || !!item.color))
 
   const hasInvalidStockRequest = cleanedItemsForValidation.some(
     (item) => item.quantity > item.stockAvailable,
@@ -711,6 +946,8 @@ export function WholesalePage() {
         dueDate: creditDueDate,
         items: cleanedItemsForValidation.map((item) => ({
           variantId: item.variantId,
+          color: item.color || 'UNICO',
+          size: item.size,
           quantity: item.quantity,
         })),
       })
@@ -738,6 +975,8 @@ export function WholesalePage() {
           id: `${result.invoiceId}-${index}`,
           variant_id: item.variantId,
           reference: item.reference,
+          color: item.color || null,
+          size: item.size,
           description: item.productName,
           quantity: item.quantity,
           unit_price: item.unitPrice,
@@ -812,12 +1051,24 @@ export function WholesalePage() {
         id: item.id,
         variantId,
         reference: refOption?.reference ?? item.reference ?? item.description,
+        color: normalizeColorValue(item.color ?? ''),
+        size: normalizeSizeValue(item.size ?? ''),
         productName: refOption?.productName ?? item.description,
-        stockAvailable: refOption?.quantityOnHand ?? 0,
+        stockAvailable: getStockForColorSize(
+          refOption?.colorQuantities ?? {},
+          refOption?.sizeQuantities ?? {},
+          item.color ?? '',
+          item.size ?? '',
+        ),
+        sizeQuantities: refOption?.sizeQuantities ?? {},
+        colorQuantities: refOption?.colorQuantities ?? {},
+        availableColors: refOption?.availableColors ?? [],
         quantity: item.quantity,
         unitPrice: refOption?.unitPrice ?? item.unit_price,
         originalQuantity: item.quantity,
         initialVariantId: variantId,
+        initialColor: normalizeColorValue(item.color ?? ''),
+        initialSize: normalizeSizeValue(item.size ?? ''),
       }
     })
 
@@ -845,9 +1096,79 @@ export function WholesalePage() {
           return item
         }
 
+        const sameOriginalSlot =
+          item.variantId === item.initialVariantId &&
+          item.color === item.initialColor &&
+          item.size === item.initialSize
+        const maxAvailable = item.stockAvailable + (sameOriginalSlot ? item.originalQuantity : 0)
+
         return {
           ...item,
-          quantity: Math.max(0, quantity),
+          quantity: Math.max(0, Math.min(quantity, maxAvailable)),
+        }
+      }),
+    )
+  }
+
+  function updateEditItemSize(id: string, rawSize: string) {
+    const nextSize = normalizeSizeValue(rawSize)
+
+    setEditItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) {
+          return item
+        }
+
+        const sizeStock = getStockForColorSize(
+          item.colorQuantities,
+          item.sizeQuantities,
+          item.color,
+          nextSize,
+        )
+        const sameOriginalSlot =
+          item.variantId === item.initialVariantId &&
+          item.color === item.initialColor &&
+          nextSize === item.initialSize
+        const maxAvailable = sizeStock + (sameOriginalSlot ? item.originalQuantity : 0)
+
+        return {
+          ...item,
+          size: nextSize,
+          stockAvailable: sizeStock,
+          originalQuantity: sameOriginalSlot ? item.originalQuantity : 0,
+          quantity: item.quantity <= 0 ? 0 : Math.min(item.quantity, maxAvailable),
+        }
+      }),
+    )
+  }
+
+  function updateEditItemColor(id: string, rawColor: string) {
+    const nextColor = normalizeColorValue(rawColor)
+
+    setEditItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) {
+          return item
+        }
+
+        const sizeStock = getStockForColorSize(
+          item.colorQuantities,
+          item.sizeQuantities,
+          nextColor,
+          item.size,
+        )
+        const sameOriginalSlot =
+          item.variantId === item.initialVariantId &&
+          nextColor === item.initialColor &&
+          item.size === item.initialSize
+        const maxAvailable = sizeStock + (sameOriginalSlot ? item.originalQuantity : 0)
+
+        return {
+          ...item,
+          color: nextColor,
+          stockAvailable: sizeStock,
+          originalQuantity: sameOriginalSlot ? item.originalQuantity : 0,
+          quantity: item.quantity <= 0 ? 0 : Math.min(item.quantity, maxAvailable),
         }
       }),
     )
@@ -869,25 +1190,74 @@ export function WholesalePage() {
             reference,
             variantId: '',
             productName: '',
+            color: '',
+            size: '',
             stockAvailable: 0,
+            sizeQuantities: {},
+            colorQuantities: {},
+            availableColors: [],
             unitPrice: 0,
             originalQuantity: item.initialVariantId ? item.originalQuantity : 0,
           }
         }
 
-        const keepsOriginalQty = selected.variantId === item.initialVariantId
+        const colorOptions = getColorOptions(
+          selected.availableColors,
+          selected.colorQuantities,
+          item.color,
+        )
+        const previousColor = normalizeColorValue(item.color)
+        const chosenColor =
+          previousColor ||
+          colorOptions.find((color) => {
+            const sizeMap = selected.colorQuantities[normalizeColorValue(color)] ?? {}
+            return Object.values(sizeMap).some((qty) => qty > 0)
+          }) ||
+          colorOptions[0] ||
+          ''
+        const previousSize = normalizeSizeValue(item.size)
+        const sizeOptions = getSizeOptions(
+          selected.sizeQuantities,
+          selected.colorQuantities,
+          chosenColor,
+          item.size,
+        )
+        const chosenSize =
+          previousSize ||
+          sizeOptions.find((size) =>
+            chosenColor
+              ? Number((selected.colorQuantities[chosenColor] ?? {})[size] ?? 0) > 0
+              : selected.sizeQuantities[size] > 0,
+          ) ||
+          sizeOptions[0] ||
+          ''
+        const sizeStock = getStockForColorSize(
+          selected.colorQuantities,
+          selected.sizeQuantities,
+          chosenColor,
+          chosenSize,
+        )
+        const keepsOriginalQty =
+          selected.variantId === item.initialVariantId &&
+          chosenColor === item.initialColor &&
+          chosenSize === item.initialSize
         return {
           ...item,
           reference,
           variantId: selected.variantId,
+          color: chosenColor,
+          size: chosenSize,
           productName: selected.productName,
-          stockAvailable: selected.quantityOnHand,
+          stockAvailable: sizeStock,
+          sizeQuantities: selected.sizeQuantities,
+          colorQuantities: selected.colorQuantities,
+          availableColors: selected.availableColors,
           unitPrice: selected.unitPrice,
           originalQuantity: keepsOriginalQty ? item.originalQuantity : 0,
           quantity:
             item.quantity <= 0
               ? 0
-              : Math.min(item.quantity, selected.quantityOnHand + (keepsOriginalQty ? item.originalQuantity : 0)),
+              : Math.min(item.quantity, sizeStock + (keepsOriginalQty ? item.originalQuantity : 0)),
         }
       }),
     )
@@ -907,12 +1277,15 @@ export function WholesalePage() {
   const cleanedEditItemsForValidation = editItems
     .map((item) => ({
       variantId: item.variantId,
+      color: normalizeColorValue(item.color),
+      size: normalizeSizeValue(item.size),
+      requiresColor: item.availableColors.length > 0 || Object.keys(item.colorQuantities).length > 0,
       quantity: Math.max(0, Number(item.quantity || 0)),
       unitPrice: Math.max(0, Number(item.unitPrice || 0)),
       stockAvailable: Math.max(0, Number(item.stockAvailable || 0)),
       originalQuantity: Math.max(0, Number(item.originalQuantity || 0)),
     }))
-    .filter((item) => item.variantId && item.quantity > 0)
+    .filter((item) => item.variantId && item.size && item.quantity > 0 && (!item.requiresColor || !!item.color))
 
   const hasInvalidEditStockRequest = cleanedEditItemsForValidation.some(
     (item) => item.quantity > item.stockAvailable + item.originalQuantity,
@@ -962,6 +1335,8 @@ export function WholesalePage() {
         discountTotal: editDiscountTotal,
         items: cleanedEditItemsForValidation.map((item) => ({
           variantId: item.variantId,
+          color: item.color || 'UNICO',
+          size: item.size,
           quantity: item.quantity,
         })),
       })
@@ -1180,7 +1555,7 @@ export function WholesalePage() {
           {draftItems.map((item, index) => (
             <div
               key={item.id}
-              className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1.4fr_90px_120px_100px_auto]"
+              className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1fr_90px_90px_90px_120px_100px_auto]"
             >
               <input
                 list="wholesale-reference-options"
@@ -1189,6 +1564,32 @@ export function WholesalePage() {
                 placeholder={`Referencia ${index + 1}`}
                 className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
               />
+              <select
+                value={item.color}
+                onChange={(event) => updateDraftColor(item.id, event.target.value)}
+                className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                disabled={!item.variantId || getColorOptions(item.availableColors, item.colorQuantities, item.color).length === 0}
+              >
+                <option value="">Color</option>
+                {getColorOptions(item.availableColors, item.colorQuantities, item.color).map((color) => (
+                  <option key={color} value={color}>
+                    {color}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={item.size}
+                onChange={(event) => updateDraftSize(item.id, event.target.value)}
+                className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                disabled={!item.variantId || getSizeOptions(item.sizeQuantities, item.colorQuantities, item.color, item.size).length === 0}
+              >
+                <option value="">Talla</option>
+                {getSizeOptions(item.sizeQuantities, item.colorQuantities, item.color, item.size).map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
               <input
                 type="number"
                 inputMode="numeric"
@@ -1221,15 +1622,25 @@ export function WholesalePage() {
                 Quitar
               </button>
               {item.productName ? (
-                <p className="md:col-span-5 text-xs text-zinc-500">{item.productName}</p>
+                <p className="md:col-span-7 text-xs text-zinc-500">{item.productName}</p>
               ) : null}
               {item.reference && !item.variantId ? (
-                <p className="md:col-span-5 text-xs text-rose-300">
+                <p className="md:col-span-7 text-xs text-rose-300">
                   Referencia no encontrada. Selecciona una referencia existente.
                 </p>
               ) : null}
+              {item.variantId && !item.size ? (
+                <p className="md:col-span-7 text-xs text-rose-300">
+                  Debes indicar la talla para facturar esta referencia.
+                </p>
+              ) : null}
+              {item.variantId && (item.availableColors.length > 0 || Object.keys(item.colorQuantities).length > 0) && !item.color ? (
+                <p className="md:col-span-7 text-xs text-rose-300">
+                  Debes indicar el color para facturar esta referencia.
+                </p>
+              ) : null}
               {item.variantId && item.quantity > item.stockAvailable ? (
-                <p className="md:col-span-5 text-xs text-rose-300">
+                <p className="md:col-span-7 text-xs text-rose-300">
                   Cantidad solicitada supera disponible ({item.stockAvailable}).
                 </p>
               ) : null}
@@ -1863,7 +2274,7 @@ export function WholesalePage() {
               {editItems.map((item, index) => (
                 <div
                   key={item.id}
-                  className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1.4fr_90px_120px_100px_auto]"
+                  className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1fr_90px_90px_90px_120px_100px_auto]"
                 >
                   <input
                     list="edit-wholesale-reference-options"
@@ -1872,6 +2283,32 @@ export function WholesalePage() {
                     placeholder={`Referencia ${index + 1}`}
                     className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
                   />
+                  <select
+                    value={item.color}
+                    onChange={(event) => updateEditItemColor(item.id, event.target.value)}
+                    className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                    disabled={!item.variantId || getColorOptions(item.availableColors, item.colorQuantities, item.color).length === 0}
+                  >
+                    <option value="">Color</option>
+                    {getColorOptions(item.availableColors, item.colorQuantities, item.color).map((color) => (
+                      <option key={color} value={color}>
+                        {color}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={item.size}
+                    onChange={(event) => updateEditItemSize(item.id, event.target.value)}
+                    className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                    disabled={!item.variantId || getSizeOptions(item.sizeQuantities, item.colorQuantities, item.color, item.size).length === 0}
+                  >
+                    <option value="">Talla</option>
+                    {getSizeOptions(item.sizeQuantities, item.colorQuantities, item.color, item.size).map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
                   <input
                     type="number"
                     inputMode="numeric"
@@ -1904,15 +2341,25 @@ export function WholesalePage() {
                     Quitar
                   </button>
                   {item.productName ? (
-                    <p className="text-xs text-zinc-500 md:col-span-5">{item.productName}</p>
+                    <p className="text-xs text-zinc-500 md:col-span-7">{item.productName}</p>
                   ) : null}
                   {item.reference && !item.variantId ? (
-                    <p className="text-xs text-rose-300 md:col-span-5">
+                    <p className="text-xs text-rose-300 md:col-span-7">
                       Referencia no encontrada. Selecciona una referencia existente.
                     </p>
                   ) : null}
+                  {item.variantId && !item.size ? (
+                    <p className="text-xs text-rose-300 md:col-span-7">
+                      Debes indicar la talla para facturar esta referencia.
+                    </p>
+                  ) : null}
+                  {item.variantId && (item.availableColors.length > 0 || Object.keys(item.colorQuantities).length > 0) && !item.color ? (
+                    <p className="text-xs text-rose-300 md:col-span-7">
+                      Debes indicar el color para facturar esta referencia.
+                    </p>
+                  ) : null}
                   {item.variantId && item.quantity > item.stockAvailable + item.originalQuantity ? (
-                    <p className="text-xs text-rose-300 md:col-span-5">
+                    <p className="text-xs text-rose-300 md:col-span-7">
                       Cantidad solicitada supera disponible ({item.stockAvailable + item.originalQuantity}).
                     </p>
                   ) : null}

@@ -9,10 +9,54 @@ export interface WholesaleInvoiceItem {
   wholesale_reference_id?: string | null
   variant_id: string | null
   reference: string
+  size?: string | null
+  color?: string | null
   description: string
   quantity: number
   unit_price: number
   line_total: number
+}
+
+export interface WholesaleCostBreakdown {
+  tela: number
+  corte: number
+  colorTela: number
+  colorTinta: number
+  plotter: number
+  estampado: number
+  disenoEstampa: number
+  dacron: number
+  cuelloRib: number
+  entretela: number
+  botones: number
+  confeccion: number
+  fletesTela: number
+  gasolina: number
+  bordado: number
+  bolsa: number
+  etiqueta: number
+  marquilla: number
+  aplique: number
+  varios: number
+  impresiones: number
+  cintaNit: number
+  talla: number
+  plastifle: number
+  hiladilla: number
+  cierre: number
+}
+
+export interface WholesaleCosteoHeader {
+  fecha: string
+  cortador: string
+  curvaCorte: string
+  promedio: string
+  tipoTela: string
+  largoTrazo: string
+  anchoTrazo: string
+  numeroRollos: string
+  rendimiento: string
+  modelo: string
 }
 
 export interface WholesaleReferenceOption {
@@ -21,6 +65,10 @@ export interface WholesaleReferenceOption {
   productName: string
   unitPrice: number
   quantityOnHand: number
+  sizeQuantities: Record<string, number>
+  colorQuantities: Record<string, Record<string, number>>
+  availableSizes: string[]
+  availableColors: string[]
 }
 
 export interface WholesaleInventoryRow {
@@ -29,6 +77,12 @@ export interface WholesaleInventoryRow {
   productName: string
   unitPrice: number
   quantityOnHand: number
+  totalInvestment: number
+  costBreakdown: WholesaleCostBreakdown
+  sizeQuantities: Record<string, number>
+  colorQuantities: Record<string, Record<string, number>>
+  designEnabled: boolean
+  costeoHeader: WholesaleCosteoHeader
 }
 
 export interface AdjustWholesaleInventoryInput {
@@ -43,6 +97,11 @@ export interface CreateWholesaleReferenceInput {
   unitPrice: number
   quantityOnHand: number
   investmentAmount: number
+  costBreakdown: WholesaleCostBreakdown
+  sizeQuantities: Record<string, number>
+  colorQuantities: Record<string, Record<string, number>>
+  designEnabled: boolean
+  costeoHeader: WholesaleCosteoHeader
 }
 
 export interface UpdateWholesaleReferenceInput {
@@ -50,6 +109,11 @@ export interface UpdateWholesaleReferenceInput {
   reference: string
   unitPrice: number
   quantityOnHand: number
+  costBreakdown: WholesaleCostBreakdown
+  sizeQuantities: Record<string, number>
+  colorQuantities: Record<string, Record<string, number>>
+  designEnabled: boolean
+  costeoHeader: WholesaleCosteoHeader
 }
 
 export interface WholesalePaymentRow {
@@ -93,6 +157,8 @@ export interface CreateWholesaleInvoiceInput {
   dueDate: string | null
   items: Array<{
     variantId: string
+    color: string
+    size: string
     quantity: number
   }>
 }
@@ -112,6 +178,8 @@ export interface UpdateWholesaleInvoiceInput {
   discountTotal: number
   items: Array<{
     variantId: string
+    color: string
+    size: string
     quantity: number
   }>
 }

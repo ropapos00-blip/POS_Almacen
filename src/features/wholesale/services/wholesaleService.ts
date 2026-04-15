@@ -13,7 +13,7 @@ import type {
 export async function listWholesaleReferenceOptions(storeId: string) {
   const { data, error } = await supabase
     .from('wholesale_references')
-    .select('id, reference, unit_price, quantity_on_hand, is_active')
+    .select('id, reference, unit_price, quantity_on_hand, size_quantities, color_quantities, is_active')
     .eq('store_id', storeId)
     .eq('is_active', true)
     .order('updated_at', { ascending: false })
@@ -29,12 +29,70 @@ export async function listWholesaleReferenceOptions(storeId: string) {
         return null
       }
 
+      const normalizedColorQuantities =
+        row.color_quantities && typeof row.color_quantities === 'object'
+          ? Object.entries(row.color_quantities as Record<string, unknown>).reduce<
+              Record<string, Record<string, number>>
+            >((colorAcc, [color, sizesRaw]) => {
+              const normalizedColor = String(color).trim().toUpperCase()
+              if (!normalizedColor || !sizesRaw || typeof sizesRaw !== 'object') {
+                return colorAcc
+              }
+
+              const sizeMap = Object.entries(sizesRaw as Record<string, unknown>).reduce<
+                Record<string, number>
+              >((sizeAcc, [size, qty]) => {
+                const normalizedSize = String(size).trim().toUpperCase()
+                const parsedQty = Number(qty ?? 0)
+                if (normalizedSize) {
+                  sizeAcc[normalizedSize] = Number.isFinite(parsedQty)
+                    ? Math.max(0, Math.trunc(parsedQty))
+                    : 0
+                }
+                return sizeAcc
+              }, {})
+
+              colorAcc[normalizedColor] = sizeMap
+              return colorAcc
+            }, {})
+          : {}
+
+      const normalizedSizeQuantities =
+        row.size_quantities && typeof row.size_quantities === 'object'
+          ? Object.entries(row.size_quantities as Record<string, unknown>).reduce<Record<string, number>>(
+              (acc, [size, qty]) => {
+                const normalized = String(size).trim().toUpperCase()
+                const parsedQty = Number(qty ?? 0)
+                if (normalized) {
+                  acc[normalized] = Number.isFinite(parsedQty) ? Math.max(0, Math.trunc(parsedQty)) : 0
+                }
+                return acc
+              },
+              {},
+            )
+          : {}
+
+      const availableSizesFromColors = Array.from(
+        new Set(
+          Object.values(normalizedColorQuantities).flatMap((sizeMap) =>
+            Object.keys(sizeMap).map((size) => size.trim().toUpperCase()).filter((size) => size.length > 0),
+          ),
+        ),
+      )
+
       return {
         variantId: String(row.id),
         reference: String(row.reference),
         productName: String(row.reference),
         unitPrice: Number(row.unit_price ?? 0),
         quantityOnHand: Number(row.quantity_on_hand ?? 0),
+        colorQuantities: normalizedColorQuantities,
+        sizeQuantities: normalizedSizeQuantities,
+        availableSizes:
+          availableSizesFromColors.length > 0
+            ? availableSizesFromColors
+            : Object.keys(normalizedSizeQuantities),
+        availableColors: Object.keys(normalizedColorQuantities),
       } satisfies WholesaleReferenceOption
     })
     .filter((row): row is WholesaleReferenceOption => Boolean(row))
@@ -48,7 +106,7 @@ export async function listWholesaleInvoices(storeId: string) {
   const { data, error } = await supabase
     .from('wholesale_invoices')
     .select(
-      'id, invoice_number, customer_name, customer_phone, issued_at, due_date, subtotal, discount_total, grand_total, paid_total, balance_due, is_credit, status, payment_method, payment_reference, notes, wholesale_invoice_items(id, wholesale_reference_id, variant_id, reference, description, quantity, unit_price, line_total), wholesale_payments(id, paid_at, amount, payment_method, payment_reference, notes)',
+      'id, invoice_number, customer_name, customer_phone, issued_at, due_date, subtotal, discount_total, grand_total, paid_total, balance_due, is_credit, status, payment_method, payment_reference, notes, wholesale_invoice_items(id, wholesale_reference_id, variant_id, reference, color, size, description, quantity, unit_price, line_total), wholesale_payments(id, paid_at, amount, payment_method, payment_reference, notes)',
     )
     .eq('store_id', storeId)
     .neq('status', 'void')
@@ -76,6 +134,8 @@ export async function createWholesaleInvoice(input: CreateWholesaleInvoiceInput)
     p_notes: null,
     p_items: input.items.map((item) => ({
       reference_id: item.variantId,
+      color: item.color,
+      size: item.size,
       quantity: item.quantity,
     })),
   })
@@ -130,6 +190,8 @@ export async function updateWholesaleInvoice(input: UpdateWholesaleInvoiceInput)
     p_discount_total: input.discountTotal,
     p_items: input.items.map((item) => ({
       reference_id: item.variantId,
+      color: item.color,
+      size: item.size,
       quantity: item.quantity,
     })),
   })

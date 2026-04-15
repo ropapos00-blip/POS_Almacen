@@ -149,7 +149,11 @@ export function WholesaleInvoiceLetter({
           <tbody>
             {(invoice.wholesale_invoice_items ?? []).map((item) => (
               <tr key={item.id}>
-                <td>{item.reference || item.description}</td>
+                <td>
+                  {item.reference || item.description}
+                  {item.color ? ` - ${item.color}` : ''}
+                  {item.size ? ` - ${item.size}` : ''}
+                </td>
                 <td className="num">{item.quantity}</td>
                 <td className="num">{formatCop(item.unit_price)}</td>
                 <td className="num">{formatCop(item.line_total)}</td>

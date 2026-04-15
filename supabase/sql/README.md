@@ -17,6 +17,9 @@
 14. `14_wholesale_edit_and_finance.sql`
 15. `15_fix_register_wholesale_payment_ambiguity.sql`
 16. `16_restore_wholesale_create_invoice_rpc.sql`
+17. `17_wholesale_sizes_and_cost_breakdown.sql`
+18. `18_wholesale_costeo_header.sql`
+19. `19_wholesale_color_support.sql`
 
 ## Desde Supabase Dashboard
 1. Ir a `SQL Editor`.
@@ -37,6 +40,9 @@
 16. Repetir con `14_wholesale_edit_and_finance.sql`.
 17. Repetir con `15_fix_register_wholesale_payment_ambiguity.sql`.
 18. Repetir con `16_restore_wholesale_create_invoice_rpc.sql`.
+19. Repetir con `17_wholesale_sizes_and_cost_breakdown.sql`.
+20. Repetir con `18_wholesale_costeo_header.sql`.
+21. Repetir con `19_wholesale_color_support.sql`.
 
 ## Si aparece error
 - Revisar la linea exacta que marca el editor.

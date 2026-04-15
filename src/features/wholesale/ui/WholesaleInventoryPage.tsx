@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createClientId } from '../../../shared/utils/id'
 import { formatCop } from '../../../shared/utils/currency'
 import { formatDateTimeColombia } from '../../../shared/utils/dateTime'
-import { formatCopInput, parseCopIntegerInput } from '../../../shared/utils/numberInput'
+import { formatCopInput, parseCopIntegerInput, parseIntegerInput } from '../../../shared/utils/numberInput'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import {
   useCreateWholesaleReferenceMutation,
@@ -12,10 +13,353 @@ import {
   useWholesaleReferenceInvestmentMovementsQuery,
   useWholesaleInventoryStockQuery,
 } from '../model/useWholesaleQueries'
-import type { WholesaleInventoryRow, UpdateWholesaleReferenceInput } from '../model/wholesale.types'
+import type {
+  WholesaleCostBreakdown,
+  WholesaleCosteoHeader,
+  WholesaleInventoryRow,
+  UpdateWholesaleReferenceInput,
+} from '../model/wholesale.types'
+
+interface SizeDraftRow {
+  id: string
+  size: string
+  quantity: string
+}
+
+interface ColorSizeDraftRow {
+  id: string
+  color: string
+  size: string
+  quantity: string
+}
+
+type StockEntryMode = 'form' | 'matrix'
+
+const DEFAULT_SIZES = ['S', 'M', 'L', 'XL', 'XXL']
+const DESIGN_COST_KEYS: Array<keyof WholesaleCostBreakdown> = [
+  'colorTela',
+  'colorTinta',
+  'cuelloRib',
+  'botones',
+  'hiladilla',
+  'etiqueta',
+  'plastifle',
+  'bolsa',
+  'estampado',
+  'aplique',
+]
+
+const DESIGN_ESTAMPADO_FIELDS: Array<keyof WholesaleCostBreakdown> = ['colorTela', 'colorTinta']
+
+const DESIGN_INSUMOS_FIELDS: Array<keyof WholesaleCostBreakdown> = [
+  'cuelloRib',
+  'botones',
+  'hiladilla',
+  'etiqueta',
+  'plastifle',
+  'bolsa',
+  'estampado',
+  'aplique',
+]
+
+const COST_FIELDS: Array<{ key: keyof WholesaleCostBreakdown; label: string }> = [
+  { key: 'tela', label: 'Tela' },
+  { key: 'corte', label: 'Corte' },
+  { key: 'colorTela', label: 'Color tela' },
+  { key: 'colorTinta', label: 'Color tinta' },
+  { key: 'plotter', label: 'Plotter' },
+  { key: 'estampado', label: 'Estampado' },
+  { key: 'disenoEstampa', label: 'Diseno de estampa' },
+  { key: 'dacron', label: 'Dacron' },
+  { key: 'cuelloRib', label: 'Rib' },
+  { key: 'entretela', label: 'Entretela' },
+  { key: 'botones', label: 'Botones' },
+  { key: 'confeccion', label: 'Confeccion' },
+  { key: 'fletesTela', label: 'Fletes tela' },
+  { key: 'gasolina', label: 'Gasolina' },
+  { key: 'bordado', label: 'Bordado' },
+  { key: 'bolsa', label: 'Bolsa' },
+  { key: 'etiqueta', label: 'Etiqueta' },
+  { key: 'marquilla', label: 'Marquilla' },
+  { key: 'aplique', label: 'Aplique pecho' },
+  { key: 'varios', label: 'Varios' },
+  { key: 'impresiones', label: 'Impresiones' },
+  { key: 'cintaNit', label: 'Cinta nit' },
+  { key: 'talla', label: 'Talla' },
+  { key: 'plastifle', label: 'Plastiflecha' },
+  { key: 'hiladilla', label: 'Hiladilla' },
+  { key: 'cierre', label: 'Cierre' },
+]
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Operacion no completada.'
+}
+
+function createEmptyCostBreakdown(): WholesaleCostBreakdown {
+  return {
+    tela: 0,
+    corte: 0,
+    colorTela: 0,
+    colorTinta: 0,
+    plotter: 0,
+    estampado: 0,
+    disenoEstampa: 0,
+    dacron: 0,
+    cuelloRib: 0,
+    entretela: 0,
+    botones: 0,
+    confeccion: 0,
+    fletesTela: 0,
+    gasolina: 0,
+    bordado: 0,
+    bolsa: 0,
+    etiqueta: 0,
+    marquilla: 0,
+    aplique: 0,
+    varios: 0,
+    impresiones: 0,
+    cintaNit: 0,
+    talla: 0,
+    plastifle: 0,
+    hiladilla: 0,
+    cierre: 0,
+  }
+}
+
+function createEmptyCostDraft(): Record<keyof WholesaleCostBreakdown, string> {
+  const base = createEmptyCostBreakdown()
+  return COST_FIELDS.reduce<Record<keyof WholesaleCostBreakdown, string>>((acc, field) => {
+    const safeValue = Number(base[field.key] ?? 0)
+    acc[field.key] = safeValue === 0 ? '' : formatCopInput(safeValue)
+    return acc
+  }, {} as Record<keyof WholesaleCostBreakdown, string>)
+}
+
+function parseCostDraft(
+  draft: Record<keyof WholesaleCostBreakdown, string>,
+  quantity: number,
+): WholesaleCostBreakdown {
+  const values = createEmptyCostBreakdown()
+  const safeQuantity = Math.max(0, Math.trunc(Number(quantity || 0)))
+  COST_FIELDS.forEach((field) => {
+    const unitValue = Math.max(0, parseCopIntegerInput(draft[field.key] ?? '', 0))
+    values[field.key] = safeQuantity > 0 ? unitValue * safeQuantity : 0
+  })
+  return values
+}
+
+function toCostDraft(
+  costs: WholesaleCostBreakdown,
+  quantity: number,
+): Record<keyof WholesaleCostBreakdown, string> {
+  const safeQuantity = Math.max(0, Math.trunc(Number(quantity || 0)))
+  return COST_FIELDS.reduce<Record<keyof WholesaleCostBreakdown, string>>((acc, field) => {
+    const totalValue = Math.max(0, Number(costs[field.key] ?? 0))
+    const unitValue = safeQuantity > 0 ? Math.round(totalValue / safeQuantity) : totalValue
+    acc[field.key] = unitValue > 0 ? formatCopInput(unitValue) : ''
+    return acc
+  }, {} as Record<keyof WholesaleCostBreakdown, string>)
+}
+
+function sumCostBreakdown(costs: WholesaleCostBreakdown) {
+  return COST_FIELDS.reduce((acc, field) => acc + Math.max(0, Number(costs[field.key] || 0)), 0)
+}
+
+function normalizeSizeLabel(raw: string) {
+  return raw.trim().toUpperCase()
+}
+
+function normalizeColorLabel(raw: string) {
+  return raw.trim().toUpperCase()
+}
+
+function sumSizeQuantities(sizeQuantities: Record<string, number>) {
+  return Object.values(sizeQuantities).reduce((acc, qty) => acc + Math.max(0, Number(qty || 0)), 0)
+}
+
+function createColorSizeRow(color: string, size: string, quantity = ''): ColorSizeDraftRow {
+  return {
+    id: createClientId(),
+    color,
+    size,
+    quantity,
+  }
+}
+
+function parseColorSizeRows(rows: ColorSizeDraftRow[]) {
+  return rows.reduce<Record<string, Record<string, number>>>((acc, row) => {
+    const color = row.color.trim().toUpperCase()
+    const size = normalizeSizeLabel(row.size)
+    if (!color || !size) {
+      return acc
+    }
+
+    const qty = Math.max(0, parseIntegerInput(row.quantity || '0', 0))
+    if (!acc[color]) {
+      acc[color] = {}
+    }
+    acc[color][size] = (acc[color][size] ?? 0) + qty
+    return acc
+  }, {})
+}
+
+function aggregateSizesFromColorQuantities(colorQuantities: Record<string, Record<string, number>>) {
+  return Object.values(colorQuantities).reduce<Record<string, number>>((acc, sizeMap) => {
+    Object.entries(sizeMap).forEach(([size, qty]) => {
+      const normalized = normalizeSizeLabel(size)
+      if (!normalized) {
+        return
+      }
+      acc[normalized] = Math.max(0, Math.trunc(Number(acc[normalized] ?? 0) + Number(qty ?? 0)))
+    })
+    return acc
+  }, {})
+}
+
+function toColorSizeRows(colorQuantities: Record<string, Record<string, number>>) {
+  const rows: ColorSizeDraftRow[] = []
+  Object.entries(colorQuantities).forEach(([color, sizeMap]) => {
+    const normalizedColor = color.trim().toUpperCase()
+    if (!normalizedColor || !sizeMap || typeof sizeMap !== 'object') {
+      return
+    }
+    Object.entries(sizeMap).forEach(([size, qty]) => {
+      const normalizedSize = normalizeSizeLabel(size)
+      if (!normalizedSize) {
+        return
+      }
+      const safeQty = Math.max(0, Math.trunc(Number(qty || 0)))
+      rows.push(createColorSizeRow(normalizedColor, normalizedSize, safeQty > 0 ? String(safeQty) : ''))
+    })
+  })
+
+  return rows
+}
+
+function toColorSizeRowsFromSizeQuantities(sizeQuantities: Record<string, number>) {
+  const rows: ColorSizeDraftRow[] = []
+  Object.entries(sizeQuantities).forEach(([size, qty]) => {
+    const normalizedSize = normalizeSizeLabel(size)
+    if (!normalizedSize) {
+      return
+    }
+
+    const safeQty = Math.max(0, Math.trunc(Number(qty || 0)))
+    rows.push(createColorSizeRow('UNICO', normalizedSize, safeQty > 0 ? String(safeQty) : ''))
+  })
+  return rows
+}
+
+function getUniqueSizesFromRows(rows: ColorSizeDraftRow[]) {
+  return Array.from(
+    new Set(rows.map((row) => normalizeSizeLabel(row.size)).filter((size) => size.length > 0)),
+  )
+}
+
+function getUniqueColorsFromRows(rows: ColorSizeDraftRow[]) {
+  return Array.from(
+    new Set(rows.map((row) => normalizeColorLabel(row.color)).filter((color) => color.length > 0)),
+  )
+}
+
+function getCellQuantity(rows: ColorSizeDraftRow[], color: string, size: string) {
+  const normalizedColor = normalizeColorLabel(color)
+  const normalizedSize = normalizeSizeLabel(size)
+  const match = rows.find(
+    (row) =>
+      normalizeColorLabel(row.color) === normalizedColor &&
+      normalizeSizeLabel(row.size) === normalizedSize,
+  )
+  return match?.quantity ?? ''
+}
+
+function setCellQuantity(
+  rows: ColorSizeDraftRow[],
+  color: string,
+  size: string,
+  quantity: string,
+) {
+  const normalizedColor = normalizeColorLabel(color)
+  const normalizedSize = normalizeSizeLabel(size)
+  if (!normalizedColor || !normalizedSize) {
+    return rows
+  }
+
+  const safeQty = String(Math.max(0, parseIntegerInput(quantity || '0', 0)))
+  const index = rows.findIndex(
+    (row) =>
+      normalizeColorLabel(row.color) === normalizedColor &&
+      normalizeSizeLabel(row.size) === normalizedSize,
+  )
+
+  if (index === -1) {
+    return [...rows, createColorSizeRow(normalizedColor, normalizedSize, safeQty)]
+  }
+
+  const next = [...rows]
+  next[index] = {
+    ...next[index],
+    quantity: safeQty,
+    color: normalizedColor,
+    size: normalizedSize,
+  }
+  return next
+}
+
+function renameColorGroupRows(rows: ColorSizeDraftRow[], oldColor: string, newColor: string) {
+  const normalizedOld = normalizeColorLabel(oldColor)
+  const normalizedNew = normalizeColorLabel(newColor)
+  if (!normalizedOld || !normalizedNew) {
+    return rows
+  }
+
+  return rows.map((row) =>
+    normalizeColorLabel(row.color) === normalizedOld
+      ? {
+          ...row,
+          color: normalizedNew,
+        }
+      : row,
+  )
+}
+
+function clearDesignCosts(costDraft: Record<keyof WholesaleCostBreakdown, string>) {
+  const next = { ...costDraft }
+  DESIGN_COST_KEYS.forEach((key) => {
+    next[key] = ''
+  })
+  return next
+}
+
+function createEmptyCosteoHeader(): WholesaleCosteoHeader {
+  return {
+    fecha: '',
+    cortador: '',
+    curvaCorte: '',
+    promedio: '',
+    tipoTela: '',
+    largoTrazo: '',
+    anchoTrazo: '',
+    numeroRollos: '',
+    rendimiento: '',
+    modelo: '',
+  }
+}
+
+function getUnitCostValue(
+  draft: Record<keyof WholesaleCostBreakdown, string>,
+  key: keyof WholesaleCostBreakdown,
+) {
+  return Math.max(0, parseCopIntegerInput(draft[key] ?? '', 0))
+}
+
+function getTotalCostValue(
+  draft: Record<keyof WholesaleCostBreakdown, string>,
+  key: keyof WholesaleCostBreakdown,
+  quantity: number,
+) {
+  const safeQuantity = Math.max(0, Math.trunc(Number(quantity || 0)))
+  return getUnitCostValue(draft, key) * safeQuantity
 }
 
 export function WholesaleInventoryPage() {
@@ -23,15 +367,34 @@ export function WholesaleInventoryPage() {
   const [feedback, setFeedback] = useState<string | null>(null)
   const [searchText, setSearchText] = useState('')
   const [reference, setReference] = useState('')
-  const [quantityOnHand, setQuantityOnHand] = useState('')
   const [unitPrice, setUnitPrice] = useState('')
-  const [investmentAmount, setInvestmentAmount] = useState('')
+  const [costDraft, setCostDraft] = useState<Record<keyof WholesaleCostBreakdown, string>>(
+    createEmptyCostDraft(),
+  )
+  const [colorSizeRows, setColorSizeRows] = useState<ColorSizeDraftRow[]>([])
+  const [stockEntryMode, setStockEntryMode] = useState<StockEntryMode>('form')
+  const [newColorInput, setNewColorInput] = useState('')
+  const [newSizeInput, setNewSizeInput] = useState('')
+  const [newQtyInput, setNewQtyInput] = useState('')
+  const [designEnabled, setDesignEnabled] = useState(false)
+  const [costingEnabled, setCostingEnabled] = useState(false)
+  const [costeoHeader, setCosteoHeader] = useState<WholesaleCosteoHeader>(createEmptyCosteoHeader())
   const [deleteTarget, setDeleteTarget] = useState<WholesaleInventoryRow | null>(null)
   const [showResetInventoryModal, setShowResetInventoryModal] = useState(false)
   const [editTarget, setEditTarget] = useState<WholesaleInventoryRow | null>(null)
   const [editReference, setEditReference] = useState('')
-  const [editQuantityOnHand, setEditQuantityOnHand] = useState('')
   const [editUnitPrice, setEditUnitPrice] = useState('')
+  const [editCostDraft, setEditCostDraft] = useState<Record<keyof WholesaleCostBreakdown, string>>(
+    createEmptyCostDraft(),
+  )
+  const [editColorSizeRows, setEditColorSizeRows] = useState<ColorSizeDraftRow[]>([])
+  const [editStockEntryMode, setEditStockEntryMode] = useState<StockEntryMode>('form')
+  const [editNewColorInput, setEditNewColorInput] = useState('')
+  const [editNewSizeInput, setEditNewSizeInput] = useState('')
+  const [editNewQtyInput, setEditNewQtyInput] = useState('')
+  const [editDesignEnabled, setEditDesignEnabled] = useState(false)
+  const [editCostingEnabled, setEditCostingEnabled] = useState(false)
+  const [editCosteoHeader, setEditCosteoHeader] = useState<WholesaleCosteoHeader>(createEmptyCosteoHeader())
   const [editFeedback, setEditFeedback] = useState<string | null>(null)
   const [investmentDrafts, setInvestmentDrafts] = useState<Record<string, string>>({})
   const [investmentFromDate, setInvestmentFromDate] = useState('')
@@ -47,6 +410,35 @@ export function WholesaleInventoryPage() {
     user?.storeId,
     editTarget?.variantId,
   )
+
+  const parsedColorQuantities = useMemo(() => parseColorSizeRows(colorSizeRows), [colorSizeRows])
+  const parsedAggregatedSizeQuantities = useMemo(
+    () => aggregateSizesFromColorQuantities(parsedColorQuantities),
+    [parsedColorQuantities],
+  )
+  const effectiveSizeQuantities = useMemo(() => parsedAggregatedSizeQuantities, [parsedAggregatedSizeQuantities])
+  const totalQuantity = useMemo(() => sumSizeQuantities(effectiveSizeQuantities), [effectiveSizeQuantities])
+  const parsedCosts = useMemo(() => parseCostDraft(costDraft, totalQuantity), [costDraft, totalQuantity])
+  const totalInvestment = useMemo(() => sumCostBreakdown(parsedCosts), [parsedCosts])
+
+  const parsedEditColorQuantities = useMemo(() => parseColorSizeRows(editColorSizeRows), [editColorSizeRows])
+  const parsedEditAggregatedSizeQuantities = useMemo(
+    () => aggregateSizesFromColorQuantities(parsedEditColorQuantities),
+    [parsedEditColorQuantities],
+  )
+  const effectiveEditSizeQuantities = useMemo(
+    () => parsedEditAggregatedSizeQuantities,
+    [parsedEditAggregatedSizeQuantities],
+  )
+  const editTotalQuantity = useMemo(
+    () => sumSizeQuantities(effectiveEditSizeQuantities),
+    [effectiveEditSizeQuantities],
+  )
+  const parsedEditCosts = useMemo(
+    () => parseCostDraft(editCostDraft, editTotalQuantity),
+    [editCostDraft, editTotalQuantity],
+  )
+  const editTotalInvestment = useMemo(() => sumCostBreakdown(parsedEditCosts), [parsedEditCosts])
 
   useEffect(() => {
     if (!deleteTarget && !showResetInventoryModal && !editTarget) {
@@ -74,8 +466,20 @@ export function WholesaleInventoryPage() {
     }
 
     setEditReference(editTarget.reference)
-    setEditQuantityOnHand(String(editTarget.quantityOnHand))
     setEditUnitPrice(formatCopInput(editTarget.unitPrice))
+    setEditCostDraft(toCostDraft(editTarget.costBreakdown, editTarget.quantityOnHand))
+    const mappedColorRows = toColorSizeRows(editTarget.colorQuantities)
+    setEditColorSizeRows(
+      mappedColorRows.length > 0
+        ? mappedColorRows
+        : toColorSizeRowsFromSizeQuantities(editTarget.sizeQuantities),
+    )
+    setEditNewColorInput('')
+    setEditNewSizeInput('')
+    setEditNewQtyInput('')
+    setEditCostingEnabled(editTarget.totalInvestment > 0)
+    setEditDesignEnabled(editTarget.designEnabled)
+    setEditCosteoHeader(editTarget.costeoHeader)
     setEditFeedback(null)
     setInvestmentFromDate('')
     setInvestmentToDate('')
@@ -100,10 +504,7 @@ export function WholesaleInventoryPage() {
         return true
       }
 
-      return (
-        row.reference.toLowerCase().includes(query) ||
-        row.productName.toLowerCase().includes(query)
-      )
+      return row.reference.toLowerCase().includes(query) || row.productName.toLowerCase().includes(query)
     })
 
     return output.sort((a, b) => a.reference.localeCompare(b.reference, 'es'))
@@ -126,9 +527,15 @@ export function WholesaleInventoryPage() {
 
   function resetForm() {
     setReference('')
-    setQuantityOnHand('')
     setUnitPrice('')
-    setInvestmentAmount('')
+    setCostDraft(createEmptyCostDraft())
+    setColorSizeRows([])
+    setCostingEnabled(false)
+    setDesignEnabled(false)
+    setCosteoHeader(createEmptyCosteoHeader())
+    setNewColorInput('')
+    setNewSizeInput('')
+    setNewQtyInput('')
   }
 
   function openEditModal(row: WholesaleInventoryRow) {
@@ -142,6 +549,196 @@ export function WholesaleInventoryPage() {
     setInvestmentDrafts({})
     setInvestmentFromDate('')
     setInvestmentToDate('')
+    setEditCostingEnabled(false)
+    setEditColorSizeRows([])
+    setEditCosteoHeader(createEmptyCosteoHeader())
+    setEditNewColorInput('')
+    setEditNewSizeInput('')
+    setEditNewQtyInput('')
+  }
+
+  function updateCosteoHeaderField(
+    key: keyof WholesaleCosteoHeader,
+    value: string,
+    isEdit = false,
+  ) {
+    if (isEdit) {
+      setEditCosteoHeader((prev) => ({ ...prev, [key]: value }))
+      return
+    }
+
+    setCosteoHeader((prev) => ({ ...prev, [key]: value }))
+  }
+
+  function addColorSizeRow(isEdit = false) {
+    if (isEdit) {
+      setEditColorSizeRows((prev) => [...prev, createColorSizeRow('', '', '')])
+      return
+    }
+
+    setColorSizeRows((prev) => [...prev, createColorSizeRow('', '', '')])
+  }
+
+  function removeColorSizeRow(id: string, isEdit = false) {
+    if (isEdit) {
+      setEditColorSizeRows((prev) => prev.filter((row) => row.id !== id))
+      return
+    }
+
+    setColorSizeRows((prev) => prev.filter((row) => row.id !== id))
+  }
+
+  function updateColorSizeRow(
+    id: string,
+    field: 'color' | 'size' | 'quantity',
+    value: string,
+    isEdit = false,
+  ) {
+    const updater = (rows: ColorSizeDraftRow[]) =>
+      rows.map((row) => {
+        if (row.id !== id) {
+          return row
+        }
+
+        return {
+          ...row,
+          [field]: field === 'quantity' ? String(Math.max(0, parseIntegerInput(value, 0))) : value,
+        }
+      })
+
+    if (isEdit) {
+      setEditColorSizeRows((prev) => updater(prev))
+      return
+    }
+
+    setColorSizeRows((prev) => updater(prev))
+  }
+
+  function removeColorGroup(rawColor: string, isEdit = false) {
+    const color = normalizeColorLabel(rawColor)
+    if (!color) {
+      return
+    }
+
+    if (isEdit) {
+      setEditColorSizeRows((prev) => prev.filter((row) => normalizeColorLabel(row.color) !== color))
+      return
+    }
+
+    setColorSizeRows((prev) => prev.filter((row) => normalizeColorLabel(row.color) !== color))
+  }
+
+  function removeSizeGlobal(rawSize: string, isEdit = false) {
+    const size = normalizeSizeLabel(rawSize)
+    if (!size) {
+      return
+    }
+
+    if (isEdit) {
+      setEditColorSizeRows((prev) => prev.filter((row) => normalizeSizeLabel(row.size) !== size))
+      return
+    }
+
+    setColorSizeRows((prev) => prev.filter((row) => normalizeSizeLabel(row.size) !== size))
+  }
+
+  function addCustomRow(rawColor: string, rawSize: string, rawQty: string, isEdit = false) {
+    const color = normalizeColorLabel(rawColor)
+    const size = normalizeSizeLabel(rawSize)
+    if (!color || !size) {
+      return
+    }
+
+    const qty = String(Math.max(0, parseIntegerInput(rawQty || '0', 0)))
+    const row = createColorSizeRow(color, size, qty)
+
+    if (isEdit) {
+      setEditColorSizeRows((prev) => [...prev, row])
+      setEditNewSizeInput('')
+      setEditNewQtyInput('')
+      return
+    }
+
+    setColorSizeRows((prev) => [...prev, row])
+    setNewSizeInput('')
+    setNewQtyInput('')
+  }
+
+  function handleQuickAddQuantityEnter(event: React.KeyboardEvent<HTMLInputElement>, isEdit = false) {
+    if (event.key !== 'Enter') {
+      return
+    }
+
+    event.preventDefault()
+    if (isEdit) {
+      addCustomRow(editNewColorInput, editNewSizeInput, editNewQtyInput, true)
+      return
+    }
+
+    addCustomRow(newColorInput, newSizeInput, newQtyInput, false)
+  }
+
+  function addSizeToColor(rawColor: string, isEdit = false) {
+    const color = normalizeColorLabel(rawColor)
+    if (!color) {
+      return
+    }
+
+    const nextRow = createColorSizeRow(color, '', '')
+    if (isEdit) {
+      setEditColorSizeRows((prev) => [...prev, nextRow])
+      return
+    }
+
+    setColorSizeRows((prev) => [...prev, nextRow])
+  }
+
+  function renameColorGroup(oldColor: string, newColor: string, isEdit = false) {
+    if (isEdit) {
+      setEditColorSizeRows((prev) => renameColorGroupRows(prev, oldColor, newColor))
+      return
+    }
+
+    setColorSizeRows((prev) => renameColorGroupRows(prev, oldColor, newColor))
+  }
+
+  function updateMatrixCell(color: string, size: string, quantity: string, isEdit = false) {
+    if (isEdit) {
+      setEditColorSizeRows((prev) => setCellQuantity(prev, color, size, quantity))
+      return
+    }
+
+    setColorSizeRows((prev) => setCellQuantity(prev, color, size, quantity))
+  }
+
+  function updateCostField(key: keyof WholesaleCostBreakdown, value: string, isEdit = false) {
+    if (isEdit) {
+      setEditCostDraft((prev) => ({
+        ...prev,
+        [key]: formatCopInput(value),
+      }))
+      return
+    }
+
+    setCostDraft((prev) => ({
+      ...prev,
+      [key]: formatCopInput(value),
+    }))
+  }
+
+  function toggleDesignSection(next: boolean, isEdit = false) {
+    if (isEdit) {
+      setEditDesignEnabled(next)
+      if (!next) {
+        setEditCostDraft((prev) => clearDesignCosts(prev))
+      }
+      return
+    }
+
+    setDesignEnabled(next)
+    if (!next) {
+      setCostDraft((prev) => clearDesignCosts(prev))
+    }
   }
 
   async function saveReference() {
@@ -150,17 +747,10 @@ export function WholesaleInventoryPage() {
       return
     }
 
-    const parsedQty = Math.max(0, Math.trunc(Number(quantityOnHand || 0)))
     const parsedUnitPrice = Math.max(0, parseCopIntegerInput(unitPrice, 0))
-    const parsedInvestmentAmount = Math.max(0, parseCopIntegerInput(investmentAmount, 0))
 
     if (!reference.trim()) {
       setFeedback('La referencia es obligatoria.')
-      return
-    }
-
-    if (!Number.isFinite(parsedQty)) {
-      setFeedback('Cantidad invalida.')
       return
     }
 
@@ -169,13 +759,8 @@ export function WholesaleInventoryPage() {
       return
     }
 
-    if (!Number.isFinite(parsedInvestmentAmount)) {
-      setFeedback('Inversion invalida.')
-      return
-    }
-
-    if (parsedQty > 0 && parsedInvestmentAmount <= 0) {
-      setFeedback('Debes indicar la inversion de esta entrada de inventario.')
+    if (totalQuantity > 0 && totalInvestment <= 0) {
+      setFeedback('Debes indicar los insumos para calcular la inversion total.')
       return
     }
 
@@ -184,17 +769,23 @@ export function WholesaleInventoryPage() {
 
       const result = await createMutation.mutateAsync({
         reference,
-        quantityOnHand: parsedQty,
+        quantityOnHand: totalQuantity,
         unitPrice: parsedUnitPrice,
-        investmentAmount: parsedInvestmentAmount,
+        investmentAmount: totalInvestment,
+        costBreakdown: parsedCosts,
+        sizeQuantities: effectiveSizeQuantities,
+        colorQuantities: parsedColorQuantities,
+        designEnabled,
+        costeoHeader,
       })
+
       if (result?.action === 'restocked') {
         setFeedback(
-          `Referencia ${result.reference} ya existia. Se agregaron unidades. Nuevo stock: ${result.finalQuantity}. Inversion registrada: ${formatCop(parsedInvestmentAmount)}.`,
+          `Referencia ${result.reference} ya existia. Se agregaron unidades. Nuevo stock: ${result.finalQuantity}. Inversion registrada: ${formatCop(totalInvestment)}.`,
         )
       } else {
         setFeedback(
-          `Referencia ${reference.trim().toUpperCase()} creada en inventario de confeccion. Inversion registrada: ${formatCop(parsedInvestmentAmount)}.`,
+          `Referencia ${reference.trim().toUpperCase()} creada en inventario de confeccion. Inversion registrada: ${formatCop(totalInvestment)}.`,
         )
       }
 
@@ -209,16 +800,10 @@ export function WholesaleInventoryPage() {
       return
     }
 
-    const parsedQty = Math.max(0, Math.trunc(Number(editQuantityOnHand || 0)))
     const parsedUnitPrice = Math.max(0, parseCopIntegerInput(editUnitPrice, 0))
 
     if (!editReference.trim()) {
       setEditFeedback('La referencia es obligatoria.')
-      return
-    }
-
-    if (!Number.isFinite(parsedQty)) {
-      setEditFeedback('Cantidad invalida.')
       return
     }
 
@@ -231,8 +816,13 @@ export function WholesaleInventoryPage() {
       const payload: UpdateWholesaleReferenceInput = {
         referenceId: editTarget.variantId,
         reference: editReference,
-        quantityOnHand: parsedQty,
+        quantityOnHand: editTotalQuantity,
         unitPrice: parsedUnitPrice,
+        costBreakdown: parsedEditCosts,
+        sizeQuantities: effectiveEditSizeQuantities,
+        colorQuantities: parsedEditColorQuantities,
+        designEnabled: editDesignEnabled,
+        costeoHeader: editCosteoHeader,
       }
 
       await updateMutation.mutateAsync(payload)
@@ -312,7 +902,7 @@ export function WholesaleInventoryPage() {
       <header className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
         <h1 className="text-2xl font-semibold text-zinc-100">Inventario Confeccion</h1>
         <p className="mt-2 text-sm text-zinc-400">
-          Modulo aparte del inventario retail. Solo referencia, cantidad y valor unitario.
+          Modulo aparte del inventario retail. Referencia, tallas, costos por insumo y valor unitario.
         </p>
         {feedback ? <p className="mt-2 text-sm text-amber-300">{feedback}</p> : null}
       </header>
@@ -334,15 +924,12 @@ export function WholesaleInventoryPage() {
           </label>
 
           <label className="space-y-1">
-            <span className="text-xs text-zinc-400">Cantidad</span>
+            <span className="text-xs text-zinc-400">Cantidad total</span>
             <input
               type="number"
-              min={0}
-              step={1}
-              value={quantityOnHand}
-              placeholder="0"
-              onChange={(event) => setQuantityOnHand(event.target.value)}
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+              value={totalQuantity}
+              readOnly
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
             />
           </label>
 
@@ -359,16 +946,399 @@ export function WholesaleInventoryPage() {
           </label>
 
           <label className="space-y-1">
-            <span className="text-xs text-zinc-400">Inversion entrada (COP)</span>
+            <span className="text-xs text-zinc-400">Inversion total (COP)</span>
             <input
               type="text"
-              inputMode="numeric"
-              value={investmentAmount}
-              placeholder="0"
-              onChange={(event) => setInvestmentAmount(formatCopInput(event.target.value))}
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+              value={formatCop(totalInvestment)}
+              readOnly
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
             />
           </label>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+          <h3 className="text-sm font-semibold text-zinc-100">Costeo polos-camisetas</h3>
+          <div className="mt-3 grid gap-2 md:grid-cols-4 xl:grid-cols-6">
+            <label className="space-y-1">
+              <span className="text-xs text-zinc-400">Fecha</span>
+              <input
+                type="date"
+                value={costeoHeader.fecha}
+                onChange={(event) => updateCosteoHeaderField('fecha', event.target.value)}
+                onFocus={(event) => {
+                  event.currentTarget.showPicker?.()
+                }}
+                onClick={(event) => {
+                  event.currentTarget.showPicker?.()
+                }}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 scheme-dark"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs text-zinc-400">Cortador</span>
+              <input
+                value={costeoHeader.cortador}
+                onChange={(event) => updateCosteoHeaderField('cortador', event.target.value)}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs text-zinc-400">Curva corte</span>
+              <input
+                value={costeoHeader.curvaCorte}
+                onChange={(event) => updateCosteoHeaderField('curvaCorte', event.target.value)}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs text-zinc-400">Promedio</span>
+              <input
+                value={costeoHeader.promedio}
+                onChange={(event) => updateCosteoHeaderField('promedio', event.target.value)}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs text-zinc-400">Tipo de tela</span>
+              <input
+                value={costeoHeader.tipoTela}
+                onChange={(event) => updateCosteoHeaderField('tipoTela', event.target.value)}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs text-zinc-400">No. de rollos</span>
+              <input
+                value={costeoHeader.numeroRollos}
+                onChange={(event) => updateCosteoHeaderField('numeroRollos', event.target.value)}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs text-zinc-400">Largo trazo</span>
+              <input
+                value={costeoHeader.largoTrazo}
+                onChange={(event) => updateCosteoHeaderField('largoTrazo', event.target.value)}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs text-zinc-400">Ancho trazo</span>
+              <input
+                value={costeoHeader.anchoTrazo}
+                onChange={(event) => updateCosteoHeaderField('anchoTrazo', event.target.value)}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs text-zinc-400">Rendimiento</span>
+              <input
+                value={costeoHeader.rendimiento}
+                onChange={(event) => updateCosteoHeaderField('rendimiento', event.target.value)}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1 md:col-span-2 xl:col-span-3">
+              <span className="text-xs text-zinc-400">Modelo</span>
+              <input
+                value={costeoHeader.modelo}
+                onChange={(event) => updateCosteoHeaderField('modelo', event.target.value)}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="mr-auto">
+              <h3 className="text-sm font-semibold text-zinc-100">Stock confeccion (color + talla)</h3>
+              <p className="text-xs text-zinc-500">Un solo formulario. Ejemplo: 10 S negras, 20 S rojas.</p>
+            </div>
+            <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900/70 p-1">
+              <button
+                type="button"
+                onClick={() => setStockEntryMode('form')}
+                className={`rounded-md px-2 py-1 text-xs ${stockEntryMode === 'form' ? 'bg-zinc-200 text-zinc-900' : 'text-zinc-300'}`}
+              >
+                Formulario
+              </button>
+              <button
+                type="button"
+                onClick={() => setStockEntryMode('matrix')}
+                className={`rounded-md px-2 py-1 text-xs ${stockEntryMode === 'matrix' ? 'bg-zinc-200 text-zinc-900' : 'text-zinc-300'}`}
+              >
+                Matriz
+              </button>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-2">
+            <div className="grid gap-2 rounded-lg border border-zinc-800 bg-zinc-950/40 p-2 md:grid-cols-[1fr_1fr_140px_auto]">
+              <input
+                value={newColorInput}
+                onChange={(event) => setNewColorInput(event.target.value)}
+                placeholder="Color"
+                className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs"
+              />
+              <input
+                value={newSizeInput}
+                onChange={(event) => setNewSizeInput(event.target.value)}
+                placeholder="Talla"
+                className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs"
+              />
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={newQtyInput}
+                onChange={(event) => setNewQtyInput(event.target.value)}
+                onKeyDown={(event) => handleQuickAddQuantityEnter(event, false)}
+                placeholder="Cantidad"
+                className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs"
+              />
+              <button
+                type="button"
+                onClick={() => addCustomRow(newColorInput, newSizeInput, newQtyInput, false)}
+                className="rounded-md border border-zinc-700 px-2 py-2 text-xs text-zinc-200"
+              >
+                Agregar linea
+              </button>
+            </div>
+            {colorSizeRows.length === 0 ? (
+              <p className="text-xs text-zinc-500">Usa la primera linea para empezar y luego agrega las que necesites.</p>
+            ) : null}
+            {colorSizeRows.length > 0 && stockEntryMode === 'matrix' ? (
+              <div className="overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-950/40">
+                <table className="min-w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-zinc-800">
+                      <th className="px-2 py-2 text-left text-zinc-300">Color</th>
+                      {getUniqueSizesFromRows(colorSizeRows).map((size) => (
+                        <th key={size} className="px-2 py-2 text-zinc-300">
+                          <div className="flex items-center justify-center gap-1">
+                            <span>{size}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeSizeGlobal(size, false)}
+                              className="inline-flex h-4 w-4 items-center justify-center rounded border border-rose-500/40 text-[10px] leading-none text-rose-300"
+                              title={`Quitar talla ${size}`}
+                            >
+                              X
+                            </button>
+                          </div>
+                        </th>
+                      ))}
+                      <th className="px-2 py-2 text-left text-zinc-300">Accion</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {getUniqueColorsFromRows(colorSizeRows).map((color) => (
+                      <tr key={color} className="border-b border-zinc-900/70">
+                        <td className="px-2 py-2 font-semibold text-zinc-200">{color}</td>
+                        {getUniqueSizesFromRows(colorSizeRows).map((size) => (
+                          <td key={`${color}-${size}`} className="px-2 py-2 text-center">
+                            <input
+                              type="number"
+                              min={0}
+                              step={1}
+                              value={getCellQuantity(colorSizeRows, color, size)}
+                              placeholder="0"
+                              onChange={(event) => updateMatrixCell(color, size, event.target.value, false)}
+                              className="mx-auto w-20 rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1 text-xs"
+                            />
+                          </td>
+                        ))}
+                        <td className="px-2 py-2">
+                          <button
+                            type="button"
+                            onClick={() => removeColorGroup(color, false)}
+                            className="rounded-lg border border-rose-500/40 px-2 py-1 text-xs text-rose-300"
+                          >
+                            Quitar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+            {colorSizeRows.length > 0 && stockEntryMode === 'form' ? (
+              <div className="space-y-3">
+                {getUniqueColorsFromRows(colorSizeRows).map((color) => (
+                  <div key={color} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="text-xs text-zinc-400">Color</span>
+                      <input
+                        value={color}
+                        onChange={(event) => renameColorGroup(color, event.target.value, false)}
+                        className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1 text-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => addSizeToColor(color, false)}
+                        className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-200"
+                      >
+                        Agregar talla a este color
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeColorGroup(color, false)}
+                        className="ml-auto rounded-md border border-rose-500/40 px-2 py-1 text-xs text-rose-300"
+                      >
+                        Quitar color
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      {colorSizeRows
+                        .filter((row) => normalizeColorLabel(row.color) === color)
+                        .map((row) => (
+                          <div key={row.id} className="grid gap-2 md:grid-cols-[120px_140px_auto]">
+                            <input
+                              value={row.size}
+                              onChange={(event) => updateColorSizeRow(row.id, 'size', event.target.value, false)}
+                              placeholder="Talla"
+                              className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs"
+                            />
+                            <input
+                              type="number"
+                              min={0}
+                              step={1}
+                              value={row.quantity}
+                              placeholder="Cantidad"
+                              onChange={(event) => updateColorSizeRow(row.id, 'quantity', event.target.value, false)}
+                              className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeColorSizeRow(row.id, false)}
+                              className="rounded-md border border-zinc-700 px-2 py-2 text-xs text-zinc-200"
+                            >
+                              Quitar fila
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+          <button
+            type="button"
+            onClick={() => setCostingEnabled((prev) => !prev)}
+            className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-200"
+          >
+            {costingEnabled ? 'Ocultar formulario de costo de confeccion' : 'Agregar formulario de costo de confeccion'}
+          </button>
+
+          {costingEnabled ? (
+            <>
+              <div className="mt-3 grid grid-cols-[1.2fr_1fr_1fr] gap-2 text-xs text-zinc-400">
+                <p>INSUMO</p>
+                <p>UNIDAD</p>
+                <p>TOTAL</p>
+              </div>
+              <div className="mt-2 space-y-2">
+                {COST_FIELDS.filter((field) => !DESIGN_COST_KEYS.includes(field.key)).map((field) => (
+                  <div key={field.key} className="grid grid-cols-[1.2fr_1fr_1fr] gap-2">
+                    <p className="self-center text-xs text-zinc-300 uppercase">{field.label}</p>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={costDraft[field.key]}
+                      placeholder="0"
+                      onChange={(event) => updateCostField(field.key, event.target.value, false)}
+                      className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                    />
+                    <input
+                      type="text"
+                      value={formatCop(getTotalCostValue(costDraft, field.key, totalQuantity))}
+                      readOnly
+                      className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => toggleDesignSection(!designEnabled, false)}
+                  className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-200"
+                >
+                  {designEnabled ? 'Ocultar formulario de diseno' : 'Agregar formulario de diseno'}
+                </button>
+              </div>
+
+              {designEnabled ? (
+                <div className="mt-3 space-y-4">
+              <div>
+                <p className="text-xs text-zinc-400">ESTAMPADO</p>
+                <div className="mt-2 grid grid-cols-[1.2fr_1fr_1fr] gap-2 text-xs text-zinc-400">
+                  <p>INSUMO</p>
+                  <p>UNIDAD</p>
+                  <p>TOTAL</p>
+                </div>
+                <div className="mt-2 space-y-2">
+                  {COST_FIELDS.filter((field) => DESIGN_ESTAMPADO_FIELDS.includes(field.key)).map((field) => (
+                    <div key={field.key} className="grid grid-cols-[1.2fr_1fr_1fr] gap-2">
+                      <p className="self-center text-xs text-zinc-300 uppercase">{field.label}</p>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={costDraft[field.key]}
+                        placeholder="0"
+                        onChange={(event) => updateCostField(field.key, event.target.value, false)}
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                      />
+                      <input
+                        type="text"
+                        value={formatCop(getTotalCostValue(costDraft, field.key, totalQuantity))}
+                        readOnly
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs text-zinc-400">INSUMOS</p>
+                <div className="mt-2 grid grid-cols-[1.2fr_1fr_1fr] gap-2 text-xs text-zinc-400">
+                  <p>INSUMO</p>
+                  <p>UNIDAD</p>
+                  <p>TOTAL</p>
+                </div>
+                <div className="mt-2 space-y-2">
+                  {COST_FIELDS.filter((field) => DESIGN_INSUMOS_FIELDS.includes(field.key)).map((field) => (
+                    <div key={field.key} className="grid grid-cols-[1.2fr_1fr_1fr] gap-2">
+                      <p className="self-center text-xs text-zinc-300 uppercase">{field.label}</p>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={costDraft[field.key]}
+                        placeholder="0"
+                        onChange={(event) => updateCostField(field.key, event.target.value, false)}
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                      />
+                      <input
+                        type="text"
+                        value={formatCop(getTotalCostValue(costDraft, field.key, totalQuantity))}
+                        readOnly
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+                </div>
+              ) : null}
+            </>
+          ) : null}
         </div>
 
         <div className="mt-3 grid gap-2 md:grid-cols-2">
@@ -418,10 +1388,26 @@ export function WholesaleInventoryPage() {
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-zinc-200">{row.reference}</p>
+                  <p className="text-xs text-zinc-500">
+                    Tallas activas: {Object.entries(row.sizeQuantities)
+                      .filter((entry) => entry[1] > 0)
+                      .map((entry) => `${entry[0]} (${entry[1]})`)
+                      .join(', ') || 'Sin tallas cargadas'}
+                  </p>
+                  <p className="text-xs text-zinc-500">
+                    Colores activos: {Object.entries(row.colorQuantities)
+                      .filter((entry) => Object.values(entry[1] ?? {}).some((qty) => Number(qty) > 0))
+                      .map((entry) => entry[0])
+                      .join(', ') || 'Sin colores cargados'}
+                  </p>
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-zinc-500">Valor unitario</p>
                   <p className="text-xs text-zinc-300">{formatCop(row.unitPrice)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-zinc-500">Inversion total</p>
+                  <p className="text-xs text-zinc-300">{formatCop(row.totalInvestment)}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-zinc-500">Cantidad</p>
@@ -495,7 +1481,7 @@ export function WholesaleInventoryPage() {
           onClick={closeEditModal}
         >
           <div
-            className="w-full max-w-3xl rounded-2xl border border-zinc-700 bg-zinc-900 p-5"
+            className="w-full max-w-5xl rounded-2xl border border-zinc-700 bg-zinc-900 p-5"
             onClick={(event) => {
               event.stopPropagation()
             }}
@@ -503,7 +1489,7 @@ export function WholesaleInventoryPage() {
             <h3 className="text-lg font-semibold text-zinc-100">Editar referencia de confeccion</h3>
             <p className="mt-1 text-xs text-zinc-500">Referencia seleccionada: {editTarget.reference}</p>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="mt-4 grid gap-3 md:grid-cols-4">
               <label className="space-y-1">
                 <span className="text-xs text-zinc-400">Referencia</span>
                 <input
@@ -514,14 +1500,12 @@ export function WholesaleInventoryPage() {
               </label>
 
               <label className="space-y-1">
-                <span className="text-xs text-zinc-400">Cantidad</span>
+                <span className="text-xs text-zinc-400">Cantidad total</span>
                 <input
                   type="number"
-                  min={0}
-                  step={1}
-                  value={editQuantityOnHand}
-                  onChange={(event) => setEditQuantityOnHand(event.target.value)}
-                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  value={editTotalQuantity}
+                  readOnly
+                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
                 />
               </label>
 
@@ -535,6 +1519,401 @@ export function WholesaleInventoryPage() {
                   className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
                 />
               </label>
+
+              <label className="space-y-1">
+                <span className="text-xs text-zinc-400">Inversion total (COP)</span>
+                <input
+                  type="text"
+                  value={formatCop(editTotalInvestment)}
+                  readOnly
+                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
+                />
+              </label>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+              <h4 className="text-sm font-semibold text-zinc-100">Costeo polos-camisetas</h4>
+              <div className="mt-3 grid gap-2 md:grid-cols-4 xl:grid-cols-6">
+                <label className="space-y-1">
+                  <span className="text-xs text-zinc-400">Fecha</span>
+                  <input
+                    type="date"
+                    value={editCosteoHeader.fecha}
+                    onChange={(event) => updateCosteoHeaderField('fecha', event.target.value, true)}
+                    onFocus={(event) => {
+                      event.currentTarget.showPicker?.()
+                    }}
+                    onClick={(event) => {
+                      event.currentTarget.showPicker?.()
+                    }}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 scheme-dark"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-zinc-400">Cortador</span>
+                  <input
+                    value={editCosteoHeader.cortador}
+                    onChange={(event) => updateCosteoHeaderField('cortador', event.target.value, true)}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-zinc-400">Curva corte</span>
+                  <input
+                    value={editCosteoHeader.curvaCorte}
+                    onChange={(event) => updateCosteoHeaderField('curvaCorte', event.target.value, true)}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-zinc-400">Promedio</span>
+                  <input
+                    value={editCosteoHeader.promedio}
+                    onChange={(event) => updateCosteoHeaderField('promedio', event.target.value, true)}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-zinc-400">Tipo de tela</span>
+                  <input
+                    value={editCosteoHeader.tipoTela}
+                    onChange={(event) => updateCosteoHeaderField('tipoTela', event.target.value, true)}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-zinc-400">No. de rollos</span>
+                  <input
+                    value={editCosteoHeader.numeroRollos}
+                    onChange={(event) => updateCosteoHeaderField('numeroRollos', event.target.value, true)}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-zinc-400">Largo trazo</span>
+                  <input
+                    value={editCosteoHeader.largoTrazo}
+                    onChange={(event) => updateCosteoHeaderField('largoTrazo', event.target.value, true)}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-zinc-400">Ancho trazo</span>
+                  <input
+                    value={editCosteoHeader.anchoTrazo}
+                    onChange={(event) => updateCosteoHeaderField('anchoTrazo', event.target.value, true)}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-zinc-400">Rendimiento</span>
+                  <input
+                    value={editCosteoHeader.rendimiento}
+                    onChange={(event) => updateCosteoHeaderField('rendimiento', event.target.value, true)}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-1 md:col-span-2 xl:col-span-3">
+                  <span className="text-xs text-zinc-400">Modelo</span>
+                  <input
+                    value={editCosteoHeader.modelo}
+                    onChange={(event) => updateCosteoHeaderField('modelo', event.target.value, true)}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="mr-auto">
+                  <h4 className="text-sm font-semibold text-zinc-100">Stock confeccion (color + talla)</h4>
+                  <p className="text-xs text-zinc-500">Un solo formulario para editar cantidades por combinacion.</p>
+                </div>
+                <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900/70 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setEditStockEntryMode('form')}
+                    className={`rounded-md px-2 py-1 text-xs ${editStockEntryMode === 'form' ? 'bg-zinc-200 text-zinc-900' : 'text-zinc-300'}`}
+                  >
+                    Formulario
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditStockEntryMode('matrix')}
+                    className={`rounded-md px-2 py-1 text-xs ${editStockEntryMode === 'matrix' ? 'bg-zinc-200 text-zinc-900' : 'text-zinc-300'}`}
+                  >
+                    Matriz
+                  </button>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2">
+                <div className="grid gap-2 rounded-lg border border-zinc-800 bg-zinc-950/40 p-2 md:grid-cols-[1fr_1fr_140px_auto]">
+                  <input
+                    value={editNewColorInput}
+                    onChange={(event) => setEditNewColorInput(event.target.value)}
+                    placeholder="Color"
+                    className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs"
+                  />
+                  <input
+                    value={editNewSizeInput}
+                    onChange={(event) => setEditNewSizeInput(event.target.value)}
+                    placeholder="Talla"
+                    className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={editNewQtyInput}
+                    onChange={(event) => setEditNewQtyInput(event.target.value)}
+                    onKeyDown={(event) => handleQuickAddQuantityEnter(event, true)}
+                    placeholder="Cantidad"
+                    className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => addCustomRow(editNewColorInput, editNewSizeInput, editNewQtyInput, true)}
+                    className="rounded-md border border-zinc-700 px-2 py-2 text-xs text-zinc-200"
+                  >
+                    Agregar linea
+                  </button>
+                </div>
+                {editColorSizeRows.length === 0 ? (
+                  <p className="text-xs text-zinc-500">Usa la primera linea para empezar y luego agrega las que necesites.</p>
+                ) : null}
+                {editColorSizeRows.length > 0 && editStockEntryMode === 'matrix' ? (
+                  <div className="overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-950/40">
+                    <table className="min-w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-zinc-800">
+                          <th className="px-2 py-2 text-left text-zinc-300">Color</th>
+                          {getUniqueSizesFromRows(editColorSizeRows).map((size) => (
+                            <th key={size} className="px-2 py-2 text-zinc-300">
+                              <div className="flex items-center justify-center gap-1">
+                                <span>{size}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => removeSizeGlobal(size, true)}
+                                  className="inline-flex h-4 w-4 items-center justify-center rounded border border-rose-500/40 text-[10px] leading-none text-rose-300"
+                                  title={`Quitar talla ${size}`}
+                                >
+                                  X
+                                </button>
+                              </div>
+                            </th>
+                          ))}
+                          <th className="px-2 py-2 text-left text-zinc-300">Accion</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {getUniqueColorsFromRows(editColorSizeRows).map((color) => (
+                          <tr key={color} className="border-b border-zinc-900/70">
+                            <td className="px-2 py-2 font-semibold text-zinc-200">{color}</td>
+                            {getUniqueSizesFromRows(editColorSizeRows).map((size) => (
+                              <td key={`${color}-${size}`} className="px-2 py-2 text-center">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  value={getCellQuantity(editColorSizeRows, color, size)}
+                                  placeholder="0"
+                                  onChange={(event) => updateMatrixCell(color, size, event.target.value, true)}
+                                  className="mx-auto w-20 rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1 text-xs"
+                                />
+                              </td>
+                            ))}
+                            <td className="px-2 py-2">
+                              <button
+                                type="button"
+                                onClick={() => removeColorGroup(color, true)}
+                                className="rounded-lg border border-rose-500/40 px-2 py-1 text-xs text-rose-300"
+                              >
+                                Quitar
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+                {editColorSizeRows.length > 0 && editStockEntryMode === 'form' ? (
+                  <div className="space-y-3">
+                    {getUniqueColorsFromRows(editColorSizeRows).map((color) => (
+                      <div key={color} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                        <div className="mb-2 flex items-center gap-2">
+                          <span className="text-xs text-zinc-400">Color</span>
+                          <input
+                            value={color}
+                            onChange={(event) => renameColorGroup(color, event.target.value, true)}
+                            className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1 text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => addSizeToColor(color, true)}
+                            className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-200"
+                          >
+                            Agregar talla a este color
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeColorGroup(color, true)}
+                            className="ml-auto rounded-md border border-rose-500/40 px-2 py-1 text-xs text-rose-300"
+                          >
+                            Quitar color
+                          </button>
+                        </div>
+                        <div className="space-y-2">
+                          {editColorSizeRows
+                            .filter((row) => normalizeColorLabel(row.color) === color)
+                            .map((row) => (
+                              <div key={row.id} className="grid gap-2 md:grid-cols-[120px_140px_auto]">
+                                <input
+                                  value={row.size}
+                                  onChange={(event) => updateColorSizeRow(row.id, 'size', event.target.value, true)}
+                                  placeholder="Talla"
+                                  className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs"
+                                />
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  value={row.quantity}
+                                  placeholder="Cantidad"
+                                  onChange={(event) => updateColorSizeRow(row.id, 'quantity', event.target.value, true)}
+                                  className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => removeColorSizeRow(row.id, true)}
+                                  className="rounded-md border border-zinc-700 px-2 py-2 text-xs text-zinc-200"
+                                >
+                                  Quitar fila
+                                </button>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+              <button
+                type="button"
+                onClick={() => setEditCostingEnabled((prev) => !prev)}
+                className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-200"
+              >
+                {editCostingEnabled ? 'Ocultar formulario de costo de confeccion' : 'Agregar formulario de costo de confeccion'}
+              </button>
+
+              {editCostingEnabled ? (
+                <>
+                  <div className="mt-3 grid grid-cols-[1.2fr_1fr_1fr] gap-2 text-xs text-zinc-400">
+                    <p>INSUMO</p>
+                    <p>UNIDAD</p>
+                    <p>TOTAL</p>
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {COST_FIELDS.filter((field) => !DESIGN_COST_KEYS.includes(field.key)).map((field) => (
+                      <div key={field.key} className="grid grid-cols-[1.2fr_1fr_1fr] gap-2">
+                        <p className="self-center text-xs text-zinc-300 uppercase">{field.label}</p>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={editCostDraft[field.key]}
+                          placeholder="0"
+                          onChange={(event) => updateCostField(field.key, event.target.value, true)}
+                          className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                        />
+                        <input
+                          type="text"
+                          value={formatCop(getTotalCostValue(editCostDraft, field.key, editTotalQuantity))}
+                          readOnly
+                          className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={() => toggleDesignSection(!editDesignEnabled, true)}
+                      className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-200"
+                    >
+                      {editDesignEnabled ? 'Ocultar formulario de diseno' : 'Agregar formulario de diseno'}
+                    </button>
+                  </div>
+
+                  {editDesignEnabled ? (
+                    <div className="mt-3 space-y-4">
+                  <div>
+                    <p className="text-xs text-zinc-400">ESTAMPADO</p>
+                    <div className="mt-2 grid grid-cols-[1.2fr_1fr_1fr] gap-2 text-xs text-zinc-400">
+                      <p>INSUMO</p>
+                      <p>UNIDAD</p>
+                      <p>TOTAL</p>
+                    </div>
+                    <div className="mt-2 space-y-2">
+                      {COST_FIELDS.filter((field) => DESIGN_ESTAMPADO_FIELDS.includes(field.key)).map((field) => (
+                      <div key={field.key} className="grid grid-cols-[1.2fr_1fr_1fr] gap-2">
+                        <p className="self-center text-xs text-zinc-300 uppercase">{field.label}</p>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={editCostDraft[field.key]}
+                          placeholder="0"
+                          onChange={(event) => updateCostField(field.key, event.target.value, true)}
+                          className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                        />
+                        <input
+                          type="text"
+                          value={formatCop(getTotalCostValue(editCostDraft, field.key, editTotalQuantity))}
+                          readOnly
+                          className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
+                        />
+                      </div>
+                    ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-zinc-400">INSUMOS</p>
+                    <div className="mt-2 grid grid-cols-[1.2fr_1fr_1fr] gap-2 text-xs text-zinc-400">
+                      <p>INSUMO</p>
+                      <p>UNIDAD</p>
+                      <p>TOTAL</p>
+                    </div>
+                    <div className="mt-2 space-y-2">
+                      {COST_FIELDS.filter((field) => DESIGN_INSUMOS_FIELDS.includes(field.key)).map((field) => (
+                      <div key={field.key} className="grid grid-cols-[1.2fr_1fr_1fr] gap-2">
+                        <p className="self-center text-xs text-zinc-300 uppercase">{field.label}</p>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={editCostDraft[field.key]}
+                          placeholder="0"
+                          onChange={(event) => updateCostField(field.key, event.target.value, true)}
+                          className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                        />
+                        <input
+                          type="text"
+                          value={formatCop(getTotalCostValue(editCostDraft, field.key, editTotalQuantity))}
+                          readOnly
+                          className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
+                        />
+                      </div>
+                    ))}
+                    </div>
+                  </div>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-2">

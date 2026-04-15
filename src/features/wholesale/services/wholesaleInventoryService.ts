@@ -1,16 +1,200 @@
 import { supabase } from '../../../integrations/supabase/client/supabaseClient'
 import type {
   CreateWholesaleReferenceInput,
+  WholesaleCostBreakdown,
+  WholesaleCosteoHeader,
   UpdateWholesaleReferenceInvestmentMovementInput,
   UpdateWholesaleReferenceInput,
   WholesaleInventoryRow,
   WholesaleReferenceInvestmentMovementRow,
 } from '../model/wholesale.types'
 
+const COST_KEYS: Array<keyof WholesaleCostBreakdown> = [
+  'tela',
+  'corte',
+  'colorTela',
+  'colorTinta',
+  'plotter',
+  'estampado',
+  'disenoEstampa',
+  'dacron',
+  'cuelloRib',
+  'entretela',
+  'botones',
+  'confeccion',
+  'fletesTela',
+  'gasolina',
+  'bordado',
+  'bolsa',
+  'etiqueta',
+  'marquilla',
+  'aplique',
+  'varios',
+  'impresiones',
+  'cintaNit',
+  'talla',
+  'plastifle',
+  'hiladilla',
+  'cierre',
+]
+
+function getDefaultCostBreakdown(): WholesaleCostBreakdown {
+  return {
+    tela: 0,
+    corte: 0,
+    colorTela: 0,
+    colorTinta: 0,
+    plotter: 0,
+    estampado: 0,
+    disenoEstampa: 0,
+    dacron: 0,
+    cuelloRib: 0,
+    entretela: 0,
+    botones: 0,
+    confeccion: 0,
+    fletesTela: 0,
+    gasolina: 0,
+    bordado: 0,
+    bolsa: 0,
+    etiqueta: 0,
+    marquilla: 0,
+    aplique: 0,
+    varios: 0,
+    impresiones: 0,
+    cintaNit: 0,
+    talla: 0,
+    plastifle: 0,
+    hiladilla: 0,
+    cierre: 0,
+  }
+}
+
+function normalizeCostBreakdown(raw: unknown): WholesaleCostBreakdown {
+  const base = getDefaultCostBreakdown()
+  if (!raw || typeof raw !== 'object') {
+    return base
+  }
+
+  const source = raw as Record<string, unknown>
+  COST_KEYS.forEach((key) => {
+    const parsed = Number(source[key] ?? 0)
+    base[key] = Number.isFinite(parsed) ? Math.max(0, parsed) : 0
+  })
+
+  return base
+}
+
+function normalizeSizeQuantities(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== 'object') {
+    return {}
+  }
+
+  return Object.entries(raw as Record<string, unknown>).reduce<Record<string, number>>((acc, [size, qty]) => {
+    const normalizedSize = size.trim().toUpperCase()
+    if (!normalizedSize) {
+      return acc
+    }
+
+    const parsedQty = Number(qty ?? 0)
+    acc[normalizedSize] = Number.isFinite(parsedQty) ? Math.max(0, Math.trunc(parsedQty)) : 0
+    return acc
+  }, {})
+}
+
+function normalizeColorQuantities(raw: unknown): Record<string, Record<string, number>> {
+  if (!raw || typeof raw !== 'object') {
+    return {}
+  }
+
+  return Object.entries(raw as Record<string, unknown>).reduce<Record<string, Record<string, number>>>(
+    (acc, [color, sizesRaw]) => {
+      const normalizedColor = color.trim().toUpperCase()
+      if (!normalizedColor || !sizesRaw || typeof sizesRaw !== 'object') {
+        return acc
+      }
+
+      const normalizedSizes = Object.entries(sizesRaw as Record<string, unknown>).reduce<Record<string, number>>(
+        (sizesAcc, [size, qty]) => {
+          const normalizedSize = size.trim().toUpperCase()
+          if (!normalizedSize) {
+            return sizesAcc
+          }
+
+          const parsedQty = Number(qty ?? 0)
+          sizesAcc[normalizedSize] = Number.isFinite(parsedQty) ? Math.max(0, Math.trunc(parsedQty)) : 0
+          return sizesAcc
+        },
+        {},
+      )
+
+      acc[normalizedColor] = normalizedSizes
+      return acc
+    },
+    {},
+  )
+}
+
+function sumColorQuantities(colorQuantities: Record<string, Record<string, number>>) {
+  return Object.values(colorQuantities).reduce((acc, sizeMap) => {
+    return acc + Object.values(sizeMap).reduce((inner, qty) => inner + Math.max(0, Math.trunc(Number(qty || 0))), 0)
+  }, 0)
+}
+
+function aggregateSizeQuantitiesFromColor(
+  colorQuantities: Record<string, Record<string, number>>,
+): Record<string, number> {
+  return Object.values(colorQuantities).reduce<Record<string, number>>((acc, sizeMap) => {
+    Object.entries(sizeMap).forEach(([size, qty]) => {
+      acc[size] = (acc[size] ?? 0) + Math.max(0, Math.trunc(Number(qty || 0)))
+    })
+    return acc
+  }, {})
+}
+
+function sumSizeQuantities(sizeQuantities: Record<string, number>) {
+  return Object.values(sizeQuantities).reduce((acc, qty) => acc + Math.max(0, Math.trunc(Number(qty || 0))), 0)
+}
+
+function getDefaultCosteoHeader(): WholesaleCosteoHeader {
+  return {
+    fecha: '',
+    cortador: '',
+    curvaCorte: '',
+    promedio: '',
+    tipoTela: '',
+    largoTrazo: '',
+    anchoTrazo: '',
+    numeroRollos: '',
+    rendimiento: '',
+    modelo: '',
+  }
+}
+
+function normalizeCosteoHeader(raw: unknown): WholesaleCosteoHeader {
+  const base = getDefaultCosteoHeader()
+  if (!raw || typeof raw !== 'object') {
+    return base
+  }
+
+  const source = raw as Record<string, unknown>
+  return {
+    fecha: String(source.fecha ?? base.fecha).trim(),
+    cortador: String(source.cortador ?? base.cortador).trim(),
+    curvaCorte: String(source.curvaCorte ?? base.curvaCorte).trim(),
+    promedio: String(source.promedio ?? base.promedio).trim(),
+    tipoTela: String(source.tipoTela ?? base.tipoTela).trim(),
+    largoTrazo: String(source.largoTrazo ?? base.largoTrazo).trim(),
+    anchoTrazo: String(source.anchoTrazo ?? base.anchoTrazo).trim(),
+    numeroRollos: String(source.numeroRollos ?? base.numeroRollos).trim(),
+    rendimiento: String(source.rendimiento ?? base.rendimiento).trim(),
+    modelo: String(source.modelo ?? base.modelo).trim(),
+  }
+}
+
 export async function listWholesaleInventoryStock(storeId: string) {
   const { data, error } = await supabase
     .from('wholesale_references')
-    .select('id, reference, unit_price, quantity_on_hand, is_active')
+    .select('id, reference, unit_price, quantity_on_hand, total_investment, cost_breakdown, size_quantities, color_quantities, design_enabled, costeo_header, is_active')
     .eq('store_id', storeId)
     .eq('is_active', true)
     .order('reference', { ascending: true })
@@ -21,12 +205,22 @@ export async function listWholesaleInventoryStock(storeId: string) {
   }
 
   return (data ?? []).map((row) => {
+    const normalizedColorQuantities = normalizeColorQuantities((row as { color_quantities?: unknown }).color_quantities)
     return {
       variantId: String(row.id),
       reference: String(row.reference ?? ''),
       productName: String(row.reference ?? ''),
       unitPrice: Number(row.unit_price ?? 0),
       quantityOnHand: Number(row.quantity_on_hand ?? 0),
+      totalInvestment: Number(row.total_investment ?? 0),
+      costBreakdown: normalizeCostBreakdown(row.cost_breakdown),
+      sizeQuantities:
+        Object.keys(normalizedColorQuantities).length > 0
+          ? aggregateSizeQuantitiesFromColor(normalizedColorQuantities)
+          : normalizeSizeQuantities(row.size_quantities),
+      colorQuantities: normalizedColorQuantities,
+      designEnabled: Boolean(row.design_enabled ?? false),
+      costeoHeader: normalizeCosteoHeader(row.costeo_header),
     } satisfies WholesaleInventoryRow
   })
 }
@@ -37,12 +231,25 @@ export async function createWholesaleReference(
   input: CreateWholesaleReferenceInput,
 ) {
   const normalizedReference = input.reference.trim().toUpperCase()
+  const normalizedColorQuantities = normalizeColorQuantities(input.colorQuantities)
+  const normalizedSizeQuantities =
+    Object.keys(normalizedColorQuantities).length > 0
+      ? aggregateSizeQuantitiesFromColor(normalizedColorQuantities)
+      : normalizeSizeQuantities(input.sizeQuantities)
+  const computedQuantityFromSizes =
+    Object.keys(normalizedColorQuantities).length > 0
+      ? sumColorQuantities(normalizedColorQuantities)
+      : sumSizeQuantities(normalizedSizeQuantities)
+  const targetQuantity = computedQuantityFromSizes > 0 ? computedQuantityFromSizes : input.quantityOnHand
+  const normalizedCosts = normalizeCostBreakdown(input.costBreakdown)
+  const totalInvestment = COST_KEYS.reduce((acc, key) => acc + normalizedCosts[key], 0)
+  const normalizedCosteoHeader = normalizeCosteoHeader(input.costeoHeader)
 
   if (!normalizedReference) {
     throw new Error('La referencia es obligatoria.')
   }
 
-  if (input.quantityOnHand < 0) {
+  if (targetQuantity < 0) {
     throw new Error('La cantidad no puede ser negativa.')
   }
 
@@ -50,13 +257,13 @@ export async function createWholesaleReference(
     throw new Error('El valor unitario no puede ser negativo.')
   }
 
-  if (input.investmentAmount < 0) {
+  if (totalInvestment < 0) {
     throw new Error('La inversion no puede ser negativa.')
   }
 
   const { data: existing, error: existingError } = await supabase
     .from('wholesale_references')
-    .select('id, quantity_on_hand, is_active')
+    .select('id, quantity_on_hand, size_quantities, color_quantities, is_active')
     .eq('store_id', storeId)
     .ilike('reference', normalizedReference)
     .limit(1)
@@ -67,13 +274,38 @@ export async function createWholesaleReference(
   }
 
   if (existing?.id) {
-    const nextQuantity = Number(existing.quantity_on_hand ?? 0) + input.quantityOnHand
+    const existingSizeQuantities = normalizeSizeQuantities(existing.size_quantities)
+    const existingColorQuantities = normalizeColorQuantities((existing as { color_quantities?: unknown }).color_quantities)
+    const mergedSizeQuantities = { ...existingSizeQuantities }
+    Object.entries(normalizedSizeQuantities).forEach(([size, qty]) => {
+      mergedSizeQuantities[size] = Math.max(0, Math.trunc((mergedSizeQuantities[size] ?? 0) + qty))
+    })
+
+    const mergedColorQuantities: Record<string, Record<string, number>> = {
+      ...existingColorQuantities,
+    }
+    Object.entries(normalizedColorQuantities).forEach(([color, sizeMap]) => {
+      const current = { ...(mergedColorQuantities[color] ?? {}) }
+      Object.entries(sizeMap).forEach(([size, qty]) => {
+        current[size] = Math.max(0, Math.trunc((current[size] ?? 0) + qty))
+      })
+      mergedColorQuantities[color] = current
+    })
+
+    const quantityDelta = targetQuantity
+    const nextQuantity = Number(existing.quantity_on_hand ?? 0) + quantityDelta
 
     const { error: updateExistingError } = await supabase
       .from('wholesale_references')
       .update({
         quantity_on_hand: nextQuantity,
         unit_price: input.unitPrice,
+        total_investment: totalInvestment,
+        cost_breakdown: normalizedCosts,
+        size_quantities: mergedSizeQuantities,
+        color_quantities: mergedColorQuantities,
+        design_enabled: input.designEnabled,
+        costeo_header: normalizedCosteoHeader,
         is_active: true,
         updated_at: new Date().toISOString(),
       })
@@ -83,13 +315,13 @@ export async function createWholesaleReference(
       throw new Error(updateExistingError.message)
     }
 
-    if (input.quantityOnHand > 0) {
+    if (quantityDelta > 0) {
       const { error: movementError } = await supabase.from('wholesale_reference_movements').insert({
         store_id: storeId,
         wholesale_reference_id: existing.id,
         type: 'in',
-        quantity: input.quantityOnHand,
-        investment_amount: input.investmentAmount,
+        quantity: quantityDelta,
+        investment_amount: totalInvestment,
         reason: 'Carga adicional de referencia existente',
         reference_type: 'reference_restock',
         performed_by: userId,
@@ -112,8 +344,14 @@ export async function createWholesaleReference(
     .insert({
       store_id: storeId,
       reference: normalizedReference,
-      quantity_on_hand: input.quantityOnHand,
+      quantity_on_hand: targetQuantity,
       unit_price: input.unitPrice,
+      total_investment: totalInvestment,
+      cost_breakdown: normalizedCosts,
+      size_quantities: normalizedSizeQuantities,
+      color_quantities: normalizedColorQuantities,
+      design_enabled: input.designEnabled,
+      costeo_header: normalizedCosteoHeader,
       created_by: userId,
       is_active: true,
     })
@@ -124,7 +362,7 @@ export async function createWholesaleReference(
     throw new Error(error.message)
   }
 
-  if (input.quantityOnHand <= 0) {
+  if (targetQuantity <= 0) {
     return
   }
 
@@ -132,8 +370,8 @@ export async function createWholesaleReference(
     store_id: storeId,
     wholesale_reference_id: data.id,
     type: 'in',
-    quantity: input.quantityOnHand,
-    investment_amount: input.investmentAmount,
+    quantity: targetQuantity,
+    investment_amount: totalInvestment,
     reason: 'Carga inicial de referencia',
     reference_type: 'reference_create',
     performed_by: userId,
@@ -146,7 +384,7 @@ export async function createWholesaleReference(
   return {
     action: 'created' as const,
     reference: normalizedReference,
-    finalQuantity: input.quantityOnHand,
+    finalQuantity: targetQuantity,
   }
 }
 
@@ -155,11 +393,25 @@ export async function updateWholesaleReference(
   userId: string,
   input: UpdateWholesaleReferenceInput,
 ) {
+  const normalizedColorQuantities = normalizeColorQuantities(input.colorQuantities)
+  const normalizedSizeQuantities =
+    Object.keys(normalizedColorQuantities).length > 0
+      ? aggregateSizeQuantitiesFromColor(normalizedColorQuantities)
+      : normalizeSizeQuantities(input.sizeQuantities)
+  const computedQuantityFromSizes =
+    Object.keys(normalizedColorQuantities).length > 0
+      ? sumColorQuantities(normalizedColorQuantities)
+      : sumSizeQuantities(normalizedSizeQuantities)
+  const targetQuantity = computedQuantityFromSizes > 0 ? computedQuantityFromSizes : input.quantityOnHand
+  const normalizedCosts = normalizeCostBreakdown(input.costBreakdown)
+  const totalInvestment = COST_KEYS.reduce((acc, key) => acc + normalizedCosts[key], 0)
+  const normalizedCosteoHeader = normalizeCosteoHeader(input.costeoHeader)
+
   if (!input.reference.trim()) {
     throw new Error('La referencia es obligatoria.')
   }
 
-  if (input.quantityOnHand < 0) {
+  if (targetQuantity < 0) {
     throw new Error('La cantidad no puede ser negativa.')
   }
 
@@ -183,7 +435,13 @@ export async function updateWholesaleReference(
     .update({
       reference: input.reference.trim(),
       unit_price: input.unitPrice,
-      quantity_on_hand: input.quantityOnHand,
+      quantity_on_hand: targetQuantity,
+      total_investment: totalInvestment,
+      cost_breakdown: normalizedCosts,
+      size_quantities: normalizedSizeQuantities,
+      color_quantities: normalizedColorQuantities,
+      design_enabled: input.designEnabled,
+      costeo_header: normalizedCosteoHeader,
       updated_at: new Date().toISOString(),
     })
     .eq('id', input.referenceId)
@@ -193,7 +451,7 @@ export async function updateWholesaleReference(
     throw new Error(updateError.message)
   }
 
-  const delta = input.quantityOnHand - Number(current.quantity_on_hand ?? 0)
+  const delta = targetQuantity - Number(current.quantity_on_hand ?? 0)
   if (delta === 0) {
     return
   }
