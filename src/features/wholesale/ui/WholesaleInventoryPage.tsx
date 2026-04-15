@@ -20,12 +20,6 @@ import type {
   UpdateWholesaleReferenceInput,
 } from '../model/wholesale.types'
 
-interface SizeDraftRow {
-  id: string
-  size: string
-  quantity: string
-}
-
 interface ColorSizeDraftRow {
   id: string
   color: string
@@ -35,7 +29,6 @@ interface ColorSizeDraftRow {
 
 type StockEntryMode = 'form' | 'matrix'
 
-const DEFAULT_SIZES = ['S', 'M', 'L', 'XL', 'XXL']
 const DESIGN_COST_KEYS: Array<keyof WholesaleCostBreakdown> = [
   'colorTela',
   'colorTinta',
@@ -568,15 +561,6 @@ export function WholesaleInventoryPage() {
     }
 
     setCosteoHeader((prev) => ({ ...prev, [key]: value }))
-  }
-
-  function addColorSizeRow(isEdit = false) {
-    if (isEdit) {
-      setEditColorSizeRows((prev) => [...prev, createColorSizeRow('', '', '')])
-      return
-    }
-
-    setColorSizeRows((prev) => [...prev, createColorSizeRow('', '', '')])
   }
 
   function removeColorSizeRow(id: string, isEdit = false) {
