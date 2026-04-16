@@ -4,6 +4,7 @@ import type {
   CreateUserInput,
   DeactivateUserInput,
   ReactivateUserInput,
+  StoreNavVisibilityInput,
   StoreReceiptProfileInput,
   UpdateUserRoleInput,
   UserListRow,
@@ -202,4 +203,36 @@ export async function updateStoreReceiptProfile(storeId: string, input: StoreRec
     city: (row?.out_receipt_city as string | null | undefined) ?? '',
     phone: (row?.out_receipt_phone as string | null | undefined) ?? '',
   }
+}
+
+export async function updateStoreHiddenNavRoutes(storeId: string, input: StoreNavVisibilityInput) {
+  const sanitizedRoutes = Array.from(
+    new Set(
+      input.hiddenRoutes
+        .map((route) => route.trim())
+        .filter((route) => route.length > 0),
+    ),
+  )
+
+  const { data, error } = await supabase.rpc('update_store_hidden_nav_routes', {
+    p_store_id: storeId,
+    p_hidden_routes: sanitizedRoutes,
+  })
+
+  if (error) {
+    if (error.code === 'PGRST202' || error.message.toLowerCase().includes('update_store_hidden_nav_routes')) {
+      throw new Error(
+        'No existe la funcion RPC update_store_hidden_nav_routes en Supabase. Ejecuta el script 21_store_hidden_nav_routes.sql y reintenta.',
+      )
+    }
+
+    throw new Error(error.message)
+  }
+
+  const row = data?.[0]
+  const hiddenRoutes = row?.out_hidden_routes
+
+  return Array.isArray(hiddenRoutes)
+    ? hiddenRoutes.filter((value): value is string => typeof value === 'string')
+    : []
 }

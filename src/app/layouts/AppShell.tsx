@@ -25,6 +25,8 @@ const confeccionNavItems = [
 export function AppShell() {
   const user = useAuthStore((state) => state.user)
   const signOut = useAuthStore((state) => state.signOut)
+  const hiddenRoutes = user?.storeHiddenNavRoutes ?? []
+  const shouldApplyHiddenRoutes = user?.role !== 'super_admin'
 
   useEffect(() => {
     const storeName = user?.storeName?.trim() || 'LICKAN42'
@@ -32,6 +34,10 @@ export function AppShell() {
   }, [user?.storeName])
 
   const visibleStoreNavItems = storeNavItems.filter((item) => {
+    if (shouldApplyHiddenRoutes && hiddenRoutes.includes(item.to)) {
+      return false
+    }
+
     if (!('roles' in item) || !item.roles) {
       return true
     }
@@ -39,6 +45,10 @@ export function AppShell() {
   })
 
   const visibleConfeccionNavItems = confeccionNavItems.filter((item) => {
+    if (shouldApplyHiddenRoutes && hiddenRoutes.includes(item.to)) {
+      return false
+    }
+
     if (!('roles' in item) || !item.roles) {
       return true
     }

@@ -19,4 +19,5 @@ export interface SessionUser {
   storeSlogan: string
   storeLoginSupportText: string
   storeReceipt: StoreReceiptProfile
+  storeHiddenNavRoutes: string[]
 }

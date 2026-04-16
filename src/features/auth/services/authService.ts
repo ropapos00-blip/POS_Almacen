@@ -27,6 +27,7 @@ interface StoreRow {
   receipt_address: string | null
   receipt_city: string | null
   receipt_phone: string | null
+  hidden_nav_routes: string[] | null
 }
 
 function isAppRole(value: string): value is AppRole {
@@ -91,7 +92,9 @@ async function getProfile(userId: string, fallbackEmail?: string | null) {
 async function getStoreName(storeId: string) {
   const { data, error } = await supabase
     .from('stores')
-    .select('name, login_slogan, login_support_text, receipt_legal_name, receipt_tax_id, receipt_tax_regime, receipt_address, receipt_city, receipt_phone')
+    .select(
+      'name, login_slogan, login_support_text, receipt_legal_name, receipt_tax_id, receipt_tax_regime, receipt_address, receipt_city, receipt_phone, hidden_nav_routes',
+    )
     .eq('id', storeId)
     .maybeSingle<StoreRow>()
 
@@ -109,6 +112,7 @@ async function getStoreName(storeId: string) {
         city: '',
         phone: '',
       },
+      storeHiddenNavRoutes: [],
     }
   }
 
@@ -126,6 +130,9 @@ async function getStoreName(storeId: string) {
       city: data?.receipt_city ?? '',
       phone: data?.receipt_phone ?? '',
     },
+    storeHiddenNavRoutes: Array.isArray(data?.hidden_nav_routes)
+      ? data.hidden_nav_routes.filter((value): value is string => typeof value === 'string')
+      : [],
   }
 }
 
@@ -146,6 +153,7 @@ export async function buildSessionUser(user: User): Promise<SessionUser> {
     storeSlogan: storeData.storeSlogan,
     storeLoginSupportText: storeData.storeLoginSupportText,
     storeReceipt: storeData.storeReceipt,
+    storeHiddenNavRoutes: storeData.storeHiddenNavRoutes,
   }
 
   cacheStoreName(sessionUser.storeName)

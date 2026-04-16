@@ -7,6 +7,7 @@ import {
   useCreateUserMutation,
   useDeactivateUserMutation,
   useReactivateUserMutation,
+  useUpdateStoreHiddenNavRoutesMutation,
   useUpdateStoreReceiptProfileMutation,
   useUpdateStoreNameMutation,
   useUpdateUserRoleMutation,
@@ -27,6 +28,25 @@ const createUserSchema = z.object({
   roleCode: z.enum(['admin', 'cashier']),
 })
 
+const STORE_NAV_ROUTE_OPTIONS = [
+  { route: '/dashboard', label: 'Dashboard' },
+  { route: '/pos', label: 'POS' },
+  { route: '/sales', label: 'Ventas' },
+  { route: '/manual-invoices', label: 'Factura manual' },
+  { route: '/price-check', label: 'Consulta' },
+  { route: '/catalog', label: 'Catalogo' },
+  { route: '/inventory', label: 'Inventario' },
+  { route: '/users', label: 'Usuarios' },
+] as const
+
+const CONFECCION_NAV_ROUTE_OPTIONS = [
+  { route: '/confeccion/dashboard', label: 'Dash Confeccion' },
+  { route: '/confeccion/ventas', label: 'Confeccion' },
+  { route: '/confeccion/cartera', label: 'Cartera' },
+  { route: '/confeccion/gastos', label: 'Gastos' },
+  { route: '/confeccion/inventario', label: 'Inventario Confeccion' },
+] as const
+
 function roleBadge(roleCode: string) {
   if (roleCode === 'super_admin') return 'bg-sky-500/20 text-sky-300 border-sky-500/30'
   if (roleCode === 'admin') return 'bg-amber-500/20 text-amber-300 border-amber-500/30'
@@ -39,6 +59,7 @@ export function UsersPage() {
   const setStoreSlogan = useAuthStore((state) => state.setStoreSlogan)
   const setStoreLoginSupportText = useAuthStore((state) => state.setStoreLoginSupportText)
   const setStoreReceipt = useAuthStore((state) => state.setStoreReceipt)
+  const setStoreHiddenNavRoutes = useAuthStore((state) => state.setStoreHiddenNavRoutes)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [storeNameInput, setStoreNameInput] = useState('')
   const [modalMessage, setModalMessage] = useState<string | null>(null)
@@ -60,6 +81,7 @@ export function UsersPage() {
   const reactivateMutation = useReactivateUserMutation(user?.storeId)
   const updateStoreNameMutation = useUpdateStoreNameMutation(user?.storeId)
   const updateStoreReceiptProfileMutation = useUpdateStoreReceiptProfileMutation(user?.storeId)
+  const updateStoreHiddenNavRoutesMutation = useUpdateStoreHiddenNavRoutesMutation(user?.storeId)
   const [receiptProfileInput, setReceiptProfileInput] = useState({
     loginSlogan: '',
     loginSupportText: '',
@@ -70,6 +92,7 @@ export function UsersPage() {
     city: '',
     phone: '',
   })
+  const [hiddenRoutesInput, setHiddenRoutesInput] = useState<string[]>([])
 
   useEffect(() => {
     setStoreNameInput(user?.storeName ?? '')
@@ -96,6 +119,10 @@ export function UsersPage() {
     user?.storeReceipt.taxId,
     user?.storeReceipt.taxRegime,
   ])
+
+  useEffect(() => {
+    setHiddenRoutesInput(user?.storeHiddenNavRoutes ?? [])
+  }, [user?.storeHiddenNavRoutes])
 
   const form = useForm<CreateUserInput>({
     resolver: zodResolver(createUserSchema),
@@ -250,6 +277,36 @@ export function UsersPage() {
     }
   }
 
+  const toggleHiddenRoute = (route: string) => {
+    setHiddenRoutesInput((prev) => {
+      if (prev.includes(route)) {
+        return prev.filter((item) => item !== route)
+      }
+
+      return [...prev, route]
+    })
+  }
+
+  const saveHiddenRoutes = async () => {
+    if (!user?.storeId || user.role !== 'super_admin') {
+      return
+    }
+
+    setFeedback(null)
+    try {
+      const updatedHiddenRoutes = await updateStoreHiddenNavRoutesMutation.mutateAsync({
+        hiddenRoutes: hiddenRoutesInput,
+      })
+      setHiddenRoutesInput(updatedHiddenRoutes)
+      setStoreHiddenNavRoutes(updatedHiddenRoutes)
+      setFeedback('Vistas del menu actualizadas correctamente.')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudieron actualizar las vistas del menu.'
+      setFeedback(message)
+      setModalMessage(message)
+    }
+  }
+
   return (
     <section className="space-y-6">
       <header>
@@ -367,6 +424,84 @@ export function UsersPage() {
               ? 'Guardando datos de factura...'
               : 'Guardar datos de factura/comanda'}
           </button>
+
+          <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/40 p-3">
+            <h3 className="text-sm font-semibold text-zinc-200">Visibilidad del menu por almacen</h3>
+            <p className="mt-1 text-xs text-zinc-400">
+              Activa para ocultar una vista. Solo super admin puede cambiar esto.
+            </p>
+
+            <div className="mt-3 grid gap-3 lg:grid-cols-2">
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/30 p-2">
+                <p className="mb-2 px-1 text-xs uppercase tracking-[0.14em] text-zinc-500">Tienda</p>
+                <div className="space-y-2">
+                  {STORE_NAV_ROUTE_OPTIONS.map((option) => {
+                    const isHidden = hiddenRoutesInput.includes(option.route)
+                    return (
+                      <label
+                        key={option.route}
+                        className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                      >
+                        <span className="text-zinc-200">{option.label}</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleHiddenRoute(option.route)}
+                          className={`rounded-md px-2 py-1 text-xs font-medium transition ${
+                            isHidden
+                              ? 'border border-amber-500/40 bg-amber-500/20 text-amber-200'
+                              : 'border border-emerald-500/40 bg-emerald-500/20 text-emerald-200'
+                          }`}
+                        >
+                          {isHidden ? 'Oculto' : 'Visible'}
+                        </button>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/30 p-2">
+                <p className="mb-2 px-1 text-xs uppercase tracking-[0.14em] text-zinc-500">Confeccion</p>
+                <div className="space-y-2">
+                  {CONFECCION_NAV_ROUTE_OPTIONS.map((option) => {
+                    const isHidden = hiddenRoutesInput.includes(option.route)
+                    return (
+                      <label
+                        key={option.route}
+                        className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                      >
+                        <span className="text-zinc-200">{option.label}</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleHiddenRoute(option.route)}
+                          className={`rounded-md px-2 py-1 text-xs font-medium transition ${
+                            isHidden
+                              ? 'border border-amber-500/40 bg-amber-500/20 text-amber-200'
+                              : 'border border-emerald-500/40 bg-emerald-500/20 text-emerald-200'
+                          }`}
+                        >
+                          {isHidden ? 'Oculto' : 'Visible'}
+                        </button>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                void saveHiddenRoutes()
+              }}
+              disabled={updateStoreHiddenNavRoutesMutation.isPending}
+              className="mt-3 rounded-lg border border-sky-500/50 px-4 py-2 text-sm font-semibold text-sky-200 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {updateStoreHiddenNavRoutesMutation.isPending
+                ? 'Guardando vistas...'
+                : 'Guardar visibilidad de vistas'}
+            </button>
+          </div>
         </article>
       ) : null}
 

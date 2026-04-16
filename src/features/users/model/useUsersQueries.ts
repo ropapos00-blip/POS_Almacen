@@ -4,6 +4,7 @@ import type {
   CreateUserInput,
   DeactivateUserInput,
   ReactivateUserInput,
+  StoreNavVisibilityInput,
   StoreReceiptProfileInput,
   UpdateUserRoleInput,
 } from './users.types'
@@ -12,6 +13,7 @@ import {
   deactivatePosUser,
   listUsersByStore,
   reactivatePosUser,
+  updateStoreHiddenNavRoutes,
   updateStoreReceiptProfile,
   updateStoreName,
   updatePosUserRole,
@@ -91,6 +93,20 @@ export function useUpdateStoreReceiptProfileMutation(storeId?: string) {
 
   return useMutation({
     mutationFn: (input: StoreReceiptProfileInput) => updateStoreReceiptProfile(storeId as string, input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['users', 'store', storeId] }),
+      ])
+    },
+  })
+}
+
+export function useUpdateStoreHiddenNavRoutesMutation(storeId?: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: StoreNavVisibilityInput) => updateStoreHiddenNavRoutes(storeId as string, input),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),

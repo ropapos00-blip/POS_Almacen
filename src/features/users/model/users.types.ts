@@ -42,3 +42,7 @@ export interface DeactivateUserInput {
 export interface ReactivateUserInput {
   assignmentId: string
 }
+
+export interface StoreNavVisibilityInput {
+  hiddenRoutes: string[]
+}
