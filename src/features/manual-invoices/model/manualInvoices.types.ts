@@ -1,4 +1,11 @@
-export type ManualPaymentMethod = 'cash' | 'card' | 'transfer' | 'mixed'
+export type ManualPaymentMethod =
+  | 'cash'
+  | 'addi'
+  | 'credilondon'
+  | 'dataphone'
+  | 'bancolombia'
+  | 'daviplata'
+  | 'nequi'
 
 export interface ManualInvoiceItem {
   id: string

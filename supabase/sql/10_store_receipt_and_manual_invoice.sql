@@ -1,3 +1,19 @@
+-- Actualiza el constraint de payment_method para permitir los nuevos métodos (ejecutar en caliente)
+do $$
+begin
+  if exists (
+    select 1 from information_schema.table_constraints
+    where table_name = 'manual_invoices'
+      and constraint_type = 'CHECK'
+      and constraint_name = 'manual_invoices_payment_method_check'
+  ) then
+    alter table public.manual_invoices drop constraint manual_invoices_payment_method_check;
+  end if;
+end$$;
+
+alter table public.manual_invoices
+  add constraint manual_invoices_payment_method_check
+    check (payment_method in ('cash', 'addi', 'credilondon', 'dataphone', 'bancolombia', 'daviplata', 'nequi'));
 -- 10_store_receipt_and_manual_invoice.sql
 -- Extiende configuracion de tienda para encabezado de factura/comanda,
 -- agrega telefono en perfiles y crea facturacion manual provisional.
@@ -275,7 +291,7 @@ create table if not exists public.manual_invoices (
   subtotal numeric(12,2) not null,
   discount_total numeric(12,2) not null default 0,
   grand_total numeric(12,2) not null,
-  payment_method text not null check (payment_method in ('cash', 'card', 'transfer', 'mixed')),
+  payment_method text not null check (payment_method in ('cash', 'addi', 'credilondon', 'dataphone', 'bancolombia', 'daviplata', 'nequi')),
   payment_reference text,
   created_by uuid not null references public.profiles(id) on delete restrict,
   created_at timestamptz not null default now(),
@@ -413,7 +429,7 @@ begin
     raise exception 'Usuario sin permisos para facturacion manual.';
   end if;
 
-  if p_payment_method not in ('cash', 'card', 'transfer', 'mixed') then
+  if p_payment_method not in ('cash', 'addi', 'credilondon', 'dataphone', 'bancolombia', 'daviplata', 'nequi') then
     raise exception 'Metodo de pago invalido.';
   end if;
 
@@ -451,8 +467,33 @@ begin
     raise exception 'Descuento no puede superar subtotal.';
   end if;
 
+
   v_grand_total := v_subtotal - v_discount_total;
-  v_invoice_number := concat('M-', to_char(now(), 'YYYYMMDD-HH24MISS'), '-', floor(random() * 9000 + 1000)::int);
+
+  -- Buscar el último número correlativo de factura para la tienda
+  select mi.invoice_number into v_invoice_number
+  from public.manual_invoices mi
+  where mi.store_id = p_store_id
+    and mi.invoice_number ~ '^No Venta [0-9]+$'
+  order by length(mi.invoice_number) desc, mi.invoice_number desc
+  limit 1;
+
+  declare
+    v_next_number integer;
+  begin
+    if v_invoice_number is not null then
+      -- Extraer el número y sumarle 1
+      v_next_number := (regexp_replace(v_invoice_number, '[^0-9]', '', 'g'))::integer + 1;
+    else
+      v_next_number := 1;
+    end if;
+    -- Formatear con ceros a la izquierda hasta 4 dígitos, luego solo el número
+    if v_next_number < 10000 then
+      v_invoice_number := 'No Venta ' || lpad(v_next_number::text, 4, '0');
+    else
+      v_invoice_number := 'No Venta ' || v_next_number::text;
+    end if;
+  end;
 
   insert into public.manual_invoices (
     store_id,

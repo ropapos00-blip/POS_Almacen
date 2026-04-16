@@ -20,6 +20,9 @@
 17. `17_wholesale_sizes_and_cost_breakdown.sql`
 18. `18_wholesale_costeo_header.sql`
 19. `19_wholesale_color_support.sql`
+20. `20_manual_invoice_expenses.sql`
+21. `21_store_hidden_nav_routes.sql`
+22. `22_enable_rls_organizations_stores.sql`
 
 ## Desde Supabase Dashboard
 1. Ir a `SQL Editor`.
@@ -43,6 +46,9 @@
 19. Repetir con `17_wholesale_sizes_and_cost_breakdown.sql`.
 20. Repetir con `18_wholesale_costeo_header.sql`.
 21. Repetir con `19_wholesale_color_support.sql`.
+22. Repetir con `20_manual_invoice_expenses.sql`.
+23. Repetir con `21_store_hidden_nav_routes.sql`.
+24. Repetir con `22_enable_rls_organizations_stores.sql`.
 
 ## Si aparece error
 - Revisar la linea exacta que marca el editor.

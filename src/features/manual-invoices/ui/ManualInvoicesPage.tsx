@@ -16,9 +16,11 @@ import {
   useUpdateManualExpenseMutation,
   useUpdateManualInvoiceMutation,
   useVoidManualInvoiceMutation,
+  useManualInvoicePaymentKpisQuery,
 } from '../model/useManualInvoicesQueries'
 import type { ManualExpenseRow, ManualInvoiceRow, ManualPaymentMethod } from '../model/manualInvoices.types'
 import { ManualInvoiceReceipt } from './ManualInvoiceReceipt'
+
 
 interface DraftItem {
   id: string
@@ -28,10 +30,24 @@ interface DraftItem {
 }
 
 function paymentLabel(method: ManualPaymentMethod) {
-  if (method === 'cash') return 'Efectivo'
-  if (method === 'card') return 'Tarjeta'
-  if (method === 'transfer') return 'Transferencia'
-  return 'Mixto'
+  switch (method) {
+    case 'cash':
+      return 'Efectivo'
+    case 'addi':
+      return 'Addi'
+    case 'credilondon':
+      return 'CREDILONDON'
+    case 'dataphone':
+      return 'Datáfono'
+    case 'bancolombia':
+      return 'Bancolombia'
+    case 'daviplata':
+      return 'Daviplata'
+    case 'nequi':
+      return 'Nequi'
+    default:
+      return method
+  }
 }
 
 function createDraftItem(): DraftItem {
@@ -61,6 +77,7 @@ function invoiceActionButtonClass(variant: 'print' | 'edit' | 'delete') {
 export function ManualInvoicesPage() {
   const user = useAuthStore((state) => state.user)
   const isAdminUser = user?.role === 'admin' || user?.role === 'super_admin'
+  const paymentKpisQuery = useManualInvoicePaymentKpisQuery(user?.storeId, isAdminUser)
   const todayIso = getTodayIsoDateColombia()
   const todayLabel = useMemo(() => {
     const parts = new Intl.DateTimeFormat('es-CO', {
@@ -127,9 +144,10 @@ export function ManualInvoicesPage() {
     return Math.max(0, subtotal - discountTotal)
   }, [discountTotal, subtotal])
 
-  const allowsPaymentReference = paymentMethod === 'card' || paymentMethod === 'transfer'
+  const allowsPaymentReference =
+    paymentMethod !== 'cash'
   const editAllowsPaymentReference =
-    editPaymentMethod === 'card' || editPaymentMethod === 'transfer'
+    editPaymentMethod !== 'cash'
 
   useEffect(() => {
     if (!allowsPaymentReference && paymentReference) {
@@ -443,38 +461,69 @@ export function ManualInvoicesPage() {
           Modulo temporal sin afectar inventario. Retirable cuando el inventario este completo.
         </p>
 
+
         {isAdminUser ? (
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-              <p className="text-xs text-zinc-500">Ventas del dia</p>
-              <p className="mt-1 text-lg font-semibold text-emerald-300">
-                {formatCop(manualKpisQuery.data?.dayTotal ?? 0)}
-              </p>
-              <p className="text-xs text-zinc-500">
-                Facturas: {manualKpisQuery.data?.dayCount ?? 0}
-              </p>
-            </article>
-
-            <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-              <p className="text-xs text-zinc-500">Ventas del mes</p>
-              <p className="mt-1 text-lg font-semibold text-amber-300">
-                {formatCop(manualKpisQuery.data?.monthTotal ?? 0)}
-              </p>
-              <p className="text-xs text-zinc-500">
-                Facturas: {manualKpisQuery.data?.monthCount ?? 0}
-              </p>
-            </article>
-
-            <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-              <p className="text-xs text-zinc-500">Ventas del ano</p>
-              <p className="mt-1 text-lg font-semibold text-sky-300">
-                {formatCop(manualKpisQuery.data?.yearTotal ?? 0)}
-              </p>
-              <p className="text-xs text-zinc-500">
-                Facturas: {manualKpisQuery.data?.yearCount ?? 0}
-              </p>
-            </article>
-          </div>
+          <>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-xs text-zinc-500">Ventas del dia</p>
+                <p className="mt-1 text-lg font-semibold text-emerald-300">
+                  {formatCop(manualKpisQuery.data?.dayTotal ?? 0)}
+                </p>
+                <p className="text-xs text-zinc-500">
+                  Facturas: {manualKpisQuery.data?.dayCount ?? 0}
+                </p>
+              </article>
+              <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-xs text-zinc-500">Ventas del mes</p>
+                <p className="mt-1 text-lg font-semibold text-amber-300">
+                  {formatCop(manualKpisQuery.data?.monthTotal ?? 0)}
+                </p>
+                <p className="text-xs text-zinc-500">
+                  Facturas: {manualKpisQuery.data?.monthCount ?? 0}
+                </p>
+              </article>
+              <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-xs text-zinc-500">Ventas del año</p>
+                <p className="mt-1 text-lg font-semibold text-sky-300">
+                  {formatCop(manualKpisQuery.data?.yearTotal ?? 0)}
+                </p>
+                <p className="text-xs text-zinc-500">
+                  Facturas: {manualKpisQuery.data?.yearCount ?? 0}
+                </p>
+              </article>
+            </div>
+            {/* KPIs de cierre de caja por método de pago */}
+            <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+              <p className="text-xs text-zinc-400 font-semibold mb-2">Cierre de caja por método de pago</p>
+              {paymentKpisQuery.isLoading ? (
+                <p className="text-xs text-zinc-500">Cargando cierre de caja...</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs">
+                    <thead>
+                      <tr className="text-zinc-500">
+                        <th className="px-2 py-1 text-left">Método</th>
+                        <th className="px-2 py-1 text-right">Día</th>
+                        <th className="px-2 py-1 text-right">Mes</th>
+                        <th className="px-2 py-1 text-right">Año</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {['cash','addi','credilondon','dataphone','bancolombia','daviplata','nequi'].map((method) => (
+                        <tr key={method}>
+                          <td className="px-2 py-1">{paymentLabel(method as ManualPaymentMethod)}</td>
+                          <td className="px-2 py-1 text-right">{formatCop(paymentKpisQuery.data?.[method]?.day ?? 0)}</td>
+                          <td className="px-2 py-1 text-right">{formatCop(paymentKpisQuery.data?.[method]?.month ?? 0)}</td>
+                          <td className="px-2 py-1 text-right">{formatCop(paymentKpisQuery.data?.[method]?.year ?? 0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
         ) : null}
 
         {isAdminUser && manualKpisQuery.isLoading ? (
@@ -571,9 +620,12 @@ export function ManualInvoicesPage() {
               className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
             >
               <option value="cash">Efectivo</option>
-              <option value="card">Tarjeta</option>
-              <option value="transfer">Transferencia</option>
-              <option value="mixed">Mixto</option>
+              <option value="addi">Addi</option>
+              <option value="credilondon">CREDILONDON</option>
+              <option value="dataphone">Datáfono</option>
+              <option value="bancolombia">Bancolombia</option>
+              <option value="daviplata">Daviplata</option>
+              <option value="nequi">Nequi</option>
             </select>
           </label>
 
@@ -865,9 +917,12 @@ export function ManualInvoicesPage() {
                   className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
                 >
                   <option value="cash">Efectivo</option>
-                  <option value="card">Tarjeta</option>
-                  <option value="transfer">Transferencia</option>
-                  <option value="mixed">Mixto</option>
+                  <option value="addi">Addi</option>
+                  <option value="credilondon">CREDILONDON</option>
+                  <option value="dataphone">Datáfono</option>
+                  <option value="bancolombia">Bancolombia</option>
+                  <option value="daviplata">Daviplata</option>
+                  <option value="nequi">Nequi</option>
                 </select>
               </label>
 

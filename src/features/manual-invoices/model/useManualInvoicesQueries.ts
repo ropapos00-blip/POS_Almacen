@@ -1,3 +1,13 @@
+// KPIs de cierre de caja por método de pago
+import { listManualInvoicePaymentKpis } from '../services/manualInvoicesService';
+
+export function useManualInvoicePaymentKpisQuery(storeId?: string, enabled = true) {
+  return useQuery({
+    queryKey: ['manual-invoices', 'payment-kpis', storeId],
+    queryFn: () => listManualInvoicePaymentKpis(storeId as string),
+    enabled: Boolean(storeId) && enabled,
+  });
+}
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createManualExpense,

@@ -5,10 +5,24 @@ import { useAuthStore } from '../../auth/model/useAuthStore'
 import type { ManualInvoiceRow, ManualPaymentMethod } from '../model/manualInvoices.types'
 
 function paymentLabel(method: ManualPaymentMethod) {
-  if (method === 'cash') return 'Efectivo'
-  if (method === 'card') return 'Tarjeta'
-  if (method === 'transfer') return 'Transferencia'
-  return 'Mixto'
+  switch (method) {
+    case 'cash':
+      return 'Efectivo'
+    case 'addi':
+      return 'Addi'
+    case 'credilondon':
+      return 'CREDILONDON'
+    case 'dataphone':
+      return 'Datáfono'
+    case 'bancolombia':
+      return 'Bancolombia'
+    case 'daviplata':
+      return 'Daviplata'
+    case 'nequi':
+      return 'Nequi'
+    default:
+      return method
+  }
 }
 
 export function ManualInvoiceReceipt({

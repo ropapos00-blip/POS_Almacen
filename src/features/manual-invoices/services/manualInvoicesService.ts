@@ -1,3 +1,58 @@
+// KPIs agrupados por método de pago para cierre de caja
+export async function listManualInvoicePaymentKpis(storeId: string) {
+  const todayIso = getTodayIsoDateColombia();
+  const yearStartIso = `${todayIso.slice(0, 4)}-01-01`;
+  const { data, error } = await supabase
+    .from('manual_invoices')
+    .select('grand_total, created_at, payment_method')
+    .eq('store_id', storeId)
+    .eq('source', 'provisional')
+    .eq('is_active', true)
+    .gte('created_at', toUtcIsoStartOfColombiaDay(yearStartIso))
+    .limit(10000);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const todayMonth = todayIso.slice(0, 7);
+  const paymentMethods = [
+    'cash',
+    'addi',
+    'credilondon',
+    'dataphone',
+    'bancolombia',
+    'daviplata',
+    'nequi',
+  ];
+
+  // Estructura: { [method]: { day: number, month: number, year: number } }
+  const result = {} as Record<string, { day: number; month: number; year: number }>;
+  for (const method of paymentMethods) {
+    result[method] = { day: 0, month: 0, year: 0 };
+  }
+
+  (data ?? []).forEach((row) => {
+    const createdIsoDate = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Bogota',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date(String(row.created_at)));
+    const amount = Math.max(0, Number(row.grand_total ?? 0));
+    const method = row.payment_method;
+    if (!result[method]) return;
+    result[method].year += amount;
+    if (createdIsoDate.slice(0, 7) === todayMonth) {
+      result[method].month += amount;
+    }
+    if (createdIsoDate === todayIso) {
+      result[method].day += amount;
+    }
+  });
+
+  return result;
+}
 import { supabase } from '../../../integrations/supabase/client/supabaseClient'
 import { getTodayIsoDateColombia, toUtcIsoStartOfColombiaDay } from '../../../shared/utils/dateTime'
 import type {
