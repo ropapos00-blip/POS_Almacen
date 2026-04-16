@@ -57,6 +57,11 @@ export interface WholesaleCosteoHeader {
   numeroRollos: string
   rendimiento: string
   modelo: string
+  customCostItems?: Array<{
+    id: string
+    label: string
+    unitCost: number
+  }>
 }
 
 export interface WholesaleReferenceOption {

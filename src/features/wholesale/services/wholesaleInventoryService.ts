@@ -167,6 +167,7 @@ function getDefaultCosteoHeader(): WholesaleCosteoHeader {
     numeroRollos: '',
     rendimiento: '',
     modelo: '',
+    customCostItems: [],
   }
 }
 
@@ -188,6 +189,28 @@ function normalizeCosteoHeader(raw: unknown): WholesaleCosteoHeader {
     numeroRollos: String(source.numeroRollos ?? base.numeroRollos).trim(),
     rendimiento: String(source.rendimiento ?? base.rendimiento).trim(),
     modelo: String(source.modelo ?? base.modelo).trim(),
+    customCostItems: Array.isArray(source.customCostItems)
+      ? source.customCostItems
+          .map((item, index) => {
+            if (!item || typeof item !== 'object') {
+              return null
+            }
+
+            const itemSource = item as Record<string, unknown>
+            const label = String(itemSource.label ?? '').trim()
+            if (!label) {
+              return null
+            }
+
+            const parsedUnitCost = Number(itemSource.unitCost ?? 0)
+            return {
+              id: String(itemSource.id ?? `custom-${index + 1}`),
+              label,
+              unitCost: Number.isFinite(parsedUnitCost) ? Math.max(0, Math.trunc(parsedUnitCost)) : 0,
+            }
+          })
+          .filter((item): item is { id: string; label: string; unitCost: number } => Boolean(item))
+      : [],
   }
 }
 

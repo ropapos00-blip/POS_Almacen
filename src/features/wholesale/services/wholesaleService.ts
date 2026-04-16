@@ -146,7 +146,7 @@ export async function createWholesaleInvoice(input: CreateWholesaleInvoiceInput)
       error.message.toLowerCase().includes('create_wholesale_invoice_transaction')
     ) {
       throw new Error(
-        'No existe la funcion RPC create_wholesale_invoice_transaction en Supabase. Ejecuta el script 11_wholesale_subpos.sql y reintenta.',
+        'No existe la funcion RPC create_wholesale_invoice_transaction en Supabase. Ejecuta el script 19_wholesale_color_support.sql (actualizado) y reintenta.',
       )
     }
 
@@ -202,7 +202,7 @@ export async function updateWholesaleInvoice(input: UpdateWholesaleInvoiceInput)
       error.message.toLowerCase().includes('update_wholesale_invoice_transaction')
     ) {
       throw new Error(
-        'No existe la funcion RPC update_wholesale_invoice_transaction en Supabase. Ejecuta el script 14_wholesale_edit_and_finance.sql y reintenta.',
+        'No existe la funcion RPC update_wholesale_invoice_transaction en Supabase. Ejecuta el script 19_wholesale_color_support.sql (actualizado) y reintenta.',
       )
     }
 
@@ -232,7 +232,7 @@ export async function voidWholesaleInvoice(invoiceId: string, actorUserId: strin
       error.message.toLowerCase().includes('void_wholesale_invoice_transaction')
     ) {
       throw new Error(
-        'No existe la funcion RPC void_wholesale_invoice_transaction en Supabase. Ejecuta el script 12 actualizado y reintenta.',
+        'No existe la funcion RPC void_wholesale_invoice_transaction en Supabase. Ejecuta el script 19_wholesale_color_support.sql (actualizado) y reintenta.',
       )
     }
 

@@ -10,6 +10,28 @@ update public.wholesale_invoice_items
 set color = 'UNICO'
 where coalesce(trim(color), '') = '';
 
+create or replace function public.next_wholesale_invoice_number(p_store_id uuid)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_next bigint;
+begin
+  select coalesce(max((substring(i.invoice_number from '([0-9]+)$'))::bigint), 0) + 1
+  into v_next
+  from public.wholesale_invoices i
+  where i.store_id = p_store_id
+    and i.invoice_number is not null
+    and substring(i.invoice_number from '([0-9]+)$') is not null;
+
+  return 'CF-' || lpad(v_next::text, 6, '0');
+end;
+$$;
+
+grant execute on function public.next_wholesale_invoice_number(uuid) to authenticated;
+
 drop function if exists public.create_wholesale_invoice_transaction(uuid, uuid, text, text, numeric, boolean, date, text, text, text, jsonb);
 
 create or replace function public.create_wholesale_invoice_transaction(
@@ -60,10 +82,10 @@ begin
 
   if not exists (
     select 1
-    from public.store_staff ss
-    where ss.store_id = p_store_id
-      and ss.user_id = p_created_by
-      and ss.is_active = true
+    from public.user_store_roles usr
+    where usr.store_id = p_store_id
+      and usr.user_id = p_created_by
+      and usr.is_active = true
   ) then
     raise exception 'No autorizado para crear facturas en esta tienda.';
   end if;
@@ -105,7 +127,7 @@ begin
     end if;
 
     v_has_color_matrix := jsonb_typeof(coalesce(v_ref.color_quantities, '{}'::jsonb)) = 'object'
-      and jsonb_object_length(coalesce(v_ref.color_quantities, '{}'::jsonb)) > 0;
+      and coalesce(v_ref.color_quantities, '{}'::jsonb) <> '{}'::jsonb;
 
     if v_has_color_matrix then
       v_available_qty := coalesce((coalesce(v_ref.color_quantities, '{}'::jsonb) -> v_color ->> v_size)::integer, 0);
@@ -129,7 +151,7 @@ begin
   v_grand_total := greatest(0, v_subtotal - greatest(0, coalesce(p_discount_total, 0)));
   v_balance_due := case when p_is_credit then v_grand_total else 0 end;
 
-  insert into public.wholesale_invoices (
+  insert into public.wholesale_invoices as wi (
     store_id,
     invoice_number,
     customer_name,
@@ -167,7 +189,7 @@ begin
     nullif(trim(p_notes), ''),
     p_created_by
   )
-  returning id, invoice_number into v_invoice_id, v_invoice_number;
+  returning wi.id, wi.invoice_number into v_invoice_id, v_invoice_number;
 
   for v_item in select value from jsonb_array_elements(p_items)
   loop
@@ -198,7 +220,7 @@ begin
     values (
       v_invoice_id,
       v_ref.id,
-      v_ref.id,
+      null,
       v_ref.reference,
       v_color,
       v_size,
@@ -209,7 +231,7 @@ begin
     );
 
     v_has_color_matrix := jsonb_typeof(coalesce(v_ref.color_quantities, '{}'::jsonb)) = 'object'
-      and jsonb_object_length(coalesce(v_ref.color_quantities, '{}'::jsonb)) > 0;
+      and coalesce(v_ref.color_quantities, '{}'::jsonb) <> '{}'::jsonb;
 
     if v_has_color_matrix then
       v_available_qty := coalesce((coalesce(v_ref.color_quantities, '{}'::jsonb) -> v_color ->> v_size)::integer, 0);
@@ -237,14 +259,16 @@ begin
     end if;
   end loop;
 
-  perform public.create_notification(
-    p_store_id,
-    'wholesale_invoices',
-    'create',
-    v_invoice_id,
-    format('Factura confeccion %s creada.', v_invoice_number),
-    jsonb_build_object('invoice_id', v_invoice_id, 'invoice_number', v_invoice_number, 'grand_total', v_grand_total)
-  );
+  if to_regprocedure('public.create_notification(uuid,text,text,uuid,text,jsonb)') is not null then
+    perform public.create_notification(
+      p_store_id,
+      'wholesale_invoices',
+      'create',
+      v_invoice_id,
+      format('Factura confeccion %s creada.', v_invoice_number),
+      jsonb_build_object('invoice_id', v_invoice_id, 'invoice_number', v_invoice_number, 'grand_total', v_grand_total)
+    );
+  end if;
 
   return query select v_invoice_id, v_invoice_number;
 end;
@@ -309,10 +333,10 @@ begin
 
   select exists (
     select 1
-    from public.store_staff ss
-    where ss.store_id = v_invoice.store_id
-      and ss.user_id = p_actor_user_id
-      and ss.is_active = true
+    from public.user_store_roles usr
+    where usr.store_id = v_invoice.store_id
+      and usr.user_id = p_actor_user_id
+      and usr.is_active = true
   ) into v_same_store;
 
   if not v_same_store then
@@ -334,7 +358,7 @@ begin
       v_color := upper(trim(coalesce(v_old_item.color, 'UNICO')));
       v_size := upper(trim(coalesce(v_old_item.size, 'UNICA')));
       v_has_color_matrix := jsonb_typeof(coalesce(v_ref.color_quantities, '{}'::jsonb)) = 'object'
-        and jsonb_object_length(coalesce(v_ref.color_quantities, '{}'::jsonb)) > 0;
+        and coalesce(v_ref.color_quantities, '{}'::jsonb) <> '{}'::jsonb;
 
       if v_has_color_matrix then
         update public.wholesale_references
@@ -399,7 +423,7 @@ begin
     end if;
 
     v_has_color_matrix := jsonb_typeof(coalesce(v_ref.color_quantities, '{}'::jsonb)) = 'object'
-      and jsonb_object_length(coalesce(v_ref.color_quantities, '{}'::jsonb)) > 0;
+      and coalesce(v_ref.color_quantities, '{}'::jsonb) <> '{}'::jsonb;
 
     if v_has_color_matrix then
       v_available_qty := coalesce((coalesce(v_ref.color_quantities, '{}'::jsonb) -> v_color ->> v_size)::integer, 0);
@@ -434,7 +458,7 @@ begin
     values (
       p_invoice_id,
       v_ref.id,
-      v_ref.id,
+      null,
       v_ref.reference,
       v_color,
       v_size,
@@ -489,14 +513,16 @@ begin
     end
   where id = p_invoice_id;
 
-  perform public.create_notification(
-    v_invoice.store_id,
-    'wholesale_invoices',
-    'update',
-    p_invoice_id,
-    format('Factura confeccion %s actualizada.', coalesce(nullif(trim(p_invoice_number), ''), v_invoice.invoice_number)),
-    jsonb_build_object('invoice_id', p_invoice_id, 'invoice_number', coalesce(nullif(trim(p_invoice_number), ''), v_invoice.invoice_number), 'grand_total', v_grand_total)
-  );
+  if to_regprocedure('public.create_notification(uuid,text,text,uuid,text,jsonb)') is not null then
+    perform public.create_notification(
+      v_invoice.store_id,
+      'wholesale_invoices',
+      'update',
+      p_invoice_id,
+      format('Factura confeccion %s actualizada.', coalesce(nullif(trim(p_invoice_number), ''), v_invoice.invoice_number)),
+      jsonb_build_object('invoice_id', p_invoice_id, 'invoice_number', coalesce(nullif(trim(p_invoice_number), ''), v_invoice.invoice_number), 'grand_total', v_grand_total)
+    );
+  end if;
 
   return query
     select p_invoice_id, coalesce(nullif(trim(p_invoice_number), ''), v_invoice.invoice_number);
@@ -544,10 +570,10 @@ begin
 
   select exists (
     select 1
-    from public.store_staff ss
-    where ss.store_id = v_invoice.store_id
-      and ss.user_id = p_actor_user_id
-      and ss.is_active = true
+    from public.user_store_roles usr
+    where usr.store_id = v_invoice.store_id
+      and usr.user_id = p_actor_user_id
+      and usr.is_active = true
   ) into v_same_store;
 
   if not v_same_store then
@@ -573,7 +599,7 @@ begin
     v_size := upper(trim(coalesce(v_item.size, 'UNICA')));
 
     v_has_color_matrix := jsonb_typeof(coalesce(v_ref.color_quantities, '{}'::jsonb)) = 'object'
-      and jsonb_object_length(coalesce(v_ref.color_quantities, '{}'::jsonb)) > 0;
+      and coalesce(v_ref.color_quantities, '{}'::jsonb) <> '{}'::jsonb;
 
     if v_has_color_matrix then
       update public.wholesale_references
@@ -615,14 +641,16 @@ begin
     notes = concat_ws(E'\n', nullif(notes, ''), format('Anulada por %s', p_actor_user_id::text))
   where id = p_invoice_id;
 
-  perform public.create_notification(
-    v_invoice.store_id,
-    'wholesale_invoices',
-    'void',
-    p_invoice_id,
-    format('Factura confeccion %s anulada.', v_invoice.invoice_number),
-    jsonb_build_object('invoice_id', p_invoice_id, 'invoice_number', v_invoice.invoice_number)
-  );
+  if to_regprocedure('public.create_notification(uuid,text,text,uuid,text,jsonb)') is not null then
+    perform public.create_notification(
+      v_invoice.store_id,
+      'wholesale_invoices',
+      'void',
+      p_invoice_id,
+      format('Factura confeccion %s anulada.', v_invoice.invoice_number),
+      jsonb_build_object('invoice_id', p_invoice_id, 'invoice_number', v_invoice.invoice_number)
+    );
+  end if;
 
   return query select v_invoice.id, v_invoice.invoice_number;
 end;
