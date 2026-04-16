@@ -1,7 +1,14 @@
 import { supabase } from '../../../integrations/supabase/client/supabaseClient'
+import { getTodayIsoDateColombia, toUtcIsoStartOfColombiaDay } from '../../../shared/utils/dateTime'
 import type {
+  DeleteManualExpenseInput,
+  CreateManualExpenseInput,
   CreateManualInvoiceInput,
+  ManualExpenseKpis,
+  ManualExpenseRow,
+  ManualInvoiceKpis,
   ManualInvoiceRow,
+  UpdateManualExpenseInput,
   UpdateManualInvoiceHeaderInput,
   VoidManualInvoiceInput,
 } from '../model/manualInvoices.types'
@@ -23,6 +30,215 @@ export async function listManualInvoices(storeId: string) {
   }
 
   return (data ?? []) as ManualInvoiceRow[]
+}
+
+export async function listManualInvoiceKpis(storeId: string): Promise<ManualInvoiceKpis> {
+  const todayIso = getTodayIsoDateColombia()
+  const yearStartIso = `${todayIso.slice(0, 4)}-01-01`
+
+  const { data, error } = await supabase
+    .from('manual_invoices')
+    .select('grand_total, created_at')
+    .eq('store_id', storeId)
+    .eq('source', 'provisional')
+    .eq('is_active', true)
+    .gte('created_at', toUtcIsoStartOfColombiaDay(yearStartIso))
+    .limit(10000)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const todayMonth = todayIso.slice(0, 7)
+
+  return (data ?? []).reduce<ManualInvoiceKpis>(
+    (acc, row) => {
+      const createdIsoDate = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Bogota',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date(String(row.created_at)))
+
+      const amount = Math.max(0, Number(row.grand_total ?? 0))
+
+      acc.yearTotal += amount
+      acc.yearCount += 1
+
+      if (createdIsoDate.slice(0, 7) === todayMonth) {
+        acc.monthTotal += amount
+        acc.monthCount += 1
+      }
+
+      if (createdIsoDate === todayIso) {
+        acc.dayTotal += amount
+        acc.dayCount += 1
+      }
+
+      return acc
+    },
+    {
+      dayTotal: 0,
+      monthTotal: 0,
+      yearTotal: 0,
+      dayCount: 0,
+      monthCount: 0,
+      yearCount: 0,
+    },
+  )
+}
+
+export async function listManualExpenses(storeId: string) {
+  const { data, error } = await supabase
+    .from('manual_invoice_expenses')
+    .select('id, store_id, amount, expense_date, category, notes, created_by, created_at')
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+    .order('expense_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(400)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return (data ?? []) as ManualExpenseRow[]
+}
+
+export async function listManualExpenseKpis(storeId: string): Promise<ManualExpenseKpis> {
+  const todayIso = getTodayIsoDateColombia()
+  const yearStartIso = `${todayIso.slice(0, 4)}-01-01`
+
+  const { data, error } = await supabase
+    .from('manual_invoice_expenses')
+    .select('amount, expense_date')
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+    .gte('expense_date', yearStartIso)
+    .limit(10000)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const todayMonth = todayIso.slice(0, 7)
+
+  return (data ?? []).reduce<ManualExpenseKpis>(
+    (acc, row) => {
+      const expenseDate = String(row.expense_date ?? '')
+      const amount = Math.max(0, Number(row.amount ?? 0))
+
+      acc.yearTotal += amount
+      acc.yearCount += 1
+
+      if (expenseDate.slice(0, 7) === todayMonth) {
+        acc.monthTotal += amount
+        acc.monthCount += 1
+      }
+
+      if (expenseDate === todayIso) {
+        acc.dayTotal += amount
+        acc.dayCount += 1
+      }
+
+      return acc
+    },
+    {
+      dayTotal: 0,
+      monthTotal: 0,
+      yearTotal: 0,
+      dayCount: 0,
+      monthCount: 0,
+      yearCount: 0,
+    },
+  )
+}
+
+export async function createManualExpense(input: CreateManualExpenseInput) {
+  const { data, error } = await supabase
+    .from('manual_invoice_expenses')
+    .insert({
+      store_id: input.storeId,
+      amount: input.amount,
+      expense_date: input.expenseDate,
+      category: input.category.trim() || null,
+      notes: input.notes.trim() || null,
+      created_by: input.actorUserId,
+      is_active: true,
+    })
+    .select('id')
+    .single()
+
+  if (error) {
+    if (error.message.toLowerCase().includes('manual_invoice_expenses')) {
+      throw new Error(
+        'No existe la tabla manual_invoice_expenses en Supabase. Ejecuta el script 20_manual_invoice_expenses.sql y reintenta.',
+      )
+    }
+
+    throw new Error(error.message)
+  }
+
+  if (!data?.id) {
+    throw new Error('No se pudo registrar el gasto provisional.')
+  }
+
+  return {
+    expenseId: String(data.id),
+  }
+}
+
+export async function updateManualExpense(input: UpdateManualExpenseInput) {
+  const { data, error } = await supabase
+    .from('manual_invoice_expenses')
+    .update({
+      amount: input.amount,
+      expense_date: input.expenseDate,
+      category: input.category.trim() || null,
+      notes: input.notes.trim() || null,
+    })
+    .eq('id', input.expenseId)
+    .eq('store_id', input.storeId)
+    .eq('is_active', true)
+    .select('id')
+    .single()
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  if (!data?.id) {
+    throw new Error('No se pudo editar el gasto provisional.')
+  }
+
+  return {
+    expenseId: String(data.id),
+  }
+}
+
+export async function deleteManualExpense(input: DeleteManualExpenseInput) {
+  const { data, error } = await supabase
+    .from('manual_invoice_expenses')
+    .update({
+      is_active: false,
+    })
+    .eq('id', input.expenseId)
+    .eq('store_id', input.storeId)
+    .eq('is_active', true)
+    .select('id')
+    .single()
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  if (!data?.id) {
+    throw new Error('No se pudo eliminar el gasto provisional.')
+  }
+
+  return {
+    expenseId: String(data.id),
+  }
 }
 
 export async function createManualInvoice(input: CreateManualInvoiceInput) {

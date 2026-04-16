@@ -51,3 +51,55 @@ export interface VoidManualInvoiceInput {
   actorUserId: string
   reason?: string
 }
+
+export interface ManualInvoiceKpis {
+  dayTotal: number
+  monthTotal: number
+  yearTotal: number
+  dayCount: number
+  monthCount: number
+  yearCount: number
+}
+
+export interface ManualExpenseRow {
+  id: string
+  store_id: string
+  amount: number
+  expense_date: string
+  category: string | null
+  notes: string | null
+  created_by: string
+  created_at: string
+}
+
+export interface CreateManualExpenseInput {
+  storeId: string
+  actorUserId: string
+  amount: number
+  expenseDate: string
+  category: string
+  notes: string
+}
+
+export interface UpdateManualExpenseInput {
+  expenseId: string
+  storeId: string
+  amount: number
+  expenseDate: string
+  category: string
+  notes: string
+}
+
+export interface DeleteManualExpenseInput {
+  expenseId: string
+  storeId: string
+}
+
+export interface ManualExpenseKpis {
+  dayTotal: number
+  monthTotal: number
+  yearTotal: number
+  dayCount: number
+  monthCount: number
+  yearCount: number
+}
