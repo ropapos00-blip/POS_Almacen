@@ -14,6 +14,7 @@ import { formatDateColombia } from '../../../shared/utils/dateTime'
 export function ClientesPage() {
 	const user = useAuthStore((state) => state.user)
 	const [selectedCustomer, setSelectedCustomer] = useState<ConfeccionCustomer | null>(null)
+	const [customerForDelete, setCustomerForDelete] = useState<ConfeccionCustomer | null>(null)
 	const [statsRows, setStatsRows] = useState<CustomerPurchaseStats[]>([])
 	const [loadingStats, setLoadingStats] = useState(false)
 	const [statsError, setStatsError] = useState<string | null>(null)
@@ -119,23 +120,17 @@ export function ClientesPage() {
 	}
 
 	async function handleDeactivateCustomer() {
-		if (!selectedCustomer) {
-			return
-		}
-
-		const confirmed = window.confirm(
-			`¿Eliminar cliente ${selectedCustomer.full_name}? Se desactivará y no saldrá en búsquedas para facturar.`,
-		)
-		if (!confirmed) {
+		if (!customerForDelete) {
 			return
 		}
 
 		setDeleting(true)
 		setFeedback(null)
 		try {
-			await deactivateConfeccionCustomer(selectedCustomer.id, storeId)
-			await refreshSelectedCustomer(selectedCustomer.id)
+			await deactivateConfeccionCustomer(customerForDelete.id, storeId)
+			await refreshSelectedCustomer(customerForDelete.id)
 			setEditing(false)
+			setCustomerForDelete(null)
 			setFeedback('Cliente desactivado correctamente.')
 		} catch (err) {
 			setFeedback(err instanceof Error ? err.message : 'No se pudo eliminar el cliente.')
@@ -216,7 +211,7 @@ export function ClientesPage() {
 							<button
 								type="button"
 								onClick={() => {
-									void handleDeactivateCustomer()
+									setCustomerForDelete(selectedCustomer)
 								}}
 								disabled={deleting || !selectedCustomer.is_active}
 								className="rounded-lg border border-rose-500/40 px-3 py-1 text-xs text-rose-300 disabled:opacity-60"
@@ -292,6 +287,51 @@ export function ClientesPage() {
 
 					{feedback ? <p className="mt-3 text-xs text-amber-300">{feedback}</p> : null}
 				</article>
+			) : null}
+
+			{customerForDelete ? (
+				<div
+					className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
+					onClick={() => {
+						if (!deleting) {
+							setCustomerForDelete(null)
+						}
+					}}
+				>
+					<div
+						className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5"
+						onClick={(event) => {
+							event.stopPropagation()
+						}}
+					>
+						<h3 className="text-lg font-semibold text-zinc-100">Eliminar cliente</h3>
+						<p className="mt-2 text-sm text-zinc-400">
+							Seguro que deseas eliminar el cliente {customerForDelete.full_name}? Se desactivará y no saldrá en
+							búsquedas para facturar.
+						</p>
+
+						<div className="mt-4 grid grid-cols-2 gap-2">
+							<button
+								type="button"
+								onClick={() => setCustomerForDelete(null)}
+								disabled={deleting}
+								className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200 disabled:opacity-60"
+							>
+								Cancelar
+							</button>
+							<button
+								type="button"
+								onClick={() => {
+									void handleDeactivateCustomer()
+								}}
+								disabled={deleting}
+								className="rounded-lg bg-rose-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-70"
+							>
+								{deleting ? 'Eliminando...' : 'Sí, eliminar'}
+							</button>
+						</div>
+					</div>
+				</div>
 			) : null}
 
 			<article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
