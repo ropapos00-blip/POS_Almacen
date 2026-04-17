@@ -23,6 +23,9 @@
 20. `20_manual_invoice_expenses.sql`
 21. `21_store_hidden_nav_routes.sql`
 22. `22_enable_rls_organizations_stores.sql`
+23. `23_confeccion_customers.sql`
+24. `25_fix_wholesale_reference_distribution.sql`
+25. `26_wholesale_invoice_consecutive_format.sql`
 
 ## Desde Supabase Dashboard
 1. Ir a `SQL Editor`.
@@ -49,6 +52,9 @@
 22. Repetir con `20_manual_invoice_expenses.sql`.
 23. Repetir con `21_store_hidden_nav_routes.sql`.
 24. Repetir con `22_enable_rls_organizations_stores.sql`.
+25. Repetir con `23_confeccion_customers.sql`.
+26. Repetir con `25_fix_wholesale_reference_distribution.sql`.
+27. Repetir con `26_wholesale_invoice_consecutive_format.sql`.
 
 ## Si aparece error
 - Revisar la linea exacta que marca el editor.

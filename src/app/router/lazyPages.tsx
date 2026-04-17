@@ -57,3 +57,9 @@ export const WholesaleInventoryPage = lazy(() =>
     default: m.WholesaleInventoryPage,
   })),
 )
+
+export const ClientesPage = lazy(() =>
+  import('../../features/wholesale/ui/ClientesPage').then((m) => ({
+    default: m.ClientesPage,
+  })),
+)

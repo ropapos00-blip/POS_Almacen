@@ -28,6 +28,7 @@ declare
   v_line_total numeric;
   v_pay_total numeric := 0;
   v_payment jsonb;
+  v_next_number integer := 1;
 begin
   if not (p_store_id in (select public.current_user_store_ids())) then
     raise exception 'Usuario sin acceso a la tienda.';
@@ -114,7 +115,26 @@ begin
     raise exception 'Total de pagos (%) no coincide con total de venta (%)', v_pay_total, v_grand_total;
   end if;
 
-  v_sale_number := concat('S-', to_char(now(), 'YYYYMMDD-HH24MISS'), '-', floor(random() * 9000 + 1000)::int);
+  -- Evita colisiones de consecutivo por tienda en ventas concurrentes.
+  perform pg_advisory_xact_lock(hashtext('sales_number:' || p_store_id::text));
+
+  -- Consecutivo limpio: 'No 0001', 'No 0002', ... incremental por tienda
+  select s.sale_number into v_sale_number
+  from public.sales s
+  where s.store_id = p_store_id
+    and s.sale_number ~ '^No [0-9]+$'
+  order by length(s.sale_number) desc, s.sale_number desc
+  limit 1;
+
+  if v_sale_number is not null then
+    v_next_number := (regexp_replace(v_sale_number, '[^0-9]', '', 'g'))::integer + 1;
+  end if;
+
+  if v_next_number < 10000 then
+    v_sale_number := 'No ' || lpad(v_next_number::text, 4, '0');
+  else
+    v_sale_number := 'No ' || v_next_number::text;
+  end if;
 
   insert into public.sales (
     store_id,

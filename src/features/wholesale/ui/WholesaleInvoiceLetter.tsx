@@ -11,6 +11,42 @@ function paymentLabel(method: WholesalePaymentMethod) {
   return 'Credito'
 }
 
+function aggregateInvoiceItems(invoice: WholesaleInvoiceRow) {
+  const map = new Map<
+    string,
+    {
+      id: string
+      label: string
+      quantity: number
+      unitPrice: number
+      lineTotal: number
+    }
+  >()
+
+  ;(invoice.wholesale_invoice_items ?? []).forEach((item) => {
+    const label = (item.reference || item.description || 'Articulo').trim()
+    const unitPrice = Math.max(0, Number(item.unit_price || 0))
+    const key = `${label}__${unitPrice}`
+    const existing = map.get(key)
+
+    if (existing) {
+      existing.quantity += Math.max(0, Number(item.quantity || 0))
+      existing.lineTotal += Math.max(0, Number(item.line_total || 0))
+      return
+    }
+
+    map.set(key, {
+      id: item.id,
+      label,
+      quantity: Math.max(0, Number(item.quantity || 0)),
+      unitPrice,
+      lineTotal: Math.max(0, Number(item.line_total || 0)),
+    })
+  })
+
+  return Array.from(map.values())
+}
+
 export function WholesaleInvoiceLetter({
   invoice,
   printRef,
@@ -21,6 +57,8 @@ export function WholesaleInvoiceLetter({
   if (!invoice) {
     return null
   }
+
+  const printableItems = aggregateInvoiceItems(invoice)
 
   return (
     <div className="sr-only">
@@ -147,16 +185,12 @@ export function WholesaleInvoiceLetter({
             </tr>
           </thead>
           <tbody>
-            {(invoice.wholesale_invoice_items ?? []).map((item) => (
+            {printableItems.map((item) => (
               <tr key={item.id}>
-                <td>
-                  {item.reference || item.description}
-                  {item.color ? ` - ${item.color}` : ''}
-                  {item.size ? ` - ${item.size}` : ''}
-                </td>
+                <td>{item.label}</td>
                 <td className="num">{item.quantity}</td>
-                <td className="num">{formatCop(item.unit_price)}</td>
-                <td className="num">{formatCop(item.line_total)}</td>
+                <td className="num">{formatCop(item.unitPrice)}</td>
+                <td className="num">{formatCop(item.lineTotal)}</td>
               </tr>
             ))}
           </tbody>

@@ -4,6 +4,7 @@ import { AppShell } from '../layouts/AppShell'
 import { ProtectedRoute } from './ProtectedRoute'
 import {
   DashboardPage,
+  ClientesPage,
   InventoryPage,
   LoginPage,
   ManualInvoicesPage,
@@ -140,6 +141,14 @@ export const appRouter = createBrowserRouter([
         element: withFallback(
           <ProtectedRoute roles={['super_admin', 'admin']}>
             <WholesalePage />
+          </ProtectedRoute>,
+        ),
+      },
+      {
+        path: 'confeccion/clientes',
+        element: withFallback(
+          <ProtectedRoute roles={['super_admin', 'admin']}>
+            <ClientesPage />
           </ProtectedRoute>,
         ),
       },

@@ -1,4 +1,4 @@
-import { FileText, LayoutDashboard, LogOut, Package, ReceiptText, ShoppingCart, Store, Wallet } from 'lucide-react'
+import { FileText, LayoutDashboard, LogOut, Package, ReceiptText, ShoppingCart, Store, Users, Wallet } from 'lucide-react'
 import { useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuthStore } from '../../features/auth/model/useAuthStore'
@@ -19,6 +19,7 @@ const confeccionNavItems = [
   { to: '/confeccion/ventas', label: 'Confeccion', icon: FileText, roles: ['super_admin', 'admin'] },
   { to: '/confeccion/cartera', label: 'Cartera', icon: Wallet, roles: ['super_admin', 'admin'] },
   { to: '/confeccion/gastos', label: 'Gastos', icon: Wallet, roles: ['super_admin', 'admin'] },
+  { to: '/confeccion/clientes', label: 'Clientes', icon: Users, roles: ['super_admin', 'admin'] },
   { to: '/confeccion/inventario', label: 'Inventario Confeccion', icon: Package, roles: ['super_admin', 'admin'] },
 ]
 
