@@ -42,7 +42,7 @@ export function ManualInvoiceReceipt({
 
   return (
     <div className="sr-only">
-      <div ref={receiptRef} className="w-[54mm] bg-white px-2 py-3 text-black">
+      <div ref={receiptRef} className="bg-white text-black" style={{ width: '54mm', padding: '2mm 3mm', boxSizing: 'border-box' }}>
         <h1
           className="store-logo-font text-center text-base font-bold uppercase tracking-[0.08em]"
           style={{ fontFamily: "'Dolce Vita', 'Space Grotesk', sans-serif" }}
@@ -69,7 +69,7 @@ export function ManualInvoiceReceipt({
               <p>{item.description}</p>
               <div className="flex justify-between gap-1">
                 <span className="text-zinc-500">{item.quantity} x {formatCop(item.unit_price)}</span>
-                <span className="whitespace-nowrap font-medium">{formatCop(item.line_total)}</span>
+                <span className="font-medium" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{formatCop(item.line_total)}</span>
               </div>
             </div>
           ))}
@@ -78,15 +78,15 @@ export function ManualInvoiceReceipt({
         <div className="mt-2 border-t border-dashed border-black pt-2 text-xs">
           <div className="flex justify-between gap-2">
             <span>Subtotal</span>
-            <span className="whitespace-nowrap">{formatCop(invoice.subtotal)}</span>
+            <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{formatCop(invoice.subtotal)}</span>
           </div>
           <div className="flex justify-between gap-2">
             <span>Descuento</span>
-            <span className="whitespace-nowrap">{formatCop(invoice.discount_total)}</span>
+            <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{formatCop(invoice.discount_total)}</span>
           </div>
           <div className="mt-1 flex justify-between gap-2 font-bold">
             <span>Total</span>
-            <span className="whitespace-nowrap">{formatCop(invoice.grand_total)}</span>
+            <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{formatCop(invoice.grand_total)}</span>
           </div>
         </div>
 

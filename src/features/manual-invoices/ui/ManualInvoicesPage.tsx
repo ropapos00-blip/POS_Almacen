@@ -134,7 +134,7 @@ export function ManualInvoicesPage() {
   const handlePrint = useReactToPrint({
     contentRef: receiptRef,
     documentTitle: selectedInvoice?.invoice_number ?? 'factura-manual',
-    pageStyle: '@page { size: 58mm auto; margin: 0mm 2mm; }',
+    pageStyle: '@page { size: 58mm auto; margin: 0; } body { margin: 0 !important; padding: 0 !important; }',
   })
 
   const subtotal = useMemo(() => {

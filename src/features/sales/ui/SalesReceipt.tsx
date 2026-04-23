@@ -35,7 +35,7 @@ export function SalesReceipt({
 
   return (
     <div className="sr-only">
-      <div ref={receiptRef} className="w-[54mm] bg-white px-2 py-3 text-black">
+      <div ref={receiptRef} className="bg-white text-black" style={{ width: '54mm', padding: '2mm 3mm', boxSizing: 'border-box' }}>
         <h1
           className="store-logo-font text-center text-base font-bold uppercase tracking-[0.08em]"
           style={{ fontFamily: "'Dolce Vita', 'Space Grotesk', sans-serif" }}
@@ -61,7 +61,7 @@ export function SalesReceipt({
               <p>{item.name_snapshot}</p>
               <div className="flex justify-between gap-1">
                 <span className="text-zinc-500">{item.quantity} x {formatCop(item.unit_price)}</span>
-                <span className="whitespace-nowrap font-medium">{formatCop(item.line_total)}</span>
+                <span className="font-medium" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{formatCop(item.line_total)}</span>
               </div>
               <p className="text-zinc-400">{item.sku_snapshot}</p>
             </div>
@@ -71,21 +71,21 @@ export function SalesReceipt({
         <div className="mt-2 border-t border-dashed border-black pt-2 text-xs">
           <div className="flex justify-between gap-2">
             <span>Subtotal</span>
-            <span className="whitespace-nowrap">{formatCop(sale.subtotal)}</span>
+            <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{formatCop(sale.subtotal)}</span>
           </div>
           <div className="flex justify-between gap-2">
             <span>Descuento</span>
-            <span className="whitespace-nowrap">{formatCop(sale.discount_total)}</span>
+            <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{formatCop(sale.discount_total)}</span>
           </div>
           <div className="mt-1 flex justify-between gap-2 font-bold">
             <span>Total</span>
-            <span className="whitespace-nowrap">{formatCop(sale.grand_total)}</span>
+            <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{formatCop(sale.grand_total)}</span>
           </div>
         </div>
 
         <div className="mt-2 border-t border-dashed border-black pt-2 text-xs">
           {(sale.sale_payments ?? []).map((payment) => (
-            <p key={payment.id}>
+            <p key={payment.id} style={{ whiteSpace: 'nowrap' }}>
               {paymentLabel(payment.method)}: {formatCop(payment.amount)}
             </p>
           ))}
