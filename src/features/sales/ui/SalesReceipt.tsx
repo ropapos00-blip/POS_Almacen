@@ -35,9 +35,9 @@ export function SalesReceipt({
 
   return (
     <div className="sr-only">
-      <div ref={receiptRef} className="w-75 bg-white p-4 text-black">
+      <div ref={receiptRef} className="w-[54mm] bg-white px-2 py-3 text-black">
         <h1
-          className="store-logo-font text-center text-xl font-bold uppercase tracking-[0.08em]"
+          className="store-logo-font text-center text-base font-bold uppercase tracking-[0.08em]"
           style={{ fontFamily: "'Dolce Vita', 'Space Grotesk', sans-serif" }}
         >
           {businessName}

@@ -67,6 +67,7 @@ export function SalesPage() {
   const handlePrint = useReactToPrint({
     contentRef: receiptRef,
     documentTitle: selectedSale?.sale_number ?? 'ticket-venta',
+    pageStyle: '@page { size: 58mm auto; margin: 0mm 2mm; }',
   })
 
   async function confirmVoidSale() {
