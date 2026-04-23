@@ -52,7 +52,7 @@ export function PosPage() {
   const handlePrintTicket = useReactToPrint({
     contentRef: receiptRef,
     documentTitle: lastSale?.saleNumber ?? 'ticket-pos',
-    pageStyle: '@page { size: 58mm auto; margin: 0; } body { margin: 0 !important; padding: 0 !important; }',
+    pageStyle: '@page { size: 56mm auto; margin: 0mm; } html, body { margin: 0 !important; padding: 0 !important; height: auto !important; min-height: 0 !important; background: white !important; }',
   })
 
   const filtered = useMemo(() => {

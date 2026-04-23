@@ -42,7 +42,7 @@ export function ManualInvoiceReceipt({
 
   return (
     <div className="sr-only">
-      <div ref={receiptRef} className="bg-white text-black" style={{ width: '54mm', padding: '2mm 3mm', boxSizing: 'border-box' }}>
+      <div ref={receiptRef} className="text-black" style={{ width: '56mm', margin: 0, padding: '0 2mm 4mm 2mm', boxSizing: 'border-box', background: 'white' }}>
         <h1
           className="store-logo-font text-center text-base font-bold uppercase tracking-[0.08em]"
           style={{ fontFamily: "'Dolce Vita', 'Space Grotesk', sans-serif" }}
