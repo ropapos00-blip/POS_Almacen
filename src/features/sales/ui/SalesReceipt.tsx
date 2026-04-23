@@ -59,26 +59,27 @@ export function SalesReceipt({
           {(sale.sale_items ?? []).map((item) => (
             <div key={item.id} className="mb-2 text-xs">
               <p>{item.name_snapshot}</p>
-              <p>
-                {item.quantity} x {formatCop(item.unit_price)} = {formatCop(item.line_total)}
-              </p>
-              <p>{item.sku_snapshot}</p>
+              <div className="flex justify-between gap-1">
+                <span className="text-zinc-500">{item.quantity} x {formatCop(item.unit_price)}</span>
+                <span className="whitespace-nowrap font-medium">{formatCop(item.line_total)}</span>
+              </div>
+              <p className="text-zinc-400">{item.sku_snapshot}</p>
             </div>
           ))}
         </div>
 
         <div className="mt-2 border-t border-dashed border-black pt-2 text-xs">
-          <div className="flex justify-between">
+          <div className="flex justify-between gap-2">
             <span>Subtotal</span>
-            <span>{formatCop(sale.subtotal)}</span>
+            <span className="whitespace-nowrap">{formatCop(sale.subtotal)}</span>
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between gap-2">
             <span>Descuento</span>
-            <span>{formatCop(sale.discount_total)}</span>
+            <span className="whitespace-nowrap">{formatCop(sale.discount_total)}</span>
           </div>
-          <div className="mt-1 flex justify-between font-bold">
+          <div className="mt-1 flex justify-between gap-2 font-bold">
             <span>Total</span>
-            <span>{formatCop(sale.grand_total)}</span>
+            <span className="whitespace-nowrap">{formatCop(sale.grand_total)}</span>
           </div>
         </div>
 

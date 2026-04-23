@@ -72,27 +72,27 @@ export function SaleReceipt({
           {data.items.map((item) => (
             <div key={item.variantId} className="mb-2 text-xs">
               <p>{item.name}</p>
-              <p>
-                {item.quantity} x {formatCop(item.unitPrice)} ={' '}
-                {formatCop(item.quantity * item.unitPrice)}
-              </p>
-              <p>{item.sku}</p>
+              <div className="flex justify-between gap-1">
+                <span className="text-zinc-500">{item.quantity} x {formatCop(item.unitPrice)}</span>
+                <span className="whitespace-nowrap font-medium">{formatCop(item.quantity * item.unitPrice)}</span>
+              </div>
+              <p className="text-zinc-400">{item.sku}</p>
             </div>
           ))}
         </div>
 
         <div className="mt-2 border-t border-dashed border-black pt-2 text-xs">
-          <div className="flex justify-between">
+          <div className="flex justify-between gap-2">
             <span>Subtotal</span>
-            <span>{formatCop(data.subtotal)}</span>
+            <span className="whitespace-nowrap">{formatCop(data.subtotal)}</span>
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between gap-2">
             <span>Descuento</span>
-            <span>{formatCop(data.discount)}</span>
+            <span className="whitespace-nowrap">{formatCop(data.discount)}</span>
           </div>
-          <div className="mt-1 flex justify-between font-bold">
+          <div className="mt-1 flex justify-between gap-2 font-bold">
             <span>Total</span>
-            <span>{formatCop(data.total)}</span>
+            <span className="whitespace-nowrap">{formatCop(data.total)}</span>
           </div>
         </div>
 
