@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useReactToPrint } from 'react-to-print'
 import { formatCop } from '../../../shared/utils/currency'
 import { formatCopInput, parseCopIntegerInput } from '../../../shared/utils/numberInput'
@@ -31,7 +32,7 @@ function generateRef(description: string) {
 }
 
 const PRINT_PAGE_STYLE =
-  '@page { size: 80mm auto; margin: 4mm; } @media print { html { height: auto !important; min-height: 0 !important; } body { margin: 0 !important; padding: 0 !important; height: auto !important; min-height: 0 !important; background: white !important; } }'
+  '@page { size: 32mm 15mm; margin: 0; } @media print { html { height: auto !important; min-height: 0 !important; } body { margin: 0 !important; padding: 0 !important; height: auto !important; min-height: 0 !important; background: white !important; } }'
 
 // ─── empty form state ─────────────────────────────────────────────────────────
 
@@ -263,6 +264,59 @@ function ItemModal({
   )
 }
 
+// ─── Rename category modal ────────────────────────────────────────────────────
+
+function RenameCategoryModal({
+  category,
+  onClose,
+  onRename,
+  isSaving,
+}: {
+  category: { id: string; name: string }
+  onClose: () => void
+  onRename: (id: string, name: string) => Promise<void>
+  isSaving: boolean
+}) {
+  const [name, setName] = useState(category.name)
+  const [feedback, setFeedback] = useState<string | null>(null)
+
+  async function handleSave() {
+    if (!name.trim()) { setFeedback('El nombre es obligatorio.'); return }
+    setFeedback(null)
+    try { await onRename(category.id, name.trim()) }
+    catch (e) { setFeedback(e instanceof Error ? e.message : 'Error al renombrar.') }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900 p-5 shadow-2xl">
+        <h2 className="mb-4 text-lg font-semibold text-zinc-100">Editar categoría</h2>
+        {feedback && (
+          <p className="mb-3 rounded-lg bg-rose-500/20 px-3 py-2 text-sm text-rose-300">{feedback}</p>
+        )}
+        <input
+          type="text"
+          value={name}
+          autoFocus
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') void handleSave() }}
+          className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-400 focus:outline-none"
+        />
+        <div className="mt-4 flex gap-2">
+          <button type="button" disabled={isSaving} onClick={() => void handleSave()}
+            className="flex-1 rounded-xl bg-amber-400 py-2 text-sm font-semibold text-zinc-900 hover:bg-amber-300 disabled:opacity-50">
+            {isSaving ? 'Guardando…' : 'Guardar'}
+          </button>
+          <button type="button" onClick={onClose}
+            className="rounded-xl border border-zinc-700 px-4 py-2 text-sm text-zinc-400 hover:bg-zinc-800">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Category modal ───────────────────────────────────────────────────────────
 
 function CategoryModal({
@@ -331,6 +385,8 @@ export function InventoryPage() {
 
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
   const [showCategoryModal, setShowCategoryModal] = useState(false)
+  const [renameCategoryTarget, setRenameCategoryTarget] = useState<{ id: string; name: string } | null>(null)
+  const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<{ id: string; name: string } | null>(null)
   const [itemModal, setItemModal] = useState<{
     categoryId: string
     categoryName: string
@@ -347,10 +403,13 @@ export function InventoryPage() {
     pageStyle: PRINT_PAGE_STYLE,
   })
 
-  useEffect(() => {
-    if (printItem !== null) void handlePrint()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [printItem])
+  function triggerPrint(item: InventoryItemRow, copies: number) {
+    flushSync(() => {
+      setPrintItem(item)
+      setPrintCopies(copies)
+    })
+    void handlePrint()
+  }
 
   function toggleCategory(id: string) {
     setExpandedCategories((prev) => {
@@ -364,6 +423,17 @@ export function InventoryPage() {
   async function handleCreateCategory(name: string) {
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
     await categoryMutations.createMutation.mutateAsync({ name, slug })
+  }
+
+  async function handleRenameCategory(categoryId: string, newName: string) {
+    const slug = newName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    await categoryMutations.updateMutation.mutateAsync({ categoryId, input: { name: newName, slug } })
+    setRenameCategoryTarget(null)
+  }
+
+  async function handleDeleteCategory(categoryId: string) {
+    await categoryMutations.deleteMutation.mutateAsync(categoryId)
+    setDeleteCategoryTarget(null)
   }
 
   async function handleSaveItem(input: InventoryItemInput) {
@@ -396,8 +466,7 @@ export function InventoryPage() {
       saved = { stockId: result.stockId, variantId: result.variantId, productId: '', categoryId: input.categoryId, description: input.description, quantity: input.quantity, costPrice: input.costPrice, salePrice, reference: input.reference, barcode: input.reference }
     }
 
-    setPrintCopies(input.quantity)
-    setPrintItem(saved)
+    triggerPrint(saved, input.quantity)
   }
 
   const categories = categoriesQuery.data ?? []
@@ -474,6 +543,20 @@ export function InventoryPage() {
                   >
                     + Agregar ítem
                   </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setRenameCategoryTarget({ id: cat.id, name: cat.name }) }}
+                    className="rounded-lg border border-sky-500/40 px-3 py-1 text-xs font-medium text-sky-300 hover:bg-sky-400/10"
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setDeleteCategoryTarget({ id: cat.id, name: cat.name }) }}
+                    className="rounded-lg border border-rose-500/40 px-3 py-1 text-xs font-medium text-rose-300 hover:bg-rose-400/10"
+                  >
+                    Eliminar
+                  </button>
                   <span className="text-zinc-500">{isExpanded ? '▲' : '▼'}</span>
                 </div>
               </div>
@@ -514,7 +597,7 @@ export function InventoryPage() {
                                   <button
                                     type="button"
                                     title="Imprimir etiquetas"
-                                    onClick={() => { setPrintItem(item); setPrintCopies(item.quantity) }}
+                                    onClick={() => triggerPrint(item, item.quantity)}
                                     className="rounded border border-amber-500/40 px-2 py-1 text-amber-300 hover:bg-amber-400/10"
                                   >
                                     🖨
@@ -569,6 +652,41 @@ export function InventoryPage() {
           onSaveAndPrint={handleSaveAndPrint}
           isSaving={isSaving}
         />
+      )}
+
+      {renameCategoryTarget && (
+        <RenameCategoryModal
+          category={renameCategoryTarget}
+          onClose={() => setRenameCategoryTarget(null)}
+          onRename={handleRenameCategory}
+          isSaving={categoryMutations.updateMutation.isPending}
+        />
+      )}
+
+      {deleteCategoryTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
+            <h2 className="text-base font-semibold text-zinc-100">¿Eliminar categoría?</h2>
+            <p className="mt-2 text-sm text-zinc-400">
+              Se eliminará la categoría <strong className="text-zinc-100">{deleteCategoryTarget.name}</strong>.
+              Solo es posible si no tiene ítems asociados.
+            </p>
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                disabled={categoryMutations.deleteMutation.isPending}
+                onClick={() => void handleDeleteCategory(deleteCategoryTarget.id)}
+                className="flex-1 rounded-xl bg-rose-600 py-2 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-50"
+              >
+                {categoryMutations.deleteMutation.isPending ? 'Eliminando…' : 'Eliminar'}
+              </button>
+              <button type="button" onClick={() => setDeleteCategoryTarget(null)}
+                className="rounded-xl border border-zinc-700 px-4 py-2 text-sm text-zinc-400 hover:bg-zinc-800">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {deleteConfirm && (

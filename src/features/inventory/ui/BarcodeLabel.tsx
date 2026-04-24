@@ -19,48 +19,50 @@ export function BarcodeLabel({ item, storeName }: BarcodeLabelProps) {
     if (!svgRef.current) return
     JsBarcode(svgRef.current, item.barcode, {
       format: 'CODE128',
-      width: 1.5,
-      height: 40,
+      width: 1.2,
+      height: 22,
       displayValue: false,
       lineColor: '#000000',
       background: '#ffffff',
-      margin: 2,
+      margin: 1,
     })
   }, [item.barcode])
 
   return (
     <div
       style={{
-        width: '72mm',
-        padding: '3mm 4mm',
+        width: '32mm',
+        height: '15mm',
+        padding: '0.5mm 1.5mm',
         boxSizing: 'border-box',
         background: 'white',
         color: 'black',
         fontFamily: 'sans-serif',
-        border: '1px dashed #ccc',
+        overflow: 'hidden',
         breakInside: 'avoid',
       }}
     >
       <p
         style={{
-          fontSize: '11px',
+          fontSize: '6px',
           fontFamily: "'Dolce Vita', 'Space Grotesk', sans-serif",
           fontWeight: '800',
           textTransform: 'uppercase',
-          letterSpacing: '0.12em',
+          letterSpacing: '0.1em',
           textAlign: 'center',
-          margin: '0 0 3px 0',
+          margin: '0 0 0 0',
+          lineHeight: 1.1,
         }}
       >
         {storeName}
       </p>
-      <div style={{ textAlign: 'center' }}>
+      <div style={{ textAlign: 'center', lineHeight: 0 }}>
         <svg ref={svgRef} style={{ display: 'block', margin: '0 auto', maxWidth: '100%' }} />
       </div>
-      <p style={{ fontSize: '9px', textAlign: 'center', margin: '2px 0 0 0' }}>
+      <p style={{ fontSize: '6px', textAlign: 'center', margin: '0', lineHeight: 1.1 }}>
         {item.reference}
       </p>
-      <p style={{ fontSize: '10px', fontWeight: 'bold', textAlign: 'center', margin: '1px 0 0 0' }}>
+      <p style={{ fontSize: '7px', fontWeight: 'bold', textAlign: 'center', margin: '0', lineHeight: 1.1 }}>
         {formatCop(item.salePrice)}
       </p>
     </div>
