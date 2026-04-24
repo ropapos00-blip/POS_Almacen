@@ -6,7 +6,7 @@ export interface PosVariant {
   color: string
   cost_price: number
   sale_price: number
-  products: Array<{ name: string }> | null
+  products: { name: string } | null
   inventory_stock: Array<{ quantity_on_hand: number }> | null
 }
 
@@ -22,7 +22,16 @@ export interface PosCartItem {
   quantity: number
 }
 
-export type PaymentMethod = 'cash' | 'card' | 'transfer' | 'mixed'
+export type PosPaymentMethod =
+  | 'cash'
+  | 'addi'
+  | 'credilondon'
+  | 'dataphone'
+  | 'bancolombia'
+  | 'daviplata'
+  | 'nequi'
+
+export type PaymentMethod = PosPaymentMethod | 'mixed'
 
 export interface PosSalePayload {
   storeId: string
@@ -31,6 +40,14 @@ export interface PosSalePayload {
   customerName?: string
   paymentMethod: PaymentMethod
   paymentReference?: string
+  /** For mixed payment: first method */
+  mixedFirstMethod?: PosPaymentMethod
+  /** For mixed payment: amount for first method */
+  mixedFirstAmount?: number
+  /** For mixed payment: second method */
+  mixedSecondMethod?: PosPaymentMethod
+  /** For mixed payment: amount for second method */
+  mixedSecondAmount?: number
   items: Array<{ variant_id: string; quantity: number }>
 }
 

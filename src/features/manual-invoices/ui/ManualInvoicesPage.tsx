@@ -46,6 +46,8 @@ function paymentLabel(method: ManualPaymentMethod) {
       return 'Daviplata'
     case 'nequi':
       return 'Nequi'
+    case 'mixed':
+      return 'Mixto'
     default:
       return method
   }
@@ -108,6 +110,14 @@ export function ManualInvoicesPage() {
   const [editCustomerPhone, setEditCustomerPhone] = useState('')
   const [editPaymentMethod, setEditPaymentMethod] = useState<ManualPaymentMethod>('cash')
   const [editPaymentReference, setEditPaymentReference] = useState('')
+  const [mixedFirstMethod, setMixedFirstMethod] = useState<ManualPaymentMethod>('cash')
+  const [mixedFirstAmount, setMixedFirstAmount] = useState(0)
+  const [mixedSecondMethod, setMixedSecondMethod] = useState<ManualPaymentMethod>('addi')
+  const [mixedSecondAmount, setMixedSecondAmount] = useState(0)
+  const [editMixedFirstMethod, setEditMixedFirstMethod] = useState<ManualPaymentMethod>('cash')
+  const [editMixedFirstAmount, setEditMixedFirstAmount] = useState(0)
+  const [editMixedSecondMethod, setEditMixedSecondMethod] = useState<ManualPaymentMethod>('addi')
+  const [editMixedSecondAmount, setEditMixedSecondAmount] = useState(0)
   const [invoiceForDelete, setInvoiceForDelete] = useState<ManualInvoiceRow | null>(null)
   const [expenseAmount, setExpenseAmount] = useState('')
   const [expenseDate, setExpenseDate] = useState(todayIso)
@@ -162,9 +172,9 @@ export function ManualInvoicesPage() {
   }, [discountTotal, subtotal])
 
   const allowsPaymentReference =
-    paymentMethod !== 'cash'
+    paymentMethod !== 'cash' && paymentMethod !== 'mixed'
   const editAllowsPaymentReference =
-    editPaymentMethod !== 'cash'
+    editPaymentMethod !== 'cash' && editPaymentMethod !== 'mixed'
 
   useEffect(() => {
     if (!allowsPaymentReference && paymentReference) {
@@ -243,6 +253,14 @@ export function ManualInvoicesPage() {
       return null
     }
 
+    if (paymentMethod === 'mixed') {
+      const mixedSum = mixedFirstAmount + mixedSecondAmount
+      if (Math.abs(mixedSum - total) > 1) {
+        setFeedback(`Los montos del pago mixto suman ${formatCop(mixedSum)} pero el total es ${formatCop(total)}. Ajusta los montos.`)
+        return null
+      }
+    }
+
     try {
       const result = await createMutation.mutateAsync({
         storeId: user.storeId,
@@ -251,7 +269,9 @@ export function ManualInvoicesPage() {
         customerPhone,
         discountTotal,
         paymentMethod,
-        paymentReference: allowsPaymentReference ? paymentReference : '',
+        paymentReference: paymentMethod === 'mixed'
+          ? `${mixedFirstMethod}:${mixedFirstAmount}:${mixedSecondMethod}:${mixedSecondAmount}`
+          : (allowsPaymentReference ? paymentReference : ''),
         items: cleanedItems,
       })
 
@@ -265,7 +285,9 @@ export function ManualInvoicesPage() {
         discount_total: discountTotal,
         grand_total: total,
         payment_method: paymentMethod,
-        payment_reference: allowsPaymentReference ? paymentReference.trim() || null : null,
+        payment_reference: paymentMethod === 'mixed'
+          ? `${mixedFirstMethod}:${mixedFirstAmount}:${mixedSecondMethod}:${mixedSecondAmount}`
+          : (allowsPaymentReference ? paymentReference.trim() || null : null),
         created_at: createdAt,
         manual_invoice_items: cleanedItems.map((item, index) => ({
           id: `${result.invoiceId}-${index}`,
@@ -283,6 +305,10 @@ export function ManualInvoicesPage() {
       setDiscountTotal(0)
       setPaymentMethod('cash')
       setPaymentReference('')
+      setMixedFirstMethod('cash')
+      setMixedFirstAmount(0)
+      setMixedSecondMethod('addi')
+      setMixedSecondAmount(0)
       setDraftItems([createDraftItem()])
       return invoiceRow
     } catch (error) {
@@ -314,6 +340,20 @@ export function ManualInvoicesPage() {
     setEditCustomerName(invoice.customer_name ?? '')
     setEditCustomerPhone(invoice.customer_phone ?? '')
     setEditPaymentMethod(invoice.payment_method)
+    if (invoice.payment_method === 'mixed' && invoice.payment_reference) {
+      const parts = invoice.payment_reference.split(':')
+      if (parts.length === 4 && Number.isFinite(Number(parts[1])) && Number.isFinite(Number(parts[3]))) {
+        setEditMixedFirstMethod(parts[0] as ManualPaymentMethod)
+        setEditMixedFirstAmount(Number(parts[1]))
+        setEditMixedSecondMethod(parts[2] as ManualPaymentMethod)
+        setEditMixedSecondAmount(Number(parts[3]))
+      } else {
+        setEditMixedFirstMethod('cash')
+        setEditMixedFirstAmount(0)
+        setEditMixedSecondMethod('addi')
+        setEditMixedSecondAmount(0)
+      }
+    }
     setEditPaymentReference(invoice.payment_reference ?? '')
   }
 
@@ -323,11 +363,24 @@ export function ManualInvoicesPage() {
     setEditCustomerPhone('')
     setEditPaymentMethod('cash')
     setEditPaymentReference('')
+    setEditMixedFirstMethod('cash')
+    setEditMixedFirstAmount(0)
+    setEditMixedSecondMethod('addi')
+    setEditMixedSecondAmount(0)
   }
 
   async function saveInvoiceHeaderEdit() {
     if (!invoiceForEdit || !user?.id) {
       return
+    }
+
+    if (editPaymentMethod === 'mixed') {
+      const mixedSum = editMixedFirstAmount + editMixedSecondAmount
+      const invoiceTotal = invoiceForEdit.grand_total
+      if (Math.abs(mixedSum - invoiceTotal) > 1) {
+        setFeedback(`Los montos del pago mixto suman ${formatCop(mixedSum)} pero el total de la factura es ${formatCop(invoiceTotal)}. Ajusta los montos.`)
+        return
+      }
     }
 
     try {
@@ -337,7 +390,9 @@ export function ManualInvoicesPage() {
         customerName: editCustomerName,
         customerPhone: editCustomerPhone,
         paymentMethod: editPaymentMethod,
-        paymentReference: editAllowsPaymentReference ? editPaymentReference : '',
+        paymentReference: editPaymentMethod === 'mixed'
+          ? `${editMixedFirstMethod}:${editMixedFirstAmount}:${editMixedSecondMethod}:${editMixedSecondAmount}`
+          : (editAllowsPaymentReference ? editPaymentReference : ''),
       })
 
       setFeedback(`Factura ${invoiceForEdit.invoice_number} actualizada.`)
@@ -655,8 +710,73 @@ export function ManualInvoicesPage() {
               <option value="bancolombia">Bancolombia</option>
               <option value="daviplata">Daviplata</option>
               <option value="nequi">Nequi</option>
+              <option value="mixed">Mixto</option>
             </select>
           </label>
+
+          {paymentMethod === 'mixed' ? (
+            <div className="space-y-2 rounded-xl border border-zinc-700 bg-zinc-950/80 p-3 md:col-span-2">
+              <p className="text-xs font-semibold text-zinc-400">Desglose pago mixto</p>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="space-y-1">
+                  <span className="text-xs text-zinc-400">Pago 1 — método</span>
+                  <select
+                    value={mixedFirstMethod}
+                    onChange={(event) => setMixedFirstMethod(event.target.value as ManualPaymentMethod)}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  >
+                    <option value="cash">Efectivo</option>
+                    <option value="addi">Addi</option>
+                    <option value="credilondon">CREDILONDON</option>
+                    <option value="dataphone">Datáfono</option>
+                    <option value="bancolombia">Bancolombia</option>
+                    <option value="daviplata">Daviplata</option>
+                    <option value="nequi">Nequi</option>
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-zinc-400">Pago 1 — monto</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={mixedFirstAmount === 0 ? '' : formatCopInput(mixedFirstAmount)}
+                    placeholder="0"
+                    onChange={(event) => setMixedFirstAmount(parseCopIntegerInput(event.target.value, 0))}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  />
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="space-y-1">
+                  <span className="text-xs text-zinc-400">Pago 2 — método</span>
+                  <select
+                    value={mixedSecondMethod}
+                    onChange={(event) => setMixedSecondMethod(event.target.value as ManualPaymentMethod)}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  >
+                    <option value="cash">Efectivo</option>
+                    <option value="addi">Addi</option>
+                    <option value="credilondon">CREDILONDON</option>
+                    <option value="dataphone">Datáfono</option>
+                    <option value="bancolombia">Bancolombia</option>
+                    <option value="daviplata">Daviplata</option>
+                    <option value="nequi">Nequi</option>
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-zinc-400">Pago 2 — monto</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={mixedSecondAmount === 0 ? '' : formatCopInput(mixedSecondAmount)}
+                    placeholder="0"
+                    onChange={(event) => setMixedSecondAmount(parseCopIntegerInput(event.target.value, 0))}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  />
+                </label>
+              </div>
+            </div>
+          ) : null}
 
           <label className="space-y-1">
             <span className="text-xs text-zinc-400">Descuento</span>
@@ -960,8 +1080,73 @@ export function ManualInvoicesPage() {
                   <option value="bancolombia">Bancolombia</option>
                   <option value="daviplata">Daviplata</option>
                   <option value="nequi">Nequi</option>
+                  <option value="mixed">Mixto</option>
                 </select>
               </label>
+
+              {editPaymentMethod === 'mixed' ? (
+                <div className="space-y-2 rounded-xl border border-zinc-700 bg-zinc-950/80 p-3">
+                  <p className="text-xs font-semibold text-zinc-400">Desglose pago mixto</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="space-y-1">
+                      <span className="text-xs text-zinc-400">Pago 1 — método</span>
+                      <select
+                        value={editMixedFirstMethod}
+                        onChange={(event) => setEditMixedFirstMethod(event.target.value as ManualPaymentMethod)}
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                      >
+                        <option value="cash">Efectivo</option>
+                        <option value="addi">Addi</option>
+                        <option value="credilondon">CREDILONDON</option>
+                        <option value="dataphone">Datáfono</option>
+                        <option value="bancolombia">Bancolombia</option>
+                        <option value="daviplata">Daviplata</option>
+                        <option value="nequi">Nequi</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs text-zinc-400">Pago 1 — monto</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={editMixedFirstAmount === 0 ? '' : formatCopInput(editMixedFirstAmount)}
+                        placeholder="0"
+                        onChange={(event) => setEditMixedFirstAmount(parseCopIntegerInput(event.target.value, 0))}
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                      />
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="space-y-1">
+                      <span className="text-xs text-zinc-400">Pago 2 — método</span>
+                      <select
+                        value={editMixedSecondMethod}
+                        onChange={(event) => setEditMixedSecondMethod(event.target.value as ManualPaymentMethod)}
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                      >
+                        <option value="cash">Efectivo</option>
+                        <option value="addi">Addi</option>
+                        <option value="credilondon">CREDILONDON</option>
+                        <option value="dataphone">Datáfono</option>
+                        <option value="bancolombia">Bancolombia</option>
+                        <option value="daviplata">Daviplata</option>
+                        <option value="nequi">Nequi</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs text-zinc-400">Pago 2 — monto</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={editMixedSecondAmount === 0 ? '' : formatCopInput(editMixedSecondAmount)}
+                        placeholder="0"
+                        onChange={(event) => setEditMixedSecondAmount(parseCopIntegerInput(event.target.value, 0))}
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                      />
+                    </label>
+                  </div>
+                </div>
+              ) : null}
 
               {editAllowsPaymentReference ? (
                 <label className="space-y-1">

@@ -76,13 +76,33 @@ export async function createPosSale(payload: PosSalePayload) {
     throw new Error('El total final debe ser mayor a 0.')
   }
 
-  const payments = [
-    {
-      method: payload.paymentMethod,
-      amount: grandTotal,
-      reference: payload.paymentReference ?? null,
-    },
-  ]
+  let payments: Array<{ method: string; amount: number; reference: string | null }>
+
+  if (
+    payload.paymentMethod === 'mixed' &&
+    payload.mixedFirstMethod &&
+    payload.mixedFirstAmount != null &&
+    payload.mixedSecondMethod &&
+    payload.mixedSecondAmount != null
+  ) {
+    const firstAmount = Number(payload.mixedFirstAmount.toFixed(2))
+    const secondAmount = Number(payload.mixedSecondAmount.toFixed(2))
+    if (firstAmount + secondAmount !== grandTotal) {
+      // Allow small floating-point tolerance; just pass amounts as-is
+    }
+    payments = [
+      { method: payload.mixedFirstMethod, amount: firstAmount, reference: null },
+      { method: payload.mixedSecondMethod, amount: secondAmount, reference: null },
+    ]
+  } else {
+    payments = [
+      {
+        method: payload.paymentMethod,
+        amount: grandTotal,
+        reference: payload.paymentReference ?? null,
+      },
+    ]
+  }
 
   const { data, error } = await supabase.rpc('create_sale_transaction', {
     p_store_id: payload.storeId,

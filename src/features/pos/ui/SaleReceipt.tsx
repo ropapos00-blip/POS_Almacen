@@ -1,7 +1,7 @@
 import type { RefObject } from 'react'
 import { formatCop } from '../../../shared/utils/currency'
 import { useAuthStore } from '../../auth/model/useAuthStore'
-import type { PaymentMethod, PosCartItem } from '../model/pos.types'
+import type { PaymentMethod, PosPaymentMethod, PosCartItem } from '../model/pos.types'
 
 interface SaleReceiptData {
   saleNumber: string
@@ -10,17 +10,28 @@ interface SaleReceiptData {
   customerName: string
   paymentMethod: PaymentMethod
   paymentReference: string
+  mixedFirstMethod?: PosPaymentMethod
+  mixedFirstAmount?: number
+  mixedSecondMethod?: PosPaymentMethod
+  mixedSecondAmount?: number
   subtotal: number
   discount: number
   total: number
   items: PosCartItem[]
 }
 
-function paymentLabel(method: PaymentMethod) {
-  if (method === 'cash') return 'Efectivo'
-  if (method === 'card') return 'Tarjeta'
-  if (method === 'transfer') return 'Transferencia'
-  return 'Mixto'
+function paymentLabel(method: PaymentMethod | PosPaymentMethod) {
+  switch (method) {
+    case 'cash': return 'Efectivo'
+    case 'addi': return 'Addi'
+    case 'credilondon': return 'CREDILONDON'
+    case 'dataphone': return 'Datáfono'
+    case 'bancolombia': return 'Bancolombia'
+    case 'daviplata': return 'Daviplata'
+    case 'nequi': return 'Nequi'
+    case 'mixed': return 'Mixto'
+    default: return method
+  }
 }
 
 export function SaleReceipt({
@@ -97,8 +108,18 @@ export function SaleReceipt({
         </div>
 
         <div className="mt-2 border-t border-dashed border-black pt-2 text-xs">
-          <p>Pago: {paymentLabel(data.paymentMethod)}</p>
-          {data.paymentReference ? <p>Ref: {data.paymentReference}</p> : null}
+          {data.paymentMethod === 'mixed' && data.mixedFirstMethod && data.mixedFirstAmount != null && data.mixedSecondMethod && data.mixedSecondAmount != null ? (
+            <>
+              <p>Pago: Mixto</p>
+              <p>{paymentLabel(data.mixedFirstMethod)}: {formatCop(data.mixedFirstAmount)}</p>
+              <p>{paymentLabel(data.mixedSecondMethod)}: {formatCop(data.mixedSecondAmount)}</p>
+            </>
+          ) : (
+            <>
+              <p>Pago: {paymentLabel(data.paymentMethod)}</p>
+              {data.paymentReference ? <p>Ref: {data.paymentReference}</p> : null}
+            </>
+          )}
         </div>
 
         <p className="mt-3 text-center text-xs">Gracias por su compra</p>

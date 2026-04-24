@@ -6,6 +6,7 @@ export type ManualPaymentMethod =
   | 'bancolombia'
   | 'daviplata'
   | 'nequi'
+  | 'mixed'
 
 export interface ManualInvoiceItem {
   id: string

@@ -5,7 +5,7 @@ import { formatDateTimeColombia } from '../../../shared/utils/dateTime'
 import { formatCopInput, parseCopIntegerInput, parseIntegerInput } from '../../../shared/utils/numberInput'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import { useCreatePosSaleMutation, usePosVariantsQuery } from '../model/usePosQueries'
-import type { PaymentMethod, PosCartItem } from '../model/pos.types'
+import type { PaymentMethod, PosPaymentMethod, PosCartItem } from '../model/pos.types'
 import { authorizeDiscountOverride } from '../services/posService'
 import { SaleReceipt } from './SaleReceipt'
 
@@ -13,8 +13,8 @@ function getStock(row: { quantity_on_hand: number }[] | null) {
   return row?.[0]?.quantity_on_hand ?? 0
 }
 
-function getProductName(row: Array<{ name: string }> | null) {
-  return row?.[0]?.name ?? 'Producto'
+function getProductName(row: { name: string } | null) {
+  return row?.name ?? 'Producto'
 }
 
 export function PosPage() {
@@ -33,6 +33,10 @@ export function PosPage() {
   const [discountAuthorizedBy, setDiscountAuthorizedBy] = useState<string | null>(null)
   const [authorizedDiscountValue, setAuthorizedDiscountValue] = useState(0)
   const [cart, setCart] = useState<PosCartItem[]>([])
+  const [mixedFirstMethod, setMixedFirstMethod] = useState<PosPaymentMethod>('cash')
+  const [mixedFirstAmount, setMixedFirstAmount] = useState(0)
+  const [mixedSecondMethod, setMixedSecondMethod] = useState<PosPaymentMethod>('addi')
+  const [mixedSecondAmount, setMixedSecondAmount] = useState(0)
   const [barcodeInput, setBarcodeInput] = useState('')
   const [barcodeFeedback, setBarcodeFeedback] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
   const barcodeRef = useRef<HTMLInputElement>(null)
@@ -43,6 +47,10 @@ export function PosPage() {
     customerName: string
     paymentMethod: PaymentMethod
     paymentReference: string
+    mixedFirstMethod?: PosPaymentMethod
+    mixedFirstAmount?: number
+    mixedSecondMethod?: PosPaymentMethod
+    mixedSecondAmount?: number
     subtotal: number
     discount: number
     total: number
@@ -112,6 +120,12 @@ export function PosPage() {
     const stock = getStock(match.inventory_stock)
     if (stock <= 0) {
       setBarcodeFeedback({ type: 'err', msg: `Sin stock: ${getProductName(match.products)}` })
+      setBarcodeInput('')
+      return
+    }
+    const existingCartItem = cart.find((e) => e.variantId === match.id)
+    if (existingCartItem && existingCartItem.quantity >= existingCartItem.stockAvailable) {
+      setBarcodeFeedback({ type: 'err', msg: `Stock máximo alcanzado: ${existingCartItem.stockAvailable} ud.` })
       setBarcodeInput('')
       return
     }
@@ -192,6 +206,14 @@ export function PosPage() {
       return
     }
 
+    if (paymentMethod === 'mixed') {
+      const mixedSum = mixedFirstAmount + mixedSecondAmount
+      if (Math.abs(mixedSum - total) > 1) {
+        setFeedback(`Los montos del pago mixto suman ${formatCop(mixedSum)} pero el total es ${formatCop(total)}. Ajusta los montos.`)
+        return
+      }
+    }
+
     try {
       const result = await saleMutation.mutateAsync({
         storeId: user.storeId,
@@ -200,6 +222,10 @@ export function PosPage() {
         customerName,
         paymentMethod,
         paymentReference,
+        mixedFirstMethod: paymentMethod === 'mixed' ? mixedFirstMethod : undefined,
+        mixedFirstAmount: paymentMethod === 'mixed' ? mixedFirstAmount : undefined,
+        mixedSecondMethod: paymentMethod === 'mixed' ? mixedSecondMethod : undefined,
+        mixedSecondAmount: paymentMethod === 'mixed' ? mixedSecondAmount : undefined,
         items: cart.map((item) => ({
           variant_id: item.variantId,
           quantity: item.quantity,
@@ -214,6 +240,10 @@ export function PosPage() {
         customerName: customerName.trim(),
         paymentMethod,
         paymentReference: paymentReference.trim(),
+        mixedFirstMethod: paymentMethod === 'mixed' ? mixedFirstMethod : undefined,
+        mixedFirstAmount: paymentMethod === 'mixed' ? mixedFirstAmount : undefined,
+        mixedSecondMethod: paymentMethod === 'mixed' ? mixedSecondMethod : undefined,
+        mixedSecondAmount: paymentMethod === 'mixed' ? mixedSecondAmount : undefined,
         subtotal,
         discount,
         total,
@@ -226,6 +256,10 @@ export function PosPage() {
       setDiscountAuthorizedBy(null)
       setAuthorizedDiscountValue(0)
       setPaymentReference('')
+      setMixedFirstMethod('cash')
+      setMixedFirstAmount(0)
+      setMixedSecondMethod('addi')
+      setMixedSecondAmount(0)
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : 'No se pudo confirmar la venta.')
     }
@@ -368,8 +402,12 @@ export function PosPage() {
                 className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
               >
                 <option value="cash">Efectivo</option>
-                <option value="card">Tarjeta</option>
-                <option value="transfer">Transferencia</option>
+                <option value="addi">Addi</option>
+                <option value="credilondon">CREDILONDON</option>
+                <option value="dataphone">Datáfono</option>
+                <option value="bancolombia">Bancolombia</option>
+                <option value="daviplata">Daviplata</option>
+                <option value="nequi">Nequi</option>
                 <option value="mixed">Mixto</option>
               </select>
             </label>
@@ -395,6 +433,70 @@ export function PosPage() {
               </span>
             </label>
           </div>
+
+          {paymentMethod === 'mixed' ? (
+            <div className="rounded-xl border border-zinc-700 bg-zinc-950/80 p-3 space-y-3">
+              <p className="text-xs font-semibold text-zinc-400">Desglose pago mixto</p>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block space-y-1">
+                  <span className="text-xs text-zinc-400">Pago 1 — método</span>
+                  <select
+                    value={mixedFirstMethod}
+                    onChange={(e) => setMixedFirstMethod(e.target.value as PosPaymentMethod)}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
+                  >
+                    <option value="cash">Efectivo</option>
+                    <option value="addi">Addi</option>
+                    <option value="credilondon">CREDILONDON</option>
+                    <option value="dataphone">Datáfono</option>
+                    <option value="bancolombia">Bancolombia</option>
+                    <option value="daviplata">Daviplata</option>
+                    <option value="nequi">Nequi</option>
+                  </select>
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs text-zinc-400">Pago 1 — monto</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={mixedFirstAmount === 0 ? '' : formatCopInput(mixedFirstAmount)}
+                    placeholder="0"
+                    onChange={(e) => setMixedFirstAmount(parseCopIntegerInput(e.target.value, 0))}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
+                  />
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block space-y-1">
+                  <span className="text-xs text-zinc-400">Pago 2 — método</span>
+                  <select
+                    value={mixedSecondMethod}
+                    onChange={(e) => setMixedSecondMethod(e.target.value as PosPaymentMethod)}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
+                  >
+                    <option value="cash">Efectivo</option>
+                    <option value="addi">Addi</option>
+                    <option value="credilondon">CREDILONDON</option>
+                    <option value="dataphone">Datáfono</option>
+                    <option value="bancolombia">Bancolombia</option>
+                    <option value="daviplata">Daviplata</option>
+                    <option value="nequi">Nequi</option>
+                  </select>
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs text-zinc-400">Pago 2 — monto</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={mixedSecondAmount === 0 ? '' : formatCopInput(mixedSecondAmount)}
+                    placeholder="0"
+                    onChange={(e) => setMixedSecondAmount(parseCopIntegerInput(e.target.value, 0))}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
+                  />
+                </label>
+              </div>
+            </div>
+          ) : null}
 
           {needsDiscountAuthorization ? (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-200">
