@@ -33,9 +33,8 @@ const STORE_NAV_ROUTE_OPTIONS = [
   { route: '/pos', label: 'POS' },
   { route: '/sales', label: 'Ventas' },
   { route: '/manual-invoices', label: 'Factura manual' },
-  { route: '/price-check', label: 'Consulta' },
-  { route: '/catalog', label: 'Catalogo' },
   { route: '/inventory', label: 'Inventario' },
+  { route: '/stock', label: 'Entrada Stock' },
   { route: '/users', label: 'Usuarios' },
 ] as const
 
@@ -44,6 +43,7 @@ const CONFECCION_NAV_ROUTE_OPTIONS = [
   { route: '/confeccion/ventas', label: 'Confeccion' },
   { route: '/confeccion/cartera', label: 'Cartera' },
   { route: '/confeccion/gastos', label: 'Gastos' },
+  { route: '/confeccion/clientes', label: 'Clientes' },
   { route: '/confeccion/inventario', label: 'Inventario Confeccion' },
 ] as const
 
