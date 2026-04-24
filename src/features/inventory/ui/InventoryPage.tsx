@@ -1,6 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
-import { useReactToPrint } from 'react-to-print'
+import { useEffect, useState } from 'react'
 import { formatCop } from '../../../shared/utils/currency'
 import { formatCopInput, parseCopIntegerInput } from '../../../shared/utils/numberInput'
 import { useAuthStore } from '../../auth/model/useAuthStore'
@@ -13,7 +11,6 @@ import {
 } from '../model/useInventoryQueries'
 import type { InventoryItemInput, InventoryItemRow } from '../model/inventory.types'
 import { BarcodeLabelPreview } from './BarcodeLabel'
-import { BarcodePrintSheet } from './BarcodePrintSheet'
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -30,9 +27,6 @@ function generateRef(description: string) {
     .padEnd(4, 'X')
   return `${clean}-${Date.now().toString().slice(-5)}`
 }
-
-const PRINT_PAGE_STYLE =
-  '@page { size: 32mm 15mm; margin: 0; } @media print { html { height: auto !important; min-height: 0 !important; } body { margin: 0 !important; padding: 0 !important; height: auto !important; min-height: 0 !important; background: white !important; } }'
 
 // ─── empty form state ─────────────────────────────────────────────────────────
 
@@ -61,7 +55,6 @@ interface ItemModalProps {
   storeName: string
   onClose: () => void
   onSave: (input: InventoryItemInput) => Promise<void>
-  onSaveAndPrint: (input: InventoryItemInput) => Promise<void>
   isSaving: boolean
 }
 
@@ -72,7 +65,6 @@ function ItemModal({
   storeName,
   onClose,
   onSave,
-  onSaveAndPrint,
   isSaving,
 }: ItemModalProps) {
   const [form, setForm] = useState<FormState>(() => {
@@ -130,14 +122,6 @@ function ItemModal({
     if (!input) return
     setFeedback(null)
     try { await onSave(input); onClose() }
-    catch (e) { setFeedback(e instanceof Error ? e.message : 'Error al guardar.') }
-  }
-
-  async function handleSaveAndPrint() {
-    const input = validate()
-    if (!input) return
-    setFeedback(null)
-    try { await onSaveAndPrint(input); onClose() }
     catch (e) { setFeedback(e instanceof Error ? e.message : 'Error al guardar.') }
   }
 
@@ -249,10 +233,6 @@ function ItemModal({
           <button type="button" disabled={isSaving} onClick={() => void handleSave()}
             className="rounded-xl bg-amber-400 px-5 py-2 text-sm font-semibold text-zinc-900 hover:bg-amber-300 disabled:opacity-50">
             {isSaving ? 'Guardando…' : 'Guardar'}
-          </button>
-          <button type="button" disabled={isSaving} onClick={() => void handleSaveAndPrint()}
-            className="rounded-xl border border-amber-400/50 px-5 py-2 text-sm font-semibold text-amber-300 hover:bg-amber-400/10 disabled:opacity-50">
-            Guardar e imprimir etiquetas
           </button>
           <button type="button" onClick={onClose}
             className="ml-auto rounded-xl border border-zinc-700 px-5 py-2 text-sm text-zinc-400 hover:bg-zinc-800">
@@ -395,24 +375,6 @@ export function InventoryPage() {
   } | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<InventoryItemRow | null>(null)
   const [deleteItemError, setDeleteItemError] = useState<string | null>(null)
-  const [printItem, setPrintItem] = useState<InventoryItemRow | null>(null)
-  const [printCopies, setPrintCopies] = useState(1)
-
-  const printRef = useRef<HTMLDivElement>(null)
-  const handlePrint = useReactToPrint({
-    contentRef: printRef,
-    documentTitle: 'etiquetas',
-    pageStyle: PRINT_PAGE_STYLE,
-  })
-
-  function triggerPrint(item: InventoryItemRow, copies: number) {
-    flushSync(() => {
-      setPrintItem(item)
-      setPrintCopies(copies)
-    })
-    void handlePrint()
-  }
-
   function toggleCategory(id: string) {
     setExpandedCategories((prev) => {
       const next = new Set(prev)
@@ -454,26 +416,6 @@ export function InventoryPage() {
     } else {
       await createItem.mutateAsync(input)
     }
-  }
-
-  async function handleSaveAndPrint(input: InventoryItemInput) {
-    const salePrice = calcSalePrice(input.costPrice, input.markupPercent)
-    let saved: InventoryItemRow
-
-    if (itemModal?.editItem) {
-      await updateItem.mutateAsync({
-        ...input,
-        productId: itemModal.editItem.productId,
-        variantId: itemModal.editItem.variantId,
-        stockId: itemModal.editItem.stockId,
-      })
-      saved = { ...itemModal.editItem, description: input.description, quantity: input.quantity, costPrice: input.costPrice, salePrice, reference: input.reference, barcode: input.reference }
-    } else {
-      const result = await createItem.mutateAsync(input)
-      saved = { stockId: result.stockId, variantId: result.variantId, productId: '', categoryId: input.categoryId, description: input.description, quantity: input.quantity, costPrice: input.costPrice, salePrice, reference: input.reference, barcode: input.reference }
-    }
-
-    triggerPrint(saved, input.quantity)
   }
 
   const categories = categoriesQuery.data ?? []
@@ -603,14 +545,6 @@ export function InventoryPage() {
                                 <div className="flex gap-1">
                                   <button
                                     type="button"
-                                    title="Imprimir etiquetas"
-                                    onClick={() => triggerPrint(item, item.quantity)}
-                                    className="rounded border border-amber-500/40 px-2 py-1 text-amber-300 hover:bg-amber-400/10"
-                                  >
-                                    🖨
-                                  </button>
-                                  <button
-                                    type="button"
                                     onClick={() => setItemModal({ categoryId: cat.id, categoryName: cat.name, editItem: item })}
                                     className="rounded border border-sky-500/40 px-2 py-1 text-sky-300 hover:bg-sky-400/10"
                                   >
@@ -638,8 +572,6 @@ export function InventoryPage() {
         })}
       </div>
 
-      <BarcodePrintSheet printRef={printRef} item={printItem} copies={printCopies} storeName={storeName} />
-
       {showCategoryModal && (
         <CategoryModal
           onClose={() => setShowCategoryModal(false)}
@@ -656,7 +588,6 @@ export function InventoryPage() {
           storeName={storeName}
           onClose={() => setItemModal(null)}
           onSave={handleSaveItem}
-          onSaveAndPrint={handleSaveAndPrint}
           isSaving={isSaving}
         />
       )}

@@ -1,17 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
-import { useReactToPrint } from 'react-to-print'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import { formatCop } from '../../../shared/utils/currency'
 import { useInventoryItemsQuery, useAdjustStockMutation } from '../model/useInventoryQueries'
 import type { InventoryItemRow } from '../model/inventory.types'
-import { BarcodePrintSheet } from './BarcodePrintSheet'
-
 export function StockPage() {
   const user = useAuthStore((s) => s.user)
   const storeId = user?.storeId
-  const storeName = user?.storeName ?? 'LICKAN42'
-
   const { data: items = [], isLoading } = useInventoryItemsQuery(storeId)
   const adjustMutation = useAdjustStockMutation(storeId, user?.id)
 
@@ -20,24 +14,6 @@ export function StockPage() {
   const [notFound, setNotFound] = useState(false)
   const [qty, setQty] = useState(1)
   const [feedback, setFeedback] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
-
-  // Print
-  const printRef = useRef<HTMLDivElement>(null)
-  const [printItem, setPrintItem] = useState<InventoryItemRow | null>(null)
-  const [printCopies, setPrintCopies] = useState(1)
-  const handlePrint = useReactToPrint({
-    contentRef: printRef,
-    documentTitle: `Stock-${printItem?.reference ?? ''}`,
-    pageStyle: '@page { size: 32mm 15mm; margin: 0; } body { margin: 0; }',
-  })
-
-  function triggerPrint(item: InventoryItemRow, copies: number) {
-    flushSync(() => {
-      setPrintItem(item)
-      setPrintCopies(copies)
-    })
-    void handlePrint()
-  }
 
   const barcodeInputRef = useRef<HTMLInputElement>(null)
 
@@ -76,8 +52,6 @@ export function StockPage() {
       })
       const updated: InventoryItemRow = { ...found, quantity: found.quantity + qty }
       setFeedback({ type: 'ok', msg: `Stock actualizado: ${found.quantity} → ${found.quantity + qty}` })
-      triggerPrint(updated, qty)
-      // Update local found for UX
       setFound(updated)
     } catch (e) {
       setFeedback({ type: 'err', msg: e instanceof Error ? e.message : 'Error al ajustar stock.' })
@@ -213,7 +187,7 @@ export function StockPage() {
               onClick={() => void handleAdd()}
               className="rounded-xl bg-amber-400 px-6 py-2.5 text-sm font-semibold text-zinc-900 hover:bg-amber-300 disabled:opacity-50"
             >
-              {adjustMutation.isPending ? 'Guardando…' : `Agregar ${qty} e imprimir`}
+              {adjustMutation.isPending ? 'Guardando…' : `Agregar ${qty}`}
             </button>
             <button
               type="button"
@@ -226,13 +200,6 @@ export function StockPage() {
         </div>
       )}
 
-      {/* Hidden print sheet */}
-      <BarcodePrintSheet
-        printRef={printRef}
-        item={printItem}
-        copies={printCopies}
-        storeName={storeName}
-      />
     </section>
   )
 }
