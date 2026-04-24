@@ -20,6 +20,7 @@ import {
 } from '../model/useManualInvoicesQueries'
 import type { ManualExpenseRow, ManualInvoiceRow, ManualPaymentMethod } from '../model/manualInvoices.types'
 import { ManualInvoiceReceipt } from './ManualInvoiceReceipt'
+import { ExpenseReceipt } from './ExpenseReceipt'
 
 
 interface DraftItem {
@@ -101,6 +102,7 @@ export function ManualInvoicesPage() {
   const [feedback, setFeedback] = useState<string | null>(null)
   const [draftItems, setDraftItems] = useState<DraftItem[]>([createDraftItem()])
   const [selectedInvoice, setSelectedInvoice] = useState<ManualInvoiceRow | null>(null)
+  const [selectedExpense, setSelectedExpense] = useState<ManualExpenseRow | null>(null)
   const [invoiceForEdit, setInvoiceForEdit] = useState<ManualInvoiceRow | null>(null)
   const [editCustomerName, setEditCustomerName] = useState('')
   const [editCustomerPhone, setEditCustomerPhone] = useState('')
@@ -119,6 +121,7 @@ export function ManualInvoicesPage() {
   const [editExpenseNotes, setEditExpenseNotes] = useState('')
   const [expenseForDelete, setExpenseForDelete] = useState<ManualExpenseRow | null>(null)
   const receiptRef = useRef<HTMLDivElement>(null)
+  const expenseReceiptRef = useRef<HTMLDivElement>(null)
 
   const invoicesQuery = useManualInvoicesQuery(user?.storeId)
   const manualKpisQuery = useManualInvoiceKpisQuery(user?.storeId, isAdminUser)
@@ -134,8 +137,21 @@ export function ManualInvoicesPage() {
   const handlePrint = useReactToPrint({
     contentRef: receiptRef,
     documentTitle: selectedInvoice?.invoice_number ?? 'factura-manual',
-    pageStyle: '@page { size: 56mm auto; margin: 0mm; } html, body { margin: 0 !important; padding: 0 !important; height: auto !important; min-height: 0 !important; background: white !important; }',
+    pageStyle: '@page { size: 56mm auto; margin: 0mm; } @media print { html { height: auto !important; min-height: 0 !important; overflow: visible !important; } body { margin: 0 !important; padding: 0 !important; height: auto !important; min-height: 0 !important; overflow: visible !important; background: white !important; color: black !important; } }',
   })
+
+  const handlePrintExpense = useReactToPrint({
+    contentRef: expenseReceiptRef,
+    documentTitle: 'comprobante-gasto',
+    pageStyle: '@page { size: 56mm auto; margin: 0mm; } @media print { html { height: auto !important; min-height: 0 !important; overflow: visible !important; } body { margin: 0 !important; padding: 0 !important; height: auto !important; min-height: 0 !important; overflow: visible !important; background: white !important; color: black !important; } }',
+  })
+
+  useEffect(() => {
+    if (selectedExpense !== null) {
+      void handlePrintExpense()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedExpense])
 
   const subtotal = useMemo(() => {
     return draftItems.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0)
@@ -372,7 +388,7 @@ export function ManualInvoicesPage() {
     }
 
     try {
-      await createExpenseMutation.mutateAsync({
+      const result = await createExpenseMutation.mutateAsync({
         storeId: user.storeId,
         actorUserId: user.id,
         amount: parsedAmount,
@@ -386,6 +402,18 @@ export function ManualInvoicesPage() {
       setExpenseCategory('')
       setExpenseNotes('')
       setExpenseDate(todayIso)
+
+      const expenseRow: ManualExpenseRow = {
+        id: result.expenseId,
+        store_id: user.storeId,
+        amount: parsedAmount,
+        expense_date: expenseDate,
+        category: expenseCategory.trim() || null,
+        notes: expenseNotes.trim() || null,
+        created_by: user.id,
+        created_at: new Date().toISOString(),
+      }
+      setSelectedExpense(expenseRow)
     } catch (error) {
       setExpenseFeedback(error instanceof Error ? error.message : 'No se pudo registrar el gasto.')
     }
@@ -805,6 +833,13 @@ export function ManualInvoicesPage() {
                     <div className="mt-2 flex gap-2">
                       <button
                         type="button"
+                        onClick={() => { setSelectedExpense(expense) }}
+                        className="rounded-md border border-amber-500/40 px-2 py-1 text-xs text-amber-200"
+                      >
+                        Imprimir
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => openEditExpense(expense)}
                         className="rounded-md border border-sky-500/40 px-2 py-1 text-xs text-sky-200"
                       >
@@ -883,6 +918,7 @@ export function ManualInvoicesPage() {
       </article>
 
       <ManualInvoiceReceipt invoice={selectedInvoice} receiptRef={receiptRef} />
+      <ExpenseReceipt expense={selectedExpense} receiptRef={expenseReceiptRef} />
 
       {invoiceForEdit ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
