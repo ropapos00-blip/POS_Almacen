@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useReactToPrint } from 'react-to-print'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import { formatCop } from '../../../shared/utils/currency'
@@ -27,15 +28,16 @@ export function StockPage() {
   const handlePrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: `Stock-${printItem?.reference ?? ''}`,
-    pageStyle: `
-      @page { size: 80mm auto; margin: 2mm; }
-      body { margin: 0; }
-    `,
+    pageStyle: '@page { size: 32mm 15mm; margin: 0; } body { margin: 0; }',
   })
 
-  useEffect(() => {
-    if (printItem !== null) void handlePrint()
-  }, [printItem])
+  function triggerPrint(item: InventoryItemRow, copies: number) {
+    flushSync(() => {
+      setPrintItem(item)
+      setPrintCopies(copies)
+    })
+    void handlePrint()
+  }
 
   const barcodeInputRef = useRef<HTMLInputElement>(null)
 
@@ -74,8 +76,7 @@ export function StockPage() {
       })
       const updated: InventoryItemRow = { ...found, quantity: found.quantity + qty }
       setFeedback({ type: 'ok', msg: `Stock actualizado: ${found.quantity} → ${found.quantity + qty}` })
-      setPrintCopies(qty)
-      setPrintItem(updated)
+      triggerPrint(updated, qty)
       // Update local found for UX
       setFound(updated)
     } catch (e) {

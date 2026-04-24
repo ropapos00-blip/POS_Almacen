@@ -12,7 +12,7 @@ interface BarcodeLabelProps {
  * Renders a single barcode label using jsbarcode on an SVG element.
  * Used both inline (preview) and inside BarcodePrintSheet.
  */
-export function BarcodeLabel({ item, storeName }: BarcodeLabelProps) {
+export function BarcodeLabel({ item }: BarcodeLabelProps) {
   const svgRef = useRef<SVGSVGElement>(null)
 
   useEffect(() => {
@@ -20,7 +20,7 @@ export function BarcodeLabel({ item, storeName }: BarcodeLabelProps) {
     JsBarcode(svgRef.current, item.barcode, {
       format: 'CODE128',
       width: 1.2,
-      height: 22,
+      height: 16,
       displayValue: false,
       lineColor: '#000000',
       background: '#ffffff',
@@ -42,27 +42,13 @@ export function BarcodeLabel({ item, storeName }: BarcodeLabelProps) {
         breakInside: 'avoid',
       }}
     >
-      <p
-        style={{
-          fontSize: '6px',
-          fontFamily: "'Dolce Vita', 'Space Grotesk', sans-serif",
-          fontWeight: '800',
-          textTransform: 'uppercase',
-          letterSpacing: '0.1em',
-          textAlign: 'center',
-          margin: '0 0 0 0',
-          lineHeight: 1.1,
-        }}
-      >
-        {storeName}
-      </p>
       <div style={{ textAlign: 'center', lineHeight: 0 }}>
         <svg ref={svgRef} style={{ display: 'block', margin: '0 auto', maxWidth: '100%' }} />
       </div>
       <p style={{ fontSize: '6px', textAlign: 'center', margin: '0', lineHeight: 1.1 }}>
         {item.reference}
       </p>
-      <p style={{ fontSize: '7px', fontWeight: 'bold', textAlign: 'center', margin: '0', lineHeight: 1.1 }}>
+      <p style={{ fontSize: '14px', fontWeight: 'bold', textAlign: 'center', margin: '0', lineHeight: 1.2 }}>
         {formatCop(item.salePrice)}
       </p>
     </div>
@@ -70,7 +56,7 @@ export function BarcodeLabel({ item, storeName }: BarcodeLabelProps) {
 }
 
 /** Preview inline (visible en la UI, sin sr-only) */
-export function BarcodeLabelPreview({ item, storeName }: BarcodeLabelProps) {
+export function BarcodeLabelPreview({ item }: BarcodeLabelProps) {
   const svgRef = useRef<SVGSVGElement>(null)
 
   useEffect(() => {
@@ -92,12 +78,11 @@ export function BarcodeLabelPreview({ item, storeName }: BarcodeLabelProps) {
 
   return (
     <div className="rounded border border-zinc-300 bg-white px-2 py-1 text-black" style={{ width: '130px' }}>
-      <p className="store-logo-font text-[8px] font-extrabold uppercase tracking-widest text-center leading-tight">{storeName}</p>
       <div className="flex justify-center">
         <svg ref={svgRef} style={{ display: 'block', maxWidth: '100%' }} />
       </div>
       <p className="text-[7px] text-center leading-tight">{item.reference}</p>
-      <p className="text-[8px] font-bold text-center leading-tight">{formatCop(item.salePrice)}</p>
+      <p className="text-[12px] font-bold text-center leading-tight">{formatCop(item.salePrice)}</p>
     </div>
   )
 }

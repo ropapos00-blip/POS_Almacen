@@ -135,18 +135,38 @@ export async function updateInventoryItem(
   }
 }
 
-/** Elimina ítem: stock → variante → producto */
+/** Elimina ítem: movements → stock (cascade) → variante → producto */
 export async function deleteInventoryItem(
   productId: string,
   variantId: string,
   stockId: string,
 ): Promise<void> {
+  // 1. Borrar movimientos de inventario (on delete restrict → hay que borrarlos antes)
+  const { error: movErr } = await supabase
+    .from('inventory_movements')
+    .delete()
+    .eq('variant_id', variantId)
+  if (movErr) throw new Error(movErr.message)
+
+  // 2. Borrar stock explícitamente (también cascadea al borrar variante, pero lo hacemos explícito)
   await supabase.from('inventory_stock').delete().eq('id', stockId)
-  await supabase.from('product_variants').delete().eq('id', variantId)
-  const { error } = await supabase.from('products').delete().eq('id', productId)
-  if (error) {
-    throw new Error(error.message)
+
+  // 3. Borrar variante (inventory_stock cascadea)
+  const { error: varErr } = await supabase
+    .from('product_variants')
+    .delete()
+    .eq('id', variantId)
+  if (varErr) {
+    // Si tiene ventas asociadas (sale_items) Supabase retorna 409
+    if (varErr.code === '23503') {
+      throw new Error('No se puede eliminar: este producto tiene ventas registradas.')
+    }
+    throw new Error(varErr.message)
   }
+
+  // 4. Borrar producto padre
+  const { error: prodErr } = await supabase.from('products').delete().eq('id', productId)
+  if (prodErr) throw new Error(prodErr.message)
 }
 
 export async function adjustStock(

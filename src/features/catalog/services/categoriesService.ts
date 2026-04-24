@@ -42,9 +42,53 @@ export async function updateCategory(categoryId: string, input: CategoryInput) {
 }
 
 export async function deleteCategory(categoryId: string) {
-  const { error } = await supabase.from('categories').delete().eq('id', categoryId)
+  // 1. Obtener todas las variantes de productos de esta categoría
+  const { data: variants } = await supabase
+    .from('product_variants')
+    .select('id')
+    .in(
+      'product_id',
+      supabase.from('products').select('id').eq('category_id', categoryId),
+    )
 
-  if (error) {
-    throw new Error(error.message)
+  const variantIds = (variants ?? []).map((v) => v.id)
+
+  if (variantIds.length > 0) {
+    // 2. Borrar movimientos de inventario
+    const { error: movErr } = await supabase
+      .from('inventory_movements')
+      .delete()
+      .in('variant_id', variantIds)
+    if (movErr) throw new Error(movErr.message)
+
+    // 3. Borrar stock
+    const { error: stockErr } = await supabase
+      .from('inventory_stock')
+      .delete()
+      .in('variant_id', variantIds)
+    if (stockErr) throw new Error(stockErr.message)
+
+    // 4. Borrar variantes
+    const { error: varErr } = await supabase
+      .from('product_variants')
+      .delete()
+      .in('id', variantIds)
+    if (varErr) {
+      if (varErr.code === '23503') {
+        throw new Error('No se puede eliminar: algún producto tiene ventas registradas.')
+      }
+      throw new Error(varErr.message)
+    }
   }
+
+  // 5. Borrar productos
+  const { error: prodErr } = await supabase
+    .from('products')
+    .delete()
+    .eq('category_id', categoryId)
+  if (prodErr) throw new Error(prodErr.message)
+
+  // 6. Borrar categoría
+  const { error } = await supabase.from('categories').delete().eq('id', categoryId)
+  if (error) throw new Error(error.message)
 }

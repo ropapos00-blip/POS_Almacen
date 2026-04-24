@@ -387,12 +387,14 @@ export function InventoryPage() {
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [renameCategoryTarget, setRenameCategoryTarget] = useState<{ id: string; name: string } | null>(null)
   const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<{ id: string; name: string } | null>(null)
+  const [deleteCategoryError, setDeleteCategoryError] = useState<string | null>(null)
   const [itemModal, setItemModal] = useState<{
     categoryId: string
     categoryName: string
     editItem: InventoryItemRow | null
   } | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<InventoryItemRow | null>(null)
+  const [deleteItemError, setDeleteItemError] = useState<string | null>(null)
   const [printItem, setPrintItem] = useState<InventoryItemRow | null>(null)
   const [printCopies, setPrintCopies] = useState(1)
 
@@ -432,8 +434,13 @@ export function InventoryPage() {
   }
 
   async function handleDeleteCategory(categoryId: string) {
-    await categoryMutations.deleteMutation.mutateAsync(categoryId)
-    setDeleteCategoryTarget(null)
+    setDeleteCategoryError(null)
+    try {
+      await categoryMutations.deleteMutation.mutateAsync(categoryId)
+      setDeleteCategoryTarget(null)
+    } catch {
+      setDeleteCategoryError('No se puede eliminar: la categoría tiene ítems asociados. Elimina o mueve los ítems primero.')
+    }
   }
 
   async function handleSaveItem(input: InventoryItemInput) {
@@ -671,6 +678,9 @@ export function InventoryPage() {
               Se eliminará la categoría <strong className="text-zinc-100">{deleteCategoryTarget.name}</strong>.
               Solo es posible si no tiene ítems asociados.
             </p>
+            {deleteCategoryError && (
+              <p className="mt-3 rounded-lg bg-rose-500/20 px-3 py-2 text-sm text-rose-300">{deleteCategoryError}</p>
+            )}
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
@@ -680,7 +690,7 @@ export function InventoryPage() {
               >
                 {categoryMutations.deleteMutation.isPending ? 'Eliminando…' : 'Eliminar'}
               </button>
-              <button type="button" onClick={() => setDeleteCategoryTarget(null)}
+              <button type="button" onClick={() => { setDeleteCategoryTarget(null); setDeleteCategoryError(null) }}
                 className="rounded-xl border border-zinc-700 px-4 py-2 text-sm text-zinc-400 hover:bg-zinc-800">
                 Cancelar
               </button>
@@ -697,20 +707,25 @@ export function InventoryPage() {
               Se eliminará <strong className="text-zinc-100">{deleteConfirm.description}</strong>{' '}
               junto con su variante y stock. Esta acción no se puede deshacer.
             </p>
+            {deleteItemError && (
+              <p className="mt-3 rounded-lg bg-rose-500/20 px-3 py-2 text-sm text-rose-300">{deleteItemError}</p>
+            )}
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
                 disabled={deleteItem.isPending}
                 onClick={() => {
+                  setDeleteItemError(null)
                   void deleteItem
                     .mutateAsync({ productId: deleteConfirm.productId, variantId: deleteConfirm.variantId, stockId: deleteConfirm.stockId })
-                    .then(() => setDeleteConfirm(null))
+                    .then(() => { setDeleteConfirm(null); setDeleteItemError(null) })
+                    .catch((e: unknown) => setDeleteItemError(e instanceof Error ? e.message : 'Error al eliminar.'))
                 }}
                 className="flex-1 rounded-xl bg-rose-600 py-2 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-50"
               >
                 {deleteItem.isPending ? 'Eliminando…' : 'Eliminar'}
               </button>
-              <button type="button" onClick={() => setDeleteConfirm(null)}
+              <button type="button" onClick={() => { setDeleteConfirm(null); setDeleteItemError(null) }}
                 className="rounded-xl border border-zinc-700 px-4 py-2 text-sm text-zinc-400 hover:bg-zinc-800">
                 Cancelar
               </button>
