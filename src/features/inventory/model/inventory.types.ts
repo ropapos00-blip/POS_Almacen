@@ -8,10 +8,15 @@ export interface InventoryStockRow {
   updated_at: string
   product_variants: {
     sku: string
+    barcode: string
     size: string
     color: string
+    cost_price: number
+    sale_price: number
     products: {
+      id: string
       name: string
+      category_id: string
     } | null
   } | null
 }
@@ -32,4 +37,28 @@ export interface StockAdjustmentInput {
   currentQuantity: number
   delta: number
   reason: string
+}
+
+/** Input para crear un ítem de inventario desde la UI de inventario */
+export interface InventoryItemInput {
+  categoryId: string
+  description: string
+  quantity: number
+  costPrice: number
+  markupPercent: number
+  reference: string
+}
+
+/** Vista plana de un ítem de inventario para la tabla */
+export interface InventoryItemRow {
+  stockId: string
+  variantId: string
+  productId: string
+  categoryId: string
+  description: string
+  quantity: number
+  costPrice: number
+  salePrice: number
+  reference: string
+  barcode: string
 }

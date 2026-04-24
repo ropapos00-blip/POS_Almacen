@@ -33,6 +33,7 @@ export function SalesPage() {
     viewerRole: user?.role,
   })
   const [selectedSale, setSelectedSale] = useState<SaleRow | null>(null)
+  const [shouldPrint, setShouldPrint] = useState(false)
   const receiptRef = useRef<HTMLDivElement>(null)
 
   const salesQuery = useSalesQuery(user?.storeId, filters)
@@ -63,6 +64,14 @@ export function SalesPage() {
       gross: rows.reduce((acc, row) => acc + row.grand_total, 0),
     }
   }, [salesQuery.data])
+
+  useEffect(() => {
+    if (shouldPrint && selectedSale) {
+      handlePrint()
+      setShouldPrint(false)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldPrint, selectedSale])
 
   const handlePrint = useReactToPrint({
     contentRef: receiptRef,
@@ -206,7 +215,7 @@ export function SalesPage() {
                     type="button"
                     onClick={() => {
                       setSelectedSale(sale)
-                      void handlePrint()
+                      setShouldPrint(true)
                     }}
                     className="rounded-md border border-amber-500/40 px-2 py-1 text-xs text-amber-300"
                   >

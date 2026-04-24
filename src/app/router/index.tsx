@@ -6,11 +6,11 @@ import {
   DashboardPage,
   ClientesPage,
   InventoryPage,
+  StockPage,
   LoginPage,
   ManualInvoicesPage,
   PriceCheckPage,
   PosPage,
-  ProductsPage,
   SalesPage,
   UsersPage,
   WholesaleInventoryPage,
@@ -61,14 +61,6 @@ export const appRouter = createBrowserRouter([
         ),
       },
       {
-        path: 'catalog',
-        element: withFallback(
-          <ProtectedRoute roles={['super_admin', 'admin']}>
-            <ProductsPage />
-          </ProtectedRoute>,
-        ),
-      },
-      {
         path: 'price-check',
         element: withFallback(
           <ProtectedRoute roles={['cashier']}>
@@ -81,6 +73,14 @@ export const appRouter = createBrowserRouter([
         element: withFallback(
           <ProtectedRoute roles={['super_admin', 'admin']}>
             <InventoryPage />
+          </ProtectedRoute>,
+        ),
+      },
+      {
+        path: 'stock',
+        element: withFallback(
+          <ProtectedRoute roles={['super_admin', 'admin']}>
+            <StockPage />
           </ProtectedRoute>,
         ),
       },

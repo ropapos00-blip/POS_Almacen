@@ -9,8 +9,8 @@ const storeNavItems = [
   { to: '/sales', label: 'Ventas', icon: ReceiptText },
   { to: '/manual-invoices', label: 'Factura manual', icon: FileText },
   { to: '/price-check', label: 'Consulta', icon: Package, roles: ['cashier'] },
-  { to: '/catalog', label: 'Catalogo', icon: Package, roles: ['super_admin', 'admin'] },
   { to: '/inventory', label: 'Inventario', icon: ReceiptText, roles: ['super_admin', 'admin'] },
+  { to: '/stock', label: 'Entrada Stock', icon: Package, roles: ['super_admin', 'admin'] },
   { to: '/users', label: 'Usuarios', icon: Store, roles: ['super_admin', 'admin'] },
 ]
 

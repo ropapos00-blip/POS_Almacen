@@ -17,7 +17,6 @@ const staticRoutes = [
   'login',
   'dashboard',
   'pos',
-  'catalog',
   'price-check',
   'inventory',
   'sales',

@@ -14,15 +14,15 @@ export const PosPage = lazy(() =>
   import('../../features/pos/ui/PosPage').then((m) => ({ default: m.PosPage })),
 )
 
-export const ProductsPage = lazy(() =>
-  import('../../features/catalog/products/ui/ProductsPage').then((m) => ({
-    default: m.ProductsPage,
-  })),
-)
-
 export const InventoryPage = lazy(() =>
   import('../../features/inventory/ui/InventoryPage').then((m) => ({
     default: m.InventoryPage,
+  })),
+)
+
+export const StockPage = lazy(() =>
+  import('../../features/inventory/ui/StockPage').then((m) => ({
+    default: m.StockPage,
   })),
 )
 

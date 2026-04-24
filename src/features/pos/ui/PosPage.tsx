@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { formatCop } from '../../../shared/utils/currency'
 import { formatDateTimeColombia } from '../../../shared/utils/dateTime'
@@ -19,9 +19,9 @@ function getProductName(row: Array<{ name: string }> | null) {
 
 export function PosPage() {
   const user = useAuthStore((state) => state.user)
-  const [query, setQuery] = useState('')
   const [discount, setDiscount] = useState(0)
   const [customerName, setCustomerName] = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
   const [paymentReference, setPaymentReference] = useState('')
   const [feedback, setFeedback] = useState<string | null>(null)
@@ -33,6 +33,9 @@ export function PosPage() {
   const [discountAuthorizedBy, setDiscountAuthorizedBy] = useState<string | null>(null)
   const [authorizedDiscountValue, setAuthorizedDiscountValue] = useState(0)
   const [cart, setCart] = useState<PosCartItem[]>([])
+  const [barcodeInput, setBarcodeInput] = useState('')
+  const [barcodeFeedback, setBarcodeFeedback] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
+  const barcodeRef = useRef<HTMLInputElement>(null)
   const [lastSale, setLastSale] = useState<{
     saleNumber: string
     soldAt: string
@@ -55,20 +58,6 @@ export function PosPage() {
     pageStyle: '@page { size: 56mm auto; margin: 0mm; } html, body { margin: 0 !important; padding: 0 !important; height: auto !important; min-height: 0 !important; background: white !important; }',
   })
 
-  const filtered = useMemo(() => {
-    const source = variantsQuery.data ?? []
-    const text = query.trim().toLowerCase()
-
-    if (!text) {
-      return source
-    }
-
-    return source.filter((row) => {
-      const name = getProductName(row.products).toLowerCase()
-      return name.includes(text) || row.sku.toLowerCase().includes(text) || row.barcode.toLowerCase().includes(text)
-    })
-  }, [variantsQuery.data, query])
-
   const subtotal = useMemo(() => {
     return cart.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0)
   }, [cart])
@@ -90,6 +79,56 @@ export function PosPage() {
   const hasValidDiscountAuthorization =
     !needsDiscountAuthorization ||
     (Boolean(discountAuthorizedBy) && discount <= authorizedDiscountValue)
+
+  useEffect(() => {
+    barcodeRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
+    if (!barcodeFeedback) return
+    const t = setTimeout(() => setBarcodeFeedback(null), 2000)
+    return () => clearTimeout(t)
+  }, [barcodeFeedback])
+
+  useEffect(() => {
+    if (lastSale) {
+      handlePrintTicket()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastSale])
+
+  function addByBarcode(code: string) {
+    const trimmed = code.trim().toUpperCase()
+    if (!trimmed) return
+    const source = variantsQuery.data ?? []
+    const match = source.find(
+      (it) => it.barcode.toUpperCase() === trimmed || it.sku.toUpperCase() === trimmed,
+    )
+    if (!match) {
+      setBarcodeFeedback({ type: 'err', msg: `No encontrado: ${trimmed}` })
+      setBarcodeInput('')
+      return
+    }
+    const stock = getStock(match.inventory_stock)
+    if (stock <= 0) {
+      setBarcodeFeedback({ type: 'err', msg: `Sin stock: ${getProductName(match.products)}` })
+      setBarcodeInput('')
+      return
+    }
+    addToCart({
+      variantId: match.id,
+      sku: match.sku,
+      name: getProductName(match.products),
+      size: match.size,
+      color: match.color,
+      costPrice: Number(match.cost_price),
+      unitPrice: Number(match.sale_price),
+      stockAvailable: stock,
+      quantity: 1,
+    })
+    setBarcodeFeedback({ type: 'ok', msg: `+1 ${getProductName(match.products)}` })
+    setBarcodeInput('')
+  }
 
   function addToCart(item: PosCartItem) {
     setCart((prev) => {
@@ -123,6 +162,10 @@ export function PosPage() {
         })
         .filter((item) => item.quantity > 0),
     )
+  }
+
+  function removeFromCart(variantId: string) {
+    setCart((prev) => prev.filter((item) => item.variantId !== variantId))
   }
 
   async function confirmSale() {
@@ -178,6 +221,7 @@ export function PosPage() {
       })
       setCart([])
       setCustomerName('')
+      setCustomerPhone('')
       setDiscount(0)
       setDiscountAuthorizedBy(null)
       setAuthorizedDiscountValue(0)
@@ -214,132 +258,149 @@ export function PosPage() {
   }
 
   return (
-    <section className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
-      <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+    <section className="space-y-0">
+      <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5 space-y-4">
         <h1 className="text-2xl font-semibold text-zinc-100">POS</h1>
-        <p className="mt-2 text-sm text-zinc-400">
-          Busqueda por nombre, SKU o codigo de barras.
-        </p>
 
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Buscar por nombre, SKU o barcode"
-          className="mt-6 w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm text-zinc-200"
-        />
-
-        <div className="mt-4 space-y-3">
-          {filtered.map((item) => {
-            const stock = getStock(item.inventory_stock)
-            return (
-              <div
-                key={item.id}
-                className="flex items-center justify-between rounded-xl border border-zinc-800 px-3 py-2"
-              >
-                <div>
-                  <p className="font-medium text-zinc-200">{getProductName(item.products)}</p>
-                  <p className="text-xs text-zinc-500">
-                    {item.sku} · {item.size} · {item.color}
-                  </p>
-                  <p className="text-xs text-zinc-500">Stock: {stock}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-semibold text-emerald-300">{formatCop(item.sale_price)}</p>
-                  <button
-                    type="button"
-                    disabled={stock <= 0}
-                    onClick={() => {
-                      addToCart({
-                        variantId: item.id,
-                        sku: item.sku,
-                        name: getProductName(item.products),
-                        size: item.size,
-                        color: item.color,
-                        costPrice: Number(item.cost_price),
-                        unitPrice: Number(item.sale_price),
-                        stockAvailable: stock,
-                        quantity: 1,
-                      })
-                    }}
-                    className="mt-2 rounded-lg bg-amber-400 px-2 py-1 text-xs font-semibold text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
-                  >
-                    Agregar
-                  </button>
-                </div>
-              </div>
-            )
-          })}
+        {/* Cliente */}
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block space-y-1">
+            <span className="text-xs text-zinc-400">Cliente (opcional)</span>
+            <input
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              placeholder="Nombre cliente"
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-xs text-zinc-400">Teléfono cliente (opcional)</span>
+            <input
+              value={customerPhone}
+              onChange={(e) => setCustomerPhone(e.target.value)}
+              placeholder="Teléfono"
+              inputMode="tel"
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
+            />
+          </label>
         </div>
-      </article>
 
-      <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
-        <h2 className="text-xl font-semibold text-zinc-100">Carrito</h2>
-        <p className="mt-2 text-sm text-zinc-400">{cart.length} articulos</p>
+        {/* Barcode scanner */}
+        <div className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3">
+          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-500">Escáner</p>
+          <div className="flex gap-2">
+            <input
+              ref={barcodeRef}
+              type="text"
+              value={barcodeInput}
+              onChange={(e) => setBarcodeInput(e.target.value.toUpperCase())}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  addByBarcode(barcodeInput)
+                }
+              }}
+              placeholder="Escanea el código de barras…"
+              autoComplete="off"
+              className="flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-400 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => addByBarcode(barcodeInput)}
+              className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-amber-300"
+            >
+              +
+            </button>
+          </div>
+          {barcodeFeedback && (
+            <p
+              className={`mt-2 text-xs font-medium ${
+                barcodeFeedback.type === 'ok' ? 'text-emerald-400' : 'text-rose-400'
+              }`}
+            >
+              {barcodeFeedback.msg}
+            </p>
+          )}
+        </div>
 
-        <div className="mt-4 space-y-2">
-          {cart.map((item) => (
-            <div key={item.variantId} className="rounded-lg border border-zinc-800 px-3 py-2">
-              <p className="text-sm font-medium text-zinc-200">{item.name}</p>
-              <p className="text-xs text-zinc-500">{item.sku}</p>
-              <div className="mt-2 flex items-center justify-between gap-2">
+        {/* Cart items */}
+        {cart.length > 0 && (
+          <div className="space-y-2">
+            {cart.map((item) => (
+              <div
+                key={item.variantId}
+                className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2"
+              >
+                <p className="min-w-0 flex-1 truncate text-sm text-zinc-200">{item.name}</p>
                 <input
                   type="number"
                   inputMode="numeric"
                   min={1}
                   max={item.stockAvailable}
                   value={item.quantity}
-                  onChange={(event) =>
-                    updateCartQty(item.variantId, parseIntegerInput(event.target.value, 1))
+                  onChange={(e) =>
+                    updateCartQty(item.variantId, parseIntegerInput(e.target.value, 1))
                   }
-                  className="w-20 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm"
+                  className="w-16 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-center text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
                 />
-                <p className="text-sm font-semibold text-emerald-300">
+                <p className="w-28 shrink-0 text-right text-sm font-semibold text-emerald-300">
                   {formatCop(item.unitPrice * item.quantity)}
                 </p>
+                <button
+                  type="button"
+                  onClick={() => removeFromCart(item.variantId)}
+                  className="shrink-0 rounded-lg border border-rose-500/50 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20"
+                >
+                  Quitar
+                </button>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
-        <div className="mt-5 space-y-2 text-sm text-zinc-300">
-          <label className="block space-y-1">
-            <span className="text-xs text-zinc-400">Cliente (opcional)</span>
-            <input
-              value={customerName}
-              onChange={(event) => setCustomerName(event.target.value)}
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2"
-            />
-          </label>
-
-          <label className="block space-y-1">
-            <span className="text-xs text-zinc-400">Descuento</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              min={0}
-              value={discount === 0 ? '' : formatCopInput(discount)}
-              placeholder="0"
-              onChange={(event) => {
-                const nextDiscount = parseCopIntegerInput(event.target.value, 0)
-                setDiscount(nextDiscount)
-                if (nextDiscount <= 0) {
-                  setDiscountAuthorizedBy(null)
-                  setAuthorizedDiscountValue(0)
-                }
-              }}
-              max={maxAllowedDiscount}
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2"
-            />
-            <span className="text-xs text-zinc-500">
-              Maximo permitido por costo: {formatCop(maxAllowedDiscount)}
-            </span>
-          </label>
+        {/* Payment + totals */}
+        <div className="space-y-3 border-t border-zinc-800 pt-4 text-sm text-zinc-300">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block space-y-1">
+              <span className="text-xs text-zinc-400">Método de pago</span>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
+              >
+                <option value="cash">Efectivo</option>
+                <option value="card">Tarjeta</option>
+                <option value="transfer">Transferencia</option>
+                <option value="mixed">Mixto</option>
+              </select>
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs text-zinc-400">Descuento</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={discount === 0 ? '' : formatCopInput(discount)}
+                placeholder="0"
+                onChange={(e) => {
+                  const next = parseCopIntegerInput(e.target.value, 0)
+                  setDiscount(next)
+                  if (next <= 0) {
+                    setDiscountAuthorizedBy(null)
+                    setAuthorizedDiscountValue(0)
+                  }
+                }}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
+              />
+              <span className="text-xs text-zinc-500">
+                Máx: {formatCop(maxAllowedDiscount)}
+              </span>
+            </label>
+          </div>
 
           {needsDiscountAuthorization ? (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-200">
               {hasValidDiscountAuthorization
                 ? `Descuento autorizado por ${discountAuthorizedBy}.`
-                : 'Este descuento necesita autorizacion de admin/super admin.'}
+                : 'Este descuento necesita autorización de admin/super admin.'}
               <button
                 type="button"
                 onClick={() => setAuthorizationModalOpen(true)}
@@ -350,68 +411,33 @@ export function PosPage() {
             </div>
           ) : null}
 
-          <label className="block space-y-1">
-            <span className="text-xs text-zinc-400">Metodo de pago</span>
-            <select
-              value={paymentMethod}
-              onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2"
-            >
-              <option value="cash">Efectivo</option>
-              <option value="card">Tarjeta</option>
-              <option value="transfer">Transferencia</option>
-              <option value="mixed">Mixto</option>
-            </select>
-          </label>
-
-          <label className="block space-y-1">
-            <span className="text-xs text-zinc-400">Referencia pago</span>
-            <input
-              value={paymentReference}
-              onChange={(event) => setPaymentReference(event.target.value)}
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2"
-            />
-          </label>
-
-          <div className="mt-3 border-t border-zinc-800 pt-3">
-            <div className="flex justify-between">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 space-y-1">
+            <div className="flex justify-between text-zinc-400">
               <span>Subtotal</span>
               <span>{formatCop(subtotal)}</span>
             </div>
-            <div className="mt-1 flex justify-between">
+            <div className="flex justify-between text-zinc-400">
               <span>Descuento</span>
               <span>{formatCop(discount)}</span>
             </div>
-            <div className="mt-2 flex justify-between text-base font-semibold text-zinc-100">
+            <div className="flex justify-between text-base font-bold text-zinc-100 pt-1 border-t border-zinc-800">
               <span>Total</span>
               <span>{formatCop(total)}</span>
             </div>
           </div>
         </div>
 
-        {feedback ? <p className="mt-3 text-sm text-amber-300">{feedback}</p> : null}
+        {feedback ? <p className="text-sm text-amber-300">{feedback}</p> : null}
 
         <button
           type="button"
           disabled={saleMutation.isPending || !hasValidDiscountAuthorization}
-          onClick={() => {
-            void confirmSale()
-          }}
-          className="mt-6 w-full rounded-xl bg-amber-400 px-4 py-3 font-semibold text-zinc-900 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+          onClick={() => { void confirmSale() }}
+          className="w-full rounded-xl bg-amber-400 px-4 py-3 font-semibold text-zinc-900 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
         >
-          {saleMutation.isPending ? 'Procesando...' : 'Confirmar venta'}
+          {saleMutation.isPending ? 'Procesando...' : 'Guardar e imprimir ticket'}
         </button>
 
-        <button
-          type="button"
-          disabled={!lastSale}
-          onClick={() => {
-            void handlePrintTicket()
-          }}
-          className="mt-2 w-full rounded-xl border border-zinc-700 px-4 py-3 font-semibold text-zinc-200 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Imprimir ticket
-        </button>
       </article>
 
       <SaleReceipt receiptRef={receiptRef} data={lastSale} />
@@ -458,9 +484,7 @@ export function PosPage() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  void authorizeDiscount()
-                }}
+                onClick={() => { void authorizeDiscount() }}
                 disabled={isAuthorizingDiscount}
                 className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-zinc-900 disabled:opacity-70"
               >
@@ -473,3 +497,4 @@ export function PosPage() {
     </section>
   )
 }
+
