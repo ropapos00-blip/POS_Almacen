@@ -18,7 +18,7 @@ export async function listPosVariants(storeId: string) {
     throw new Error(error.message)
   }
 
-  return (data ?? []) as PosVariant[]
+  return (data ?? []) as unknown as PosVariant[]
 }
 
 export async function createPosSale(payload: PosSalePayload) {

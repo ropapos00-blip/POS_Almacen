@@ -19,6 +19,7 @@ import {
   useManualInvoicePaymentKpisQuery,
 } from '../model/useManualInvoicesQueries'
 import type { ManualExpenseRow, ManualInvoiceRow, ManualPaymentMethod } from '../model/manualInvoices.types'
+import { usePosVariantsQuery } from '../../pos/model/usePosQueries'
 import { ManualInvoiceReceipt } from './ManualInvoiceReceipt'
 import { ExpenseReceipt } from './ExpenseReceipt'
 
@@ -28,6 +29,7 @@ interface DraftItem {
   description: string
   quantity: number
   unitPrice: number
+  variantId?: string
 }
 
 function paymentLabel(method: ManualPaymentMethod) {
@@ -132,6 +134,9 @@ export function ManualInvoicesPage() {
   const [expenseForDelete, setExpenseForDelete] = useState<ManualExpenseRow | null>(null)
   const receiptRef = useRef<HTMLDivElement>(null)
   const expenseReceiptRef = useRef<HTMLDivElement>(null)
+  const barcodeRef = useRef<HTMLInputElement>(null)
+  const [barcodeInput, setBarcodeInput] = useState('')
+  const [barcodeFeedback, setBarcodeFeedback] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
 
   const invoicesQuery = useManualInvoicesQuery(user?.storeId)
   const manualKpisQuery = useManualInvoiceKpisQuery(user?.storeId, isAdminUser)
@@ -143,6 +148,7 @@ export function ManualInvoicesPage() {
   const createExpenseMutation = useCreateManualExpenseMutation(user?.storeId)
   const updateExpenseMutation = useUpdateManualExpenseMutation(user?.storeId)
   const deleteExpenseMutation = useDeleteManualExpenseMutation(user?.storeId)
+  const variantsQuery = usePosVariantsQuery(user?.storeId)
 
   const handlePrint = useReactToPrint({
     contentRef: receiptRef,
@@ -188,6 +194,12 @@ export function ManualInvoicesPage() {
     }
   }, [editAllowsPaymentReference, editPaymentReference])
 
+  useEffect(() => {
+    if (!barcodeFeedback) return
+    const t = setTimeout(() => setBarcodeFeedback(null), 2500)
+    return () => clearTimeout(t)
+  }, [barcodeFeedback])
+
   function updateDraftItem(id: string, field: keyof DraftItem, value: string | number) {
     setDraftItems((prev) =>
       prev.map((item) => {
@@ -214,11 +226,69 @@ export function ManualInvoicesPage() {
     })
   }
 
+  function addByBarcode(code: string) {
+    const trimmed = code.trim().toUpperCase()
+    if (!trimmed) return
+    const source = variantsQuery.data ?? []
+    const match = source.find(
+      (it) => it.barcode.toUpperCase() === trimmed || it.sku.toUpperCase() === trimmed,
+    )
+    if (!match) {
+      setBarcodeFeedback({ type: 'err', msg: `No encontrado en inventario: ${trimmed}` })
+      setBarcodeInput('')
+      return
+    }
+    const stock = match.inventory_stock?.[0]?.quantity_on_hand ?? 0
+    const existing = draftItems.find((item) => item.variantId === match.id)
+    if (existing) {
+      if (existing.quantity >= stock) {
+        setBarcodeFeedback({ type: 'err', msg: `Stock máximo alcanzado: ${stock} ud.` })
+        setBarcodeInput('')
+        return
+      }
+      setDraftItems((prev) =>
+        prev.map((item) =>
+          item.variantId === match.id ? { ...item, quantity: item.quantity + 1 } : item,
+        ),
+      )
+      setBarcodeFeedback({ type: 'ok', msg: `+1 ${match.products?.name ?? match.sku}` })
+      setBarcodeInput('')
+      return
+    }
+    if (stock <= 0) {
+      setBarcodeFeedback({ type: 'err', msg: `Sin stock: ${match.products?.name ?? match.sku}` })
+      setBarcodeInput('')
+      return
+    }
+    const productName = match.products?.name ?? match.sku
+    const parts = [productName, match.size, match.color].filter(Boolean)
+    const description = parts.join(' - ')
+    setDraftItems((prev) => {
+      const emptyIdx = prev.findIndex(
+        (item) => !item.variantId && !item.description.trim() && item.unitPrice === 0,
+      )
+      if (emptyIdx !== -1) {
+        return prev.map((item, i) =>
+          i === emptyIdx
+            ? { ...item, description, unitPrice: Number(match.sale_price), variantId: match.id }
+            : item,
+        )
+      }
+      return [
+        ...prev,
+        { id: createClientId(), description, quantity: 1, unitPrice: Number(match.sale_price), variantId: match.id },
+      ]
+    })
+    setBarcodeFeedback({ type: 'ok', msg: `✓ ${productName} — ${formatCop(Number(match.sale_price))}` })
+    setBarcodeInput('')
+  }
+
   const cleanedItemsForValidation = draftItems
     .map((item) => ({
       description: item.description.trim(),
       quantity: Math.max(0, Number(item.quantity || 0)),
       unitPrice: Math.max(0, Number(item.unitPrice || 0)),
+      variantId: item.variantId,
     }))
     .filter((item) => item.description && item.quantity > 0)
 
@@ -614,11 +684,46 @@ export function ManualInvoicesPage() {
           <p className="mt-2 text-xs text-zinc-500">Cargando KPI provisionales...</p>
         ) : null}
 
-        <div className="mt-5 space-y-2">
+        {/* Barcode scanner — optional inventory lookup */}
+        <div className="mt-5 rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3">
+          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-500">Buscar en inventario (opcional)</p>
+          <div className="flex gap-2">
+            <input
+              ref={barcodeRef}
+              type="text"
+              value={barcodeInput}
+              onChange={(e) => setBarcodeInput(e.target.value.toUpperCase())}
+              onKeyDown={(e) => { if (e.key === 'Enter') { addByBarcode(barcodeInput) } }}
+              placeholder="Escanea o escribe código de barras…"
+              autoComplete="off"
+              className="flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-400 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => addByBarcode(barcodeInput)}
+              className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-amber-300"
+            >
+              +
+            </button>
+          </div>
+          {barcodeFeedback && (
+            <p className={`mt-2 text-xs font-medium ${
+              barcodeFeedback.type === 'ok' ? 'text-emerald-400' : 'text-rose-400'
+            }`}>
+              {barcodeFeedback.msg}
+            </p>
+          )}
+        </div>
+
+        <div className="mt-3 space-y-2">
           {draftItems.map((item, index) => (
             <div
               key={item.id}
-              className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1.5fr_90px_120px_auto]"
+              className={`grid gap-2 rounded-xl border p-3 md:grid-cols-[1.5fr_90px_120px_auto] ${
+                item.variantId
+                  ? 'border-emerald-700/40 bg-emerald-950/20'
+                  : 'border-zinc-800 bg-zinc-950/60'
+              }`}
             >
               <input
                 value={item.description}

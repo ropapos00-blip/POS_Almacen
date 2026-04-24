@@ -309,6 +309,7 @@ export async function createManualInvoice(input: CreateManualInvoiceInput) {
       description: item.description.trim(),
       quantity: item.quantity,
       unit_price: item.unitPrice,
+      ...(item.variantId ? { variant_id: item.variantId } : {}),
     })),
   })
 

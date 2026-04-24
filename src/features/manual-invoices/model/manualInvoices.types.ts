@@ -42,6 +42,7 @@ export interface CreateManualInvoiceInput {
     description: string
     quantity: number
     unitPrice: number
+    variantId?: string
   }>
 }
 
