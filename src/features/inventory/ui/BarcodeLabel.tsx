@@ -20,7 +20,7 @@ export function BarcodeLabel({ item }: BarcodeLabelProps) {
     JsBarcode(svgRef.current, item.barcode, {
       format: 'CODE128',
       width: 1.2,
-      height: 16,
+      height: 22,
       displayValue: false,
       lineColor: '#000000',
       background: '#ffffff',
