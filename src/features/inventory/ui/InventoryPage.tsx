@@ -25,7 +25,7 @@ function generateRef(description: string) {
     .toUpperCase()
     .slice(0, 4)
     .padEnd(4, 'X')
-  return `${clean}-${Date.now().toString().slice(-5)}`
+  return `${clean}0${Date.now().toString().slice(-4)}`
 }
 
 // ─── empty form state ─────────────────────────────────────────────────────────
@@ -209,7 +209,7 @@ function ItemModal({
               <label className="mb-1 block text-xs text-zinc-400">Referencia (código de barras)</label>
               <input
                 type="text"
-                placeholder="Ej: JEAN-SLM-001"
+                placeholder="Ej: JEAN07465"
                 value={form.reference}
                 onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value.toUpperCase() }))}
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-400 focus:outline-none"

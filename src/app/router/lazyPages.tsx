@@ -52,6 +52,12 @@ export const WholesalePage = lazy(() =>
   })),
 )
 
+export const CustomersRetailPage = lazy(() =>
+  import('../../features/customers/ui/CustomersPage').then((m) => ({
+    default: m.CustomersPage,
+  })),
+)
+
 export const WholesaleInventoryPage = lazy(() =>
   import('../../features/wholesale/ui/WholesaleInventoryPage').then((m) => ({
     default: m.WholesaleInventoryPage,

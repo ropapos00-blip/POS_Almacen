@@ -11,6 +11,7 @@ const storeNavItems = [
   { to: '/price-check', label: 'Consulta', icon: Package, roles: ['cashier'] },
   { to: '/inventory', label: 'Inventario', icon: ReceiptText, roles: ['super_admin', 'admin'] },
   { to: '/stock', label: 'Entrada Stock', icon: Package, roles: ['super_admin', 'admin'] },
+  { to: '/customers', label: 'Clientes', icon: Users, roles: ['super_admin', 'admin', 'cashier'] },
   { to: '/users', label: 'Usuarios', icon: Store, roles: ['super_admin', 'admin'] },
 ]
 

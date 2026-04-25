@@ -8,6 +8,7 @@ import { useCreatePosSaleMutation, usePosVariantsQuery } from '../model/usePosQu
 import type { PaymentMethod, PosPaymentMethod, PosCartItem } from '../model/pos.types'
 import { authorizeDiscountOverride } from '../services/posService'
 import { SaleReceipt } from './SaleReceipt'
+import { CustomerPicker } from '../../customers/ui/CustomerPicker'
 
 function getStock(row: { quantity_on_hand: number }[] | null) {
   return row?.[0]?.quantity_on_hand ?? 0
@@ -297,26 +298,14 @@ export function PosPage() {
         <h1 className="text-2xl font-semibold text-zinc-100">POS</h1>
 
         {/* Cliente */}
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block space-y-1">
-            <span className="text-xs text-zinc-400">Cliente (opcional)</span>
-            <input
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              placeholder="Nombre cliente"
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs text-zinc-400">Teléfono cliente (opcional)</span>
-            <input
-              value={customerPhone}
-              onChange={(e) => setCustomerPhone(e.target.value)}
-              placeholder="Teléfono"
-              inputMode="tel"
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
-            />
-          </label>
+        <div className="space-y-1">
+          <span className="text-xs text-zinc-400">Cliente (opcional)</span>
+          <CustomerPicker
+            storeId={user?.storeId ?? ''}
+            name={customerName}
+            phone={customerPhone}
+            onSelect={(n, p) => { setCustomerName(n); setCustomerPhone(p) }}
+          />
         </div>
 
         {/* Barcode scanner */}
