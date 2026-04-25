@@ -24,6 +24,7 @@ const staticRoutes = [
   'manual-invoices',
   'users',
   'confeccion',
+  'layaways',
   'confeccion/dashboard',
   'confeccion/ventas',
   'confeccion/cartera',

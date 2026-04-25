@@ -69,3 +69,9 @@ export const ClientesPage = lazy(() =>
     default: m.ClientesPage,
   })),
 )
+
+export const LayawaysPage = lazy(() =>
+  import('../../features/layaways/ui/LayawaysPage').then((m) => ({
+    default: m.LayawaysPage,
+  })),
+)

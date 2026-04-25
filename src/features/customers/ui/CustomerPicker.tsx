@@ -7,9 +7,10 @@ interface CustomerPickerProps {
   name: string
   phone: string
   onSelect: (name: string, phone: string) => void
+  autoFocus?: boolean
 }
 
-export function CustomerPicker({ storeId, name, phone, onSelect }: CustomerPickerProps) {
+export function CustomerPicker({ storeId, name, phone, onSelect, autoFocus }: CustomerPickerProps) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<StoreCustomer[]>([])
   const [searching, setSearching] = useState(false)
@@ -137,6 +138,7 @@ export function CustomerPicker({ storeId, name, phone, onSelect }: CustomerPicke
           if (query.length >= 2) setShowDropdown(true)
         }}
         placeholder="Buscar cliente por nombre o teléfono…"
+        autoFocus={autoFocus}
         className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-400 focus:outline-none"
       />
 

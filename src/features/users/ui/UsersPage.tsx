@@ -36,6 +36,7 @@ const STORE_NAV_ROUTE_OPTIONS = [
   { route: '/manual-invoices', label: 'Factura manual' },
   { route: '/inventory', label: 'Inventario' },
   { route: '/stock', label: 'Entrada Stock' },
+  { route: '/layaways', label: 'Separados' },
   { route: '/customers', label: 'Clientes' },
   { route: '/users', label: 'Usuarios' },
 ] as const
