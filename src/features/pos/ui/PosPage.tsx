@@ -20,7 +20,6 @@ function getProductName(row: { name: string } | null) {
 
 export function PosPage() {
   const user = useAuthStore((state) => state.user)
-  const [discount, setDiscount] = useState(0)
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
@@ -31,7 +30,6 @@ export function PosPage() {
   const [pinInput, setPinInput] = useState('')
   const [isAuthorizingDiscount, setIsAuthorizingDiscount] = useState(false)
   const [discountAuthorizedBy, setDiscountAuthorizedBy] = useState<string | null>(null)
-  const [authorizedDiscountValue, setAuthorizedDiscountValue] = useState(0)
   const [cart, setCart] = useState<PosCartItem[]>([])
   const [mixedFirstMethod, setMixedFirstMethod] = useState<PosPaymentMethod>('cash')
   const [mixedFirstAmount, setMixedFirstAmount] = useState(0)
@@ -84,19 +82,18 @@ export function PosPage() {
   const pinRequired =
     discountPinQuery.data?.enabled === true && discountPinQuery.data?.hasPin === true
 
-  const effectiveMaxDiscount = useMemo(() => {
-    return maxAllowedDiscount
-  }, [maxAllowedDiscount])
+  const totalDiscount = useMemo(() => {
+    return cart.reduce((acc, item) => acc + (item.discount ?? 0), 0)
+  }, [cart])
 
   const total = useMemo(() => {
-    return Math.max(0, subtotal - discount)
-  }, [subtotal, discount])
+    return Math.max(0, subtotal - totalDiscount)
+  }, [subtotal, totalDiscount])
 
-  const needsDiscountAuthorization = user?.role === 'cashier' && pinRequired && discount > 0
+  const needsDiscountAuthorization = user?.role === 'cashier' && pinRequired && totalDiscount > 0
 
   const hasValidDiscountAuthorization =
-    !needsDiscountAuthorization ||
-    (Boolean(discountAuthorizedBy) && discount <= authorizedDiscountValue)
+    !needsDiscountAuthorization || Boolean(discountAuthorizedBy)
 
   useEffect(() => {
     barcodeRef.current?.focus()
@@ -149,6 +146,7 @@ export function PosPage() {
       unitPrice: Number(match.sale_price),
       stockAvailable: stock,
       quantity: 1,
+      discount: 0,
     })
     setBarcodeFeedback({ type: 'ok', msg: `+1 ${getProductName(match.products)}` })
     setBarcodeInput('')
@@ -192,6 +190,14 @@ export function PosPage() {
     setCart((prev) => prev.filter((item) => item.variantId !== variantId))
   }
 
+  function updateCartItemDiscount(variantId: string, amount: number) {
+    setCart((prev) =>
+      prev.map((item) =>
+        item.variantId === variantId ? { ...item, discount: amount } : item,
+      ),
+    )
+  }
+
   async function confirmSale() {
     setFeedback(null)
 
@@ -202,11 +208,6 @@ export function PosPage() {
 
     if (cart.length === 0) {
       setFeedback('Agrega items al carrito antes de confirmar.')
-      return
-    }
-
-    if (discount > maxAllowedDiscount) {
-      setFeedback(`Descuento invalido. Maximo permitido: ${formatCop(maxAllowedDiscount)}.`)
       return
     }
 
@@ -228,7 +229,7 @@ export function PosPage() {
       const result = await saleMutation.mutateAsync({
         storeId: user.storeId,
         soldBy: user.id,
-        discountTotal: Number(discount.toFixed(2)),
+        discountTotal: Number(totalDiscount.toFixed(2)),
         customerName,
         paymentMethod,
         paymentReference,
@@ -255,16 +256,14 @@ export function PosPage() {
         mixedSecondMethod: paymentMethod === 'mixed' ? mixedSecondMethod : undefined,
         mixedSecondAmount: paymentMethod === 'mixed' ? mixedSecondAmount : undefined,
         subtotal,
-        discount,
+        discount: totalDiscount,
         total,
         items: cart,
       })
       setCart([])
       setCustomerName('')
       setCustomerPhone('')
-      setDiscount(0)
       setDiscountAuthorizedBy(null)
-      setAuthorizedDiscountValue(0)
       setPaymentReference('')
       setMixedFirstMethod('cash')
       setMixedFirstAmount(0)
@@ -296,7 +295,6 @@ export function PosPage() {
         return
       }
       setDiscountAuthorizedBy('PIN')
-      setAuthorizedDiscountValue(maxAllowedDiscount)
       setPinInput('')
       setAuthorizationModalOpen(false)
       setFeedback(null)
@@ -365,92 +363,85 @@ export function PosPage() {
         {/* Cart items */}
         {cart.length > 0 && (
           <div className="space-y-2">
-            {cart.map((item) => (
-              <div
-                key={item.variantId}
-                className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2"
-              >
-                <p className="min-w-0 flex-1 truncate text-sm text-zinc-200">{item.name}</p>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={1}
-                  max={item.stockAvailable}
-                  value={item.quantity}
-                  onChange={(e) =>
-                    updateCartQty(item.variantId, parseIntegerInput(e.target.value, 1))
-                  }
-                  className="w-16 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-center text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
-                />
-                <p className="w-28 shrink-0 text-right text-sm font-semibold text-emerald-300">
-                  {formatCop(item.unitPrice * item.quantity)}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => removeFromCart(item.variantId)}
-                  className="shrink-0 rounded-lg border border-rose-500/50 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20"
+            {cart.map((item) => {
+              const itemMaxDiscount = Math.max(0, (item.unitPrice - item.costPrice) * item.quantity)
+              return (
+                <div
+                  key={item.variantId}
+                  className="rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 space-y-2"
                 >
-                  Quitar
-                </button>
-              </div>
-            ))}
+                  <div className="flex items-center gap-2">
+                    <p className="min-w-0 flex-1 truncate text-sm text-zinc-200">{item.name}</p>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      max={item.stockAvailable}
+                      value={item.quantity}
+                      onChange={(e) =>
+                        updateCartQty(item.variantId, parseIntegerInput(e.target.value, 1))
+                      }
+                      className="w-16 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-center text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
+                    />
+                    <p className="w-28 shrink-0 text-right text-sm font-semibold text-emerald-300">
+                      {formatCop(item.unitPrice * item.quantity)}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => removeFromCart(item.variantId)}
+                      className="shrink-0 rounded-lg border border-rose-500/50 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20"
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-zinc-500 shrink-0">Dcto:</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={item.discount === 0 ? '' : formatCopInput(item.discount)}
+                      placeholder="0"
+                      readOnly={user?.role === 'cashier' && pinRequired && !discountAuthorizedBy}
+                      onClick={() => {
+                        if (user?.role === 'cashier' && pinRequired && !discountAuthorizedBy) {
+                          setPinInput('')
+                          setAuthorizationFeedback(null)
+                          setAuthorizationModalOpen(true)
+                        }
+                      }}
+                      onChange={(e) => {
+                        const next = Math.min(parseCopIntegerInput(e.target.value, 0), itemMaxDiscount)
+                        updateCartItemDiscount(item.variantId, next)
+                      }}
+                      className="w-28 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 focus:border-amber-400 focus:outline-none read-only:cursor-pointer"
+                    />
+                    <span className="text-xs text-zinc-500">máx {formatCop(itemMaxDiscount)}</span>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
 
         {/* Payment + totals */}
         <div className="space-y-3 border-t border-zinc-800 pt-4 text-sm text-zinc-300">
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block space-y-1">
-              <span className="text-xs text-zinc-400">Método de pago</span>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
-              >
-                <option value="cash">Efectivo</option>
-                <option value="addi">Addi</option>
-                <option value="credilondon">CREDILONDON</option>
-                <option value="dataphone">Datáfono</option>
-                <option value="bancolombia">Bancolombia</option>
-                <option value="daviplata">Daviplata</option>
-                <option value="nequi">Nequi</option>
-                <option value="mixed">Mixto</option>
-              </select>
-            </label>
-            <label className="block space-y-1">
-              <span className="text-xs text-zinc-400">Descuento</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={discount === 0 ? '' : formatCopInput(discount)}
-                placeholder="0"
-                readOnly={user?.role === 'cashier' && pinRequired && !discountAuthorizedBy}
-                onClick={() => {
-                  if (user?.role === 'cashier' && pinRequired && !discountAuthorizedBy) {
-                    setPinInput('')
-                    setAuthorizationFeedback(null)
-                    setAuthorizationModalOpen(true)
-                  }
-                }}
-                onChange={(e) => {
-                  const next = Math.min(parseCopIntegerInput(e.target.value, 0), effectiveMaxDiscount)
-                  setDiscount(next)
-                  if (next <= 0) {
-                    setDiscountAuthorizedBy(null)
-                    setAuthorizedDiscountValue(0)
-                  }
-                }}
-                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 read-only:cursor-pointer"
-              />
-              {user?.role === 'cashier' && pinRequired && !discountAuthorizedBy ? (
-                <span className="text-xs text-zinc-500">Toca para ingresar clave</span>
-              ) : (
-                <span className="text-xs text-zinc-500">
-                  Máx: {formatCop(effectiveMaxDiscount)}
-                </span>
-              )}
-            </label>
-          </div>
+          <label className="block space-y-1">
+            <span className="text-xs text-zinc-400">Método de pago</span>
+            <select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
+            >
+              <option value="cash">Efectivo</option>
+              <option value="addi">Addi</option>
+              <option value="credilondon">CREDILONDON</option>
+              <option value="dataphone">Datáfono</option>
+              <option value="bancolombia">Bancolombia</option>
+              <option value="daviplata">Daviplata</option>
+              <option value="nequi">Nequi</option>
+              <option value="mixed">Mixto</option>
+            </select>
+          </label>
 
           {paymentMethod === 'mixed' ? (
             <div className="rounded-xl border border-zinc-700 bg-zinc-950/80 p-3 space-y-3">
@@ -527,7 +518,7 @@ export function PosPage() {
             </div>
             <div className="flex justify-between text-zinc-400">
               <span>Descuento</span>
-              <span>{formatCop(discount)}</span>
+              <span>{formatCop(totalDiscount)}</span>
             </div>
             <div className="flex justify-between text-base font-bold text-zinc-100 pt-1 border-t border-zinc-800">
               <span>Total</span>

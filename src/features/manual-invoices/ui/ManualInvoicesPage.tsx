@@ -31,6 +31,7 @@ interface DraftItem {
   description: string
   quantity: number
   unitPrice: number
+  discount: number
   costPrice?: number
   variantId?: string
 }
@@ -64,6 +65,7 @@ function createDraftItem(): DraftItem {
     description: '',
     quantity: 1,
     unitPrice: 0,
+    discount: 0,
   }
 }
 
@@ -103,7 +105,6 @@ export function ManualInvoicesPage() {
   }, [])
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
-  const [discountTotal, setDiscountTotal] = useState(0)
   const [discountAuthorizedBy, setDiscountAuthorizedBy] = useState<string | null>(null)
   const [pinModalOpen, setPinModalOpen] = useState(false)
   const [pinInput, setPinInput] = useState('')
@@ -186,6 +187,10 @@ export function ManualInvoicesPage() {
 
   const totalCost = useMemo(() => {
     return draftItems.reduce((acc, item) => acc + (item.costPrice ?? 0) * item.quantity, 0)
+  }, [draftItems])
+
+  const discountTotal = useMemo(() => {
+    return draftItems.reduce((acc, item) => acc + (item.discount ?? 0), 0)
   }, [draftItems])
 
   const maxAllowedDiscount = useMemo(() => {
@@ -295,7 +300,7 @@ export function ManualInvoicesPage() {
       }
       return [
         ...prev,
-        { id: createClientId(), description, quantity: 1, unitPrice: Number(match.sale_price), costPrice: Number(match.cost_price), variantId: match.id },
+        { id: createClientId(), description, quantity: 1, unitPrice: Number(match.sale_price), costPrice: Number(match.cost_price), variantId: match.id, discount: 0 },
       ]
     })
     setBarcodeFeedback({ type: 'ok', msg: `✓ ${productName} — ${formatCop(Number(match.sale_price))}` })
@@ -391,7 +396,6 @@ export function ManualInvoicesPage() {
       setFeedback(`Factura manual creada: ${result.invoiceNumber}`)
       setCustomerName('')
       setCustomerPhone('')
-      setDiscountTotal(0)
       setDiscountAuthorizedBy(null)
       setPaymentMethod('cash')
       setPaymentReference('')
@@ -736,59 +740,87 @@ export function ManualInvoicesPage() {
         </div>
 
         <div className="mt-3 space-y-2">
-          {draftItems.map((item, index) => (
-            <div
-              key={item.id}
-              className={`grid gap-2 rounded-xl border p-3 md:grid-cols-[1.5fr_90px_120px_auto] ${
-                item.variantId
-                  ? 'border-emerald-700/40 bg-emerald-950/20'
-                  : 'border-zinc-800 bg-zinc-950/60'
-              }`}
-            >
-              <input
-                value={item.description}
-                onChange={(event) => updateDraftItem(item.id, 'description', event.target.value)}
-                placeholder={`Descripcion item ${index + 1}`}
-                className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-              />
-              <input
-                type="number"
-                inputMode="numeric"
-                min={1}
-                value={item.quantity}
-                onChange={(event) =>
-                  updateDraftItem(
-                    item.id,
-                    'quantity',
-                    Math.max(1, parseIntegerInput(event.target.value, 1)),
-                  )
-                }
-                className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-              />
-              <input
-                type="text"
-                inputMode="numeric"
-                min={0}
-                value={item.unitPrice === 0 ? '' : formatCopInput(item.unitPrice)}
-                placeholder="Precio"
-                onChange={(event) =>
-                  updateDraftItem(
-                    item.id,
-                    'unitPrice',
-                    Math.max(0, parseCopIntegerInput(event.target.value, 0)),
-                  )
-                }
-                className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-              />
-              <button
-                type="button"
-                onClick={() => removeDraftItem(item.id)}
-                className="rounded-lg border border-rose-500/40 px-3 py-2 text-xs text-rose-300"
+          {draftItems.map((item, index) => {
+            const itemMaxDiscount = Math.max(0, (item.unitPrice - (item.costPrice ?? 0)) * item.quantity)
+            return (
+              <div
+                key={item.id}
+                className={`space-y-2 rounded-xl border p-3 ${
+                  item.variantId
+                    ? 'border-emerald-700/40 bg-emerald-950/20'
+                    : 'border-zinc-800 bg-zinc-950/60'
+                }`}
               >
-                Quitar
-              </button>
-            </div>
-          ))}
+                <div className="grid gap-2 md:grid-cols-[1.5fr_90px_120px_auto]">
+                  <input
+                    value={item.description}
+                    onChange={(event) => updateDraftItem(item.id, 'description', event.target.value)}
+                    placeholder={`Descripcion item ${index + 1}`}
+                    className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    value={item.quantity}
+                    onChange={(event) =>
+                      updateDraftItem(
+                        item.id,
+                        'quantity',
+                        Math.max(1, parseIntegerInput(event.target.value, 1)),
+                      )
+                    }
+                    className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    min={0}
+                    value={item.unitPrice === 0 ? '' : formatCopInput(item.unitPrice)}
+                    placeholder="Precio"
+                    onChange={(event) =>
+                      updateDraftItem(
+                        item.id,
+                        'unitPrice',
+                        Math.max(0, parseCopIntegerInput(event.target.value, 0)),
+                      )
+                    }
+                    className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeDraftItem(item.id)}
+                    className="rounded-lg border border-rose-500/40 px-3 py-2 text-xs text-rose-300"
+                  >
+                    Quitar
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-zinc-500 shrink-0">Dcto:</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={item.discount === 0 ? '' : formatCopInput(item.discount)}
+                    placeholder="0"
+                    readOnly={user?.role === 'cashier' && pinRequired && !discountAuthorizedBy}
+                    onClick={() => {
+                      if (user?.role === 'cashier' && pinRequired && !discountAuthorizedBy) {
+                        setPinInput('')
+                        setPinFeedback(null)
+                        setPinModalOpen(true)
+                      }
+                    }}
+                    onChange={(event) => {
+                      const next = Math.min(parseCopIntegerInput(event.target.value, 0), itemMaxDiscount)
+                      updateDraftItem(item.id, 'discount', next)
+                    }}
+                    className="w-28 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 focus:border-amber-400 focus:outline-none read-only:cursor-pointer"
+                  />
+                  <span className="text-xs text-zinc-500">máx {formatCop(itemMaxDiscount)}</span>
+                </div>
+              </div>
+            )
+          })}
         </div>
 
         <div className="mt-3 flex gap-2">
@@ -893,38 +925,6 @@ export function ManualInvoicesPage() {
               </div>
             </div>
           ) : null}
-
-          <label className="space-y-1">
-            <span className="text-xs text-zinc-400">Descuento</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              min={0}
-              value={discountTotal === 0 ? '' : formatCopInput(discountTotal)}
-              placeholder="0"
-              readOnly={user?.role === 'cashier' && pinRequired && !discountAuthorizedBy}
-              onClick={() => {
-                if (user?.role === 'cashier' && pinRequired && !discountAuthorizedBy) {
-                  setPinInput('')
-                  setPinFeedback(null)
-                  setPinModalOpen(true)
-                }
-              }}
-              onChange={(event) => {
-                const next = Math.min(parseCopIntegerInput(event.target.value, 0), maxAllowedDiscount)
-                setDiscountTotal(next)
-                if (next <= 0) {
-                  setDiscountAuthorizedBy(null)
-                }
-              }}
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none read-only:cursor-pointer"
-            />
-            {user?.role === 'cashier' && pinRequired && !discountAuthorizedBy ? (
-              <span className="text-xs text-zinc-500">Toca para ingresar clave</span>
-            ) : (
-              <span className="text-xs text-zinc-500">Máx: {formatCop(maxAllowedDiscount)}</span>
-            )}
-          </label>
 
           {allowsPaymentReference ? (
             <label className="space-y-1 md:col-span-2">

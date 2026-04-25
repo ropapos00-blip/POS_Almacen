@@ -20,6 +20,7 @@ export interface PosCartItem {
   unitPrice: number
   stockAvailable: number
   quantity: number
+  discount: number
 }
 
 export type PosPaymentMethod =
