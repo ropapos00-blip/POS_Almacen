@@ -6,6 +6,7 @@ export interface PosVariant {
   color: string
   cost_price: number
   sale_price: number
+  suggested_price: number | null
   products: { name: string } | null
   inventory_stock: Array<{ quantity_on_hand: number }> | null
 }
@@ -18,6 +19,7 @@ export interface PosCartItem {
   color: string
   costPrice: number
   unitPrice: number
+  minSalePrice: number
   stockAvailable: number
   quantity: number
   discount: number

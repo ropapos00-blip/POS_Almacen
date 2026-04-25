@@ -8,7 +8,7 @@ import type {
 export async function listPosVariants(storeId: string) {
   const { data, error } = await supabase
     .from('product_variants')
-    .select('id, sku, barcode, size, color, cost_price, sale_price, products(name), inventory_stock(quantity_on_hand)')
+    .select('id, sku, barcode, size, color, cost_price, sale_price, suggested_price, products(name), inventory_stock(quantity_on_hand)')
     .eq('store_id', storeId)
     .eq('is_active', true)
     .order('created_at', { ascending: false })

@@ -13,6 +13,7 @@ export interface InventoryStockRow {
     color: string
     cost_price: number
     sale_price: number
+    suggested_price: number | null
     products: {
       id: string
       name: string
@@ -45,7 +46,8 @@ export interface InventoryItemInput {
   description: string
   quantity: number
   costPrice: number
-  markupPercent: number
+  salePrice: number
+  minSalePrice: number
   reference: string
 }
 
@@ -59,6 +61,7 @@ export interface InventoryItemRow {
   quantity: number
   costPrice: number
   salePrice: number
+  minSalePrice: number | null
   reference: string
   barcode: string
 }

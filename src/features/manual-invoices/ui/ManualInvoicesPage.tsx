@@ -33,6 +33,7 @@ interface DraftItem {
   unitPrice: number
   discount: number
   costPrice?: number
+  minSalePrice?: number
   variantId?: string
 }
 
@@ -294,13 +295,13 @@ export function ManualInvoicesPage() {
       if (emptyIdx !== -1) {
         return prev.map((item, i) =>
           i === emptyIdx
-            ? { ...item, description, unitPrice: Number(match.sale_price), costPrice: Number(match.cost_price), variantId: match.id }
+            ? { ...item, description, unitPrice: Number(match.sale_price), costPrice: Number(match.cost_price), minSalePrice: match.suggested_price != null ? Number(match.suggested_price) : Number(match.sale_price), variantId: match.id }
             : item,
         )
       }
       return [
         ...prev,
-        { id: createClientId(), description, quantity: 1, unitPrice: Number(match.sale_price), costPrice: Number(match.cost_price), variantId: match.id, discount: 0 },
+        { id: createClientId(), description, quantity: 1, unitPrice: Number(match.sale_price), costPrice: Number(match.cost_price), minSalePrice: match.suggested_price != null ? Number(match.suggested_price) : Number(match.sale_price), variantId: match.id, discount: 0 },
       ]
     })
     setBarcodeFeedback({ type: 'ok', msg: `✓ ${productName} — ${formatCop(Number(match.sale_price))}` })
@@ -344,6 +345,15 @@ export function ManualInvoicesPage() {
 
     if (discountTotal > maxAllowedDiscount) {
       setFeedback(`Descuento inválido. Máximo permitido: ${formatCop(maxAllowedDiscount)}.`)
+      return null
+    }
+
+    const hasPinZoneDiscount = draftItems.some(item => {
+      const freeMax = Math.max(0, (item.unitPrice - (item.minSalePrice ?? item.unitPrice)) * item.quantity)
+      return item.discount > freeMax
+    })
+    if (hasPinZoneDiscount && !discountAuthorizedBy) {
+      setFeedback('El descuento requiere autorización (PIN).')
       return null
     }
 
@@ -741,7 +751,10 @@ export function ManualInvoicesPage() {
 
         <div className="mt-3 space-y-2">
           {draftItems.map((item, index) => {
-            const itemMaxDiscount = Math.max(0, (item.unitPrice - (item.costPrice ?? 0)) * item.quantity)
+            const freeMax = Math.max(0, (item.unitPrice - (item.minSalePrice ?? item.unitPrice)) * item.quantity)
+            const costMax = Math.max(0, (item.unitPrice - (item.costPrice ?? 0)) * item.quantity)
+            const itemMaxDiscount = (discountAuthorizedBy || user?.role !== 'cashier' || !pinRequired) ? costMax : freeMax
+            const lockedForPin = user?.role === 'cashier' && pinRequired && !discountAuthorizedBy && freeMax === 0
             return (
               <div
                 key={item.id}
@@ -802,17 +815,23 @@ export function ManualInvoicesPage() {
                     inputMode="numeric"
                     value={item.discount === 0 ? '' : formatCopInput(item.discount)}
                     placeholder="0"
-                    readOnly={user?.role === 'cashier' && pinRequired && !discountAuthorizedBy}
+                    readOnly={lockedForPin}
                     onClick={() => {
-                      if (user?.role === 'cashier' && pinRequired && !discountAuthorizedBy) {
+                      if (lockedForPin) {
                         setPinInput('')
                         setPinFeedback(null)
                         setPinModalOpen(true)
                       }
                     }}
                     onChange={(event) => {
-                      const next = Math.min(parseCopIntegerInput(event.target.value, 0), itemMaxDiscount)
-                      updateDraftItem(item.id, 'discount', next)
+                      const raw = parseCopIntegerInput(event.target.value, 0)
+                      if (user?.role === 'cashier' && pinRequired && !discountAuthorizedBy && raw > freeMax) {
+                        setPinInput('')
+                        setPinFeedback(null)
+                        setPinModalOpen(true)
+                        return
+                      }
+                      updateDraftItem(item.id, 'discount', Math.min(raw, itemMaxDiscount))
                     }}
                     className="w-28 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 focus:border-amber-400 focus:outline-none read-only:cursor-pointer"
                   />

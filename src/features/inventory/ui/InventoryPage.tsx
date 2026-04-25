@@ -14,11 +14,6 @@ import { BarcodeLabelPreview } from './BarcodeLabel'
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-function calcSalePrice(costPrice: number, markupPercent: number) {
-  if (!Number.isFinite(costPrice) || costPrice <= 0) return 0
-  return Math.round(costPrice * (1 + markupPercent / 100))
-}
-
 function generateRef(description: string) {
   const clean = description
     .replace(/[^a-zA-Z0-9]/g, '')
@@ -34,7 +29,8 @@ interface FormState {
   description: string
   quantityRaw: string
   costPriceRaw: string
-  markupRaw: string
+  salePriceRaw: string
+  minSalePriceRaw: string
   reference: string
 }
 
@@ -42,7 +38,8 @@ const emptyForm: FormState = {
   description: '',
   quantityRaw: '',
   costPriceRaw: '',
-  markupRaw: '30',
+  salePriceRaw: '',
+  minSalePriceRaw: '',
   reference: '',
 }
 
@@ -69,14 +66,12 @@ function ItemModal({
 }: ItemModalProps) {
   const [form, setForm] = useState<FormState>(() => {
     if (editItem) {
-      const markup = editItem.costPrice > 0
-        ? Math.round(((editItem.salePrice / editItem.costPrice) - 1) * 100)
-        : 30
       return {
         description: editItem.description,
         quantityRaw: String(editItem.quantity),
         costPriceRaw: String(editItem.costPrice),
-        markupRaw: String(markup),
+        salePriceRaw: String(editItem.salePrice),
+        minSalePriceRaw: String(editItem.minSalePrice ?? editItem.salePrice),
         reference: editItem.reference,
       }
     }
@@ -85,8 +80,8 @@ function ItemModal({
   const [feedback, setFeedback] = useState<string | null>(null)
 
   const costPrice = parseCopIntegerInput(form.costPriceRaw, 0)
-  const markup = parseFloat(form.markupRaw) || 0
-  const salePrice = calcSalePrice(costPrice, markup)
+  const salePrice = parseCopIntegerInput(form.salePriceRaw, 0)
+  const minSalePrice = parseCopIntegerInput(form.minSalePriceRaw, 0)
   const quantity = parseInt(form.quantityRaw, 10) || 0
 
   useEffect(() => {
@@ -105,6 +100,7 @@ function ItemModal({
     quantity,
     costPrice,
     salePrice,
+    minSalePrice: minSalePrice || null,
     reference: form.reference || 'REF00001',
     barcode: form.reference || 'REF00001',
   }
@@ -113,8 +109,10 @@ function ItemModal({
     if (!form.description.trim()) { setFeedback('La descripción es obligatoria.'); return null }
     if (quantity <= 0) { setFeedback('La cantidad debe ser mayor a cero.'); return null }
     if (!Number.isFinite(costPrice) || costPrice <= 0) { setFeedback('El valor unitario debe ser mayor a cero.'); return null }
+    if (salePrice <= 0) { setFeedback('El precio de venta debe ser mayor a cero.'); return null }
+    if (minSalePrice > salePrice) { setFeedback('El valor de venta mínima no puede superar el precio de venta.'); return null }
     if (!form.reference.trim()) { setFeedback('La referencia es obligatoria.'); return null }
-    return { categoryId, description: form.description.trim(), quantity, costPrice, markupPercent: markup, reference: form.reference.trim() }
+    return { categoryId, description: form.description.trim(), quantity, costPrice, salePrice, minSalePrice, reference: form.reference.trim() }
   }
 
   async function handleSave() {
@@ -184,24 +182,32 @@ function ItemModal({
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-xs text-zinc-400">Incremento %</label>
+                <label className="mb-1 block text-xs text-zinc-400">Valor de venta mínima</label>
                 <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  placeholder="30"
-                  value={form.markupRaw}
-                  onChange={(e) => setForm((f) => ({ ...f, markupRaw: e.target.value }))}
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="$ 0"
+                  value={form.minSalePriceRaw ? formatCopInput(parseCopIntegerInput(form.minSalePriceRaw, 0)) : ''}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/\D/g, '')
+                    setForm((f) => ({ ...f, minSalePriceRaw: raw }))
+                  }}
                   className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-400 focus:outline-none"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-zinc-400">Precio de venta (auto)</label>
-                <div className="flex items-center rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2">
-                  <span className="text-sm font-semibold text-amber-300">
-                    {salePrice > 0 ? formatCop(salePrice) : '—'}
-                  </span>
-                </div>
+                <label className="mb-1 block text-xs text-zinc-400">Precio de venta</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="$ 0"
+                  value={form.salePriceRaw ? formatCopInput(parseCopIntegerInput(form.salePriceRaw, 0)) : ''}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/\D/g, '')
+                    setForm((f) => ({ ...f, salePriceRaw: raw }))
+                  }}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-400 focus:outline-none"
+                />
               </div>
             </div>
 

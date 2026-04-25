@@ -69,14 +69,6 @@ export function PosPage() {
     return cart.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0)
   }, [cart])
 
-  const totalCost = useMemo(() => {
-    return cart.reduce((acc, item) => acc + item.costPrice * item.quantity, 0)
-  }, [cart])
-
-  const maxAllowedDiscount = useMemo(() => {
-    return Math.max(0, Number((subtotal - totalCost).toFixed(2)))
-  }, [subtotal, totalCost])
-
   // PIN is required only when the system is enabled AND a PIN has been configured.
   // When disabled, cashiers can discount freely without a PIN.
   const pinRequired =
@@ -90,7 +82,10 @@ export function PosPage() {
     return Math.max(0, subtotal - totalDiscount)
   }, [subtotal, totalDiscount])
 
-  const needsDiscountAuthorization = user?.role === 'cashier' && pinRequired && totalDiscount > 0
+  const needsDiscountAuthorization =
+    user?.role === 'cashier' &&
+    pinRequired &&
+    cart.some(item => item.discount > Math.max(0, (item.unitPrice - item.minSalePrice) * item.quantity))
 
   const hasValidDiscountAuthorization =
     !needsDiscountAuthorization || Boolean(discountAuthorizedBy)
@@ -144,6 +139,7 @@ export function PosPage() {
       color: match.color,
       costPrice: Number(match.cost_price),
       unitPrice: Number(match.sale_price),
+      minSalePrice: match.suggested_price != null ? Number(match.suggested_price) : Number(match.sale_price),
       stockAvailable: stock,
       quantity: 1,
       discount: 0,
@@ -364,7 +360,10 @@ export function PosPage() {
         {cart.length > 0 && (
           <div className="space-y-2">
             {cart.map((item) => {
-              const itemMaxDiscount = Math.max(0, (item.unitPrice - item.costPrice) * item.quantity)
+              const freeMax = Math.max(0, (item.unitPrice - item.minSalePrice) * item.quantity)
+              const costMax = Math.max(0, (item.unitPrice - item.costPrice) * item.quantity)
+              const effectiveMax = (discountAuthorizedBy || user?.role !== 'cashier' || !pinRequired) ? costMax : freeMax
+              const lockedForPin = user?.role === 'cashier' && pinRequired && !discountAuthorizedBy && freeMax === 0
               return (
                 <div
                   key={item.variantId}
@@ -401,21 +400,27 @@ export function PosPage() {
                       inputMode="numeric"
                       value={item.discount === 0 ? '' : formatCopInput(item.discount)}
                       placeholder="0"
-                      readOnly={user?.role === 'cashier' && pinRequired && !discountAuthorizedBy}
+                      readOnly={lockedForPin}
                       onClick={() => {
-                        if (user?.role === 'cashier' && pinRequired && !discountAuthorizedBy) {
+                        if (lockedForPin) {
                           setPinInput('')
                           setAuthorizationFeedback(null)
                           setAuthorizationModalOpen(true)
                         }
                       }}
                       onChange={(e) => {
-                        const next = Math.min(parseCopIntegerInput(e.target.value, 0), itemMaxDiscount)
-                        updateCartItemDiscount(item.variantId, next)
+                        const raw = parseCopIntegerInput(e.target.value, 0)
+                        if (user?.role === 'cashier' && pinRequired && !discountAuthorizedBy && raw > freeMax) {
+                          setPinInput('')
+                          setAuthorizationFeedback(null)
+                          setAuthorizationModalOpen(true)
+                          return
+                        }
+                        updateCartItemDiscount(item.variantId, Math.min(raw, effectiveMax))
                       }}
                       className="w-28 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 focus:border-amber-400 focus:outline-none read-only:cursor-pointer"
                     />
-                    <span className="text-xs text-zinc-500">máx {formatCop(itemMaxDiscount)}</span>
+                    <span className="text-xs text-zinc-500">máx {formatCop(effectiveMax)}</span>
                   </div>
                 </div>
               )

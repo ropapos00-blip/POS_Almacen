@@ -11,7 +11,7 @@ export async function listInventoryStock(storeId: string) {
   const { data, error } = await supabase
     .from('inventory_stock')
     .select(
-      '*, product_variants(sku, barcode, size, color, cost_price, sale_price, products(id, name, category_id))',
+      '*, product_variants(sku, barcode, size, color, cost_price, sale_price, suggested_price, products(id, name, category_id))',
     )
     .eq('store_id', storeId)
     .order('updated_at', { ascending: false })
@@ -36,6 +36,7 @@ export function mapStockToItems(rows: InventoryStockRow[]): InventoryItemRow[] {
       quantity: r.quantity_on_hand,
       costPrice: r.product_variants!.cost_price,
       salePrice: r.product_variants!.sale_price,
+      minSalePrice: r.product_variants!.suggested_price ?? null,
       reference: r.product_variants!.sku,
       barcode: r.product_variants!.barcode,
     }))
@@ -46,7 +47,6 @@ export async function createInventoryItem(
   storeId: string,
   input: InventoryItemInput,
 ): Promise<{ variantId: string; stockId: string }> {
-  const salePrice = Math.round(input.costPrice * (1 + input.markupPercent / 100))
   const reference = input.reference.trim() || makeBarcode()
 
   // 1. Crear producto
@@ -73,7 +73,8 @@ export async function createInventoryItem(
       size: '-',
       color: '-',
       cost_price: input.costPrice,
-      sale_price: salePrice,
+      sale_price: input.salePrice,
+      suggested_price: input.minSalePrice,
       sku: reference,
       barcode: reference,
     })
@@ -111,7 +112,6 @@ export async function createInventoryItem(
 export async function updateInventoryItem(
   input: InventoryItemInput & { productId: string; variantId: string; stockId: string },
 ): Promise<void> {
-  const salePrice = Math.round(input.costPrice * (1 + input.markupPercent / 100))
   const reference = input.reference.trim()
 
   const [productRes, variantRes, stockRes] = await Promise.all([
@@ -121,7 +121,7 @@ export async function updateInventoryItem(
       .eq('id', input.productId),
     supabase
       .from('product_variants')
-      .update({ cost_price: input.costPrice, sale_price: salePrice, sku: reference, barcode: reference })
+      .update({ cost_price: input.costPrice, sale_price: input.salePrice, suggested_price: input.minSalePrice, sku: reference, barcode: reference })
       .eq('id', input.variantId),
     supabase
       .from('inventory_stock')
