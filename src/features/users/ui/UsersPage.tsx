@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { useAuthStore } from '../../auth/model/useAuthStore'
+import { useDiscountPinConfigQuery, useSetDiscountPinMutation } from '../../pos/model/usePosQueries'
 import {
   useCreateUserMutation,
   useDeactivateUserMutation,
@@ -83,6 +84,11 @@ export function UsersPage() {
   const updateStoreNameMutation = useUpdateStoreNameMutation(user?.storeId)
   const updateStoreReceiptProfileMutation = useUpdateStoreReceiptProfileMutation(user?.storeId)
   const updateStoreHiddenNavRoutesMutation = useUpdateStoreHiddenNavRoutesMutation(user?.storeId)
+  const discountPinQuery = useDiscountPinConfigQuery(user?.storeId)
+  const discountPinMutation = useSetDiscountPinMutation(user?.storeId)
+  const [pinInput, setPinInput] = useState('')
+  const [pinModalOpen, setPinModalOpen] = useState(false)
+  const [pinFeedback, setPinFeedback] = useState<string | null>(null)
   const [receiptProfileInput, setReceiptProfileInput] = useState({
     loginSlogan: '',
     loginSupportText: '',
@@ -308,6 +314,22 @@ export function UsersPage() {
     }
   }
 
+  const saveDiscountPin = async (newPin: string | null, enabled: boolean) => {
+    if (!user?.storeId) return
+    setPinFeedback(null)
+    try {
+      await discountPinMutation.mutateAsync({ pin: newPin, enabled })
+      setPinFeedback(newPin ? 'Clave actualizada.' : enabled ? 'Descuentos activados.' : 'Descuentos desactivados.')
+      if (newPin) {
+        setPinInput('')
+        setPinModalOpen(false)
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo actualizar la clave.'
+      setPinFeedback(message)
+    }
+  }
+
   return (
     <section className="space-y-6">
       <header>
@@ -503,6 +525,75 @@ export function UsersPage() {
                 : 'Guardar visibilidad de vistas'}
             </button>
           </div>
+        </article>
+      ) : null}
+
+      {user?.role === 'admin' || user?.role === 'super_admin' ? (
+        <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
+          <h2 className="text-lg font-semibold text-zinc-100">Clave de descuento para cajeros</h2>
+          <p className="mt-1 text-sm text-zinc-400">
+            Cuando está activo, el cajero debe ingresar esta clave para aplicar descuentos en caja.
+          </p>
+
+          {discountPinQuery.isLoading ? (
+            <p className="mt-3 text-sm text-zinc-500">Cargando...</p>
+          ) : (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <span
+                className={`rounded-full border px-2 py-1 text-xs ${
+                  discountPinQuery.data?.enabled
+                    ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-300'
+                    : 'border-zinc-600 bg-zinc-800 text-zinc-400'
+                }`}
+              >
+                {discountPinQuery.data?.enabled ? 'Activo' : 'Inactivo'}
+              </span>
+              <span
+                className={`rounded-full border px-2 py-1 text-xs ${
+                  discountPinQuery.data?.hasPin
+                    ? 'border-sky-500/40 bg-sky-500/20 text-sky-300'
+                    : 'border-zinc-600 bg-zinc-800 text-zinc-400'
+                }`}
+              >
+                {discountPinQuery.data?.hasPin ? 'Clave configurada' : 'Sin clave'}
+              </span>
+
+              {discountPinQuery.data?.hasPin ? (
+                <button
+                  type="button"
+                  onClick={() => void saveDiscountPin(null, !discountPinQuery.data.enabled)}
+                  disabled={discountPinMutation.isPending}
+                  className={`rounded-lg border px-3 py-1 text-sm disabled:opacity-70 ${
+                    discountPinQuery.data.enabled
+                      ? 'border-rose-500/40 text-rose-300'
+                      : 'border-emerald-500/40 text-emerald-300'
+                  }`}
+                >
+                  {discountPinMutation.isPending
+                    ? '...'
+                    : discountPinQuery.data.enabled
+                      ? 'Desactivar'
+                      : 'Activar'}
+                </button>
+              ) : (
+                <span className="text-xs text-zinc-500">Establece una clave para poder activar los descuentos.</span>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPinInput('')
+                  setPinFeedback(null)
+                  setPinModalOpen(true)
+                }}
+                className="rounded-lg border border-amber-500/40 px-3 py-1 text-sm text-amber-300"
+              >
+                {discountPinQuery.data?.hasPin ? 'Cambiar clave' : 'Establecer clave'}
+              </button>
+            </div>
+          )}
+
+          {pinFeedback ? <p className="mt-2 text-xs text-amber-300">{pinFeedback}</p> : null}
         </article>
       ) : null}
 
@@ -702,6 +793,52 @@ export function UsersPage() {
                 className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-zinc-900"
               >
                 Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {pinModalOpen ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
+            <h3 className="text-lg font-semibold text-zinc-100">
+              {discountPinQuery.data?.hasPin ? 'Cambiar clave de descuento' : 'Establecer clave de descuento'}
+            </h3>
+            <p className="mt-1 text-sm text-zinc-400">
+              El cajero deberá ingresar esta clave para aplicar descuentos.
+            </p>
+            <input
+              type="password"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={8}
+              value={pinInput}
+              onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
+              placeholder="Clave numérica (máx 8 dígitos)"
+              className="mt-3 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm tracking-widest"
+              autoFocus
+            />
+            {pinFeedback ? <p className="mt-2 text-xs text-rose-400">{pinFeedback}</p> : null}
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPinModalOpen(false)
+                  setPinInput('')
+                  setPinFeedback(null)
+                }}
+                className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveDiscountPin(pinInput, discountPinQuery.data?.enabled ?? false)}
+                disabled={pinInput.length < 4 || discountPinMutation.isPending}
+                className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-zinc-900 disabled:opacity-70"
+              >
+                {discountPinMutation.isPending ? 'Guardando...' : 'Guardar clave'}
               </button>
             </div>
           </div>

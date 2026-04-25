@@ -56,6 +56,16 @@ pre {
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
 }
 
+/* Override browser autofill background (Chrome/Safari apply a white/yellow tint) */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #18181b inset !important; /* zinc-900 */
+  -webkit-text-fill-color: #f4f4f5 !important;              /* zinc-100 */
+  caret-color: #f4f4f5;
+}
+
 .store-logo-font {
   font-family: 'Dolce Vita', 'Space Grotesk', 'Segoe UI', sans-serif;
 }

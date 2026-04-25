@@ -4,9 +4,9 @@ import { formatCop } from '../../../shared/utils/currency'
 import { formatDateTimeColombia } from '../../../shared/utils/dateTime'
 import { formatCopInput, parseCopIntegerInput, parseIntegerInput } from '../../../shared/utils/numberInput'
 import { useAuthStore } from '../../auth/model/useAuthStore'
-import { useCreatePosSaleMutation, usePosVariantsQuery } from '../model/usePosQueries'
+import { useCreatePosSaleMutation, useDiscountPinConfigQuery, usePosVariantsQuery } from '../model/usePosQueries'
 import type { PaymentMethod, PosPaymentMethod, PosCartItem } from '../model/pos.types'
-import { authorizeDiscountOverride } from '../services/posService'
+import { validateDiscountPin } from '../services/discountPinService'
 import { SaleReceipt } from './SaleReceipt'
 import { CustomerPicker } from '../../customers/ui/CustomerPicker'
 
@@ -28,8 +28,7 @@ export function PosPage() {
   const [feedback, setFeedback] = useState<string | null>(null)
   const [authorizationFeedback, setAuthorizationFeedback] = useState<string | null>(null)
   const [authorizationModalOpen, setAuthorizationModalOpen] = useState(false)
-  const [adminEmail, setAdminEmail] = useState('')
-  const [adminPassword, setAdminPassword] = useState('')
+  const [pinInput, setPinInput] = useState('')
   const [isAuthorizingDiscount, setIsAuthorizingDiscount] = useState(false)
   const [discountAuthorizedBy, setDiscountAuthorizedBy] = useState<string | null>(null)
   const [authorizedDiscountValue, setAuthorizedDiscountValue] = useState(0)
@@ -61,6 +60,7 @@ export function PosPage() {
 
   const variantsQuery = usePosVariantsQuery(user?.storeId)
   const saleMutation = useCreatePosSaleMutation(user?.storeId)
+  const discountPinQuery = useDiscountPinConfigQuery(user?.storeId)
   const handlePrintTicket = useReactToPrint({
     contentRef: receiptRef,
     documentTitle: lastSale?.saleNumber ?? 'ticket-pos',
@@ -79,11 +79,20 @@ export function PosPage() {
     return Math.max(0, Number((subtotal - totalCost).toFixed(2)))
   }, [subtotal, totalCost])
 
+  // PIN is required only when the system is enabled AND a PIN has been configured.
+  // When disabled, cashiers can discount freely without a PIN.
+  const pinRequired =
+    discountPinQuery.data?.enabled === true && discountPinQuery.data?.hasPin === true
+
+  const effectiveMaxDiscount = useMemo(() => {
+    return maxAllowedDiscount
+  }, [maxAllowedDiscount])
+
   const total = useMemo(() => {
     return Math.max(0, subtotal - discount)
   }, [subtotal, discount])
 
-  const needsDiscountAuthorization = user?.role === 'cashier' && discount > 0
+  const needsDiscountAuthorization = user?.role === 'cashier' && pinRequired && discount > 0
 
   const hasValidDiscountAuthorization =
     !needsDiscountAuthorization ||
@@ -272,20 +281,28 @@ export function PosPage() {
       return
     }
 
+    if (!pinInput) {
+      setAuthorizationFeedback('Ingresa la clave.')
+      return
+    }
+
     setIsAuthorizingDiscount(true)
     setAuthorizationFeedback(null)
 
     try {
-      const result = await authorizeDiscountOverride(user.storeId, adminEmail, adminPassword, discount)
-      setDiscountAuthorizedBy(result.adminName)
-      setAuthorizedDiscountValue(discount)
-      setAuthorizationFeedback(`Descuento autorizado por ${result.adminName}.`)
-      setAdminPassword('')
+      const valid = await validateDiscountPin(user.storeId, pinInput)
+      if (!valid) {
+        setAuthorizationFeedback('Clave incorrecta.')
+        return
+      }
+      setDiscountAuthorizedBy('PIN')
+      setAuthorizedDiscountValue(maxAllowedDiscount)
+      setPinInput('')
       setAuthorizationModalOpen(false)
-      setFeedback(`Descuento autorizado por ${result.adminName}.`)
+      setFeedback(null)
     } catch (error) {
       setAuthorizationFeedback(
-        error instanceof Error ? error.message : 'No se pudo autorizar el descuento.',
+        error instanceof Error ? error.message : 'No se pudo validar la clave.',
       )
     } finally {
       setIsAuthorizingDiscount(false)
@@ -407,19 +424,31 @@ export function PosPage() {
                 inputMode="numeric"
                 value={discount === 0 ? '' : formatCopInput(discount)}
                 placeholder="0"
+                readOnly={user?.role === 'cashier' && pinRequired && !discountAuthorizedBy}
+                onClick={() => {
+                  if (user?.role === 'cashier' && pinRequired && !discountAuthorizedBy) {
+                    setPinInput('')
+                    setAuthorizationFeedback(null)
+                    setAuthorizationModalOpen(true)
+                  }
+                }}
                 onChange={(e) => {
-                  const next = Math.min(parseCopIntegerInput(e.target.value, 0), maxAllowedDiscount)
+                  const next = Math.min(parseCopIntegerInput(e.target.value, 0), effectiveMaxDiscount)
                   setDiscount(next)
                   if (next <= 0) {
                     setDiscountAuthorizedBy(null)
                     setAuthorizedDiscountValue(0)
                   }
                 }}
-                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 read-only:cursor-pointer"
               />
-              <span className="text-xs text-zinc-500">
-                Máx: {formatCop(maxAllowedDiscount)}
-              </span>
+              {user?.role === 'cashier' && pinRequired && !discountAuthorizedBy ? (
+                <span className="text-xs text-zinc-500">Toca para ingresar clave</span>
+              ) : (
+                <span className="text-xs text-zinc-500">
+                  Máx: {formatCop(effectiveMaxDiscount)}
+                </span>
+              )}
             </label>
           </div>
 
@@ -487,19 +516,8 @@ export function PosPage() {
             </div>
           ) : null}
 
-          {needsDiscountAuthorization ? (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-200">
-              {hasValidDiscountAuthorization
-                ? `Descuento autorizado por ${discountAuthorizedBy}.`
-                : 'Este descuento necesita autorización de admin/super admin.'}
-              <button
-                type="button"
-                onClick={() => setAuthorizationModalOpen(true)}
-                className="ml-2 rounded border border-amber-500/40 px-2 py-1 font-semibold text-amber-200 hover:bg-amber-500/20"
-              >
-                Autorizar descuento
-              </button>
-            </div>
+          {needsDiscountAuthorization && hasValidDiscountAuthorization ? (
+            <p className="text-xs text-emerald-400">Descuento autorizado.</p>
           ) : null}
 
           <div className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 space-y-1">
@@ -535,40 +553,40 @@ export function PosPage() {
 
       {authorizationModalOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
+          <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
             <h3 className="text-lg font-semibold text-zinc-100">Autorizar descuento</h3>
             <p className="mt-2 text-sm text-zinc-400">
-              Un admin o super admin debe autorizar este descuento con su clave.
+              Ingresa la clave de descuento configurada por el administrador.
             </p>
 
             <label className="mt-4 block space-y-1">
-              <span className="text-xs text-zinc-400">Correo admin</span>
-              <input
-                type="email"
-                value={adminEmail}
-                onChange={(event) => setAdminEmail(event.target.value)}
-                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-              />
-            </label>
-
-            <label className="mt-3 block space-y-1">
-              <span className="text-xs text-zinc-400">Clave admin</span>
+              <span className="text-xs text-zinc-400">Clave de descuento</span>
               <input
                 type="password"
-                value={adminPassword}
-                onChange={(event) => setAdminPassword(event.target.value)}
-                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={8}
+                autoComplete="new-password"
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
+                placeholder="mínimo 4 dígitos"
+                autoFocus
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-400 focus:outline-none"
               />
             </label>
 
             {authorizationFeedback ? (
-              <p className="mt-3 text-sm text-amber-300">{authorizationFeedback}</p>
+              <p className="mt-3 text-sm text-rose-400">{authorizationFeedback}</p>
             ) : null}
 
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => setAuthorizationModalOpen(false)}
+                onClick={() => {
+                  setAuthorizationModalOpen(false)
+                  setPinInput('')
+                  setAuthorizationFeedback(null)
+                }}
                 className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200"
               >
                 Cancelar
@@ -576,7 +594,7 @@ export function PosPage() {
               <button
                 type="button"
                 onClick={() => { void authorizeDiscount() }}
-                disabled={isAuthorizingDiscount}
+                disabled={isAuthorizingDiscount || pinInput.length < 4}
                 className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-zinc-900 disabled:opacity-70"
               >
                 {isAuthorizingDiscount ? 'Validando...' : 'Autorizar'}

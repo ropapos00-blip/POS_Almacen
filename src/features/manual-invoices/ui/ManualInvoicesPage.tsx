@@ -19,7 +19,8 @@ import {
   useManualInvoicePaymentKpisQuery,
 } from '../model/useManualInvoicesQueries'
 import type { ManualExpenseRow, ManualInvoiceRow, ManualPaymentMethod } from '../model/manualInvoices.types'
-import { usePosVariantsQuery } from '../../pos/model/usePosQueries'
+import { useDiscountPinConfigQuery, usePosVariantsQuery } from '../../pos/model/usePosQueries'
+import { validateDiscountPin } from '../../pos/services/discountPinService'
 import { ManualInvoiceReceipt } from './ManualInvoiceReceipt'
 import { ExpenseReceipt } from './ExpenseReceipt'
 import { CustomerPicker } from '../../customers/ui/CustomerPicker'
@@ -103,6 +104,11 @@ export function ManualInvoicesPage() {
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [discountTotal, setDiscountTotal] = useState(0)
+  const [discountAuthorizedBy, setDiscountAuthorizedBy] = useState<string | null>(null)
+  const [pinModalOpen, setPinModalOpen] = useState(false)
+  const [pinInput, setPinInput] = useState('')
+  const [pinFeedback, setPinFeedback] = useState<string | null>(null)
+  const [isPinValidating, setIsPinValidating] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState<ManualPaymentMethod>('cash')
   const [paymentReference, setPaymentReference] = useState('')
   const [feedback, setFeedback] = useState<string | null>(null)
@@ -150,6 +156,9 @@ export function ManualInvoicesPage() {
   const createExpenseMutation = useCreateManualExpenseMutation(user?.storeId)
   const updateExpenseMutation = useUpdateManualExpenseMutation(user?.storeId)
   const deleteExpenseMutation = useDeleteManualExpenseMutation(user?.storeId)
+  const discountPinQuery = useDiscountPinConfigQuery(user?.storeId)
+  const pinRequired =
+    discountPinQuery.data?.enabled === true && discountPinQuery.data?.hasPin === true
   const variantsQuery = usePosVariantsQuery(user?.storeId)
 
   const handlePrint = useReactToPrint({
@@ -383,6 +392,7 @@ export function ManualInvoicesPage() {
       setCustomerName('')
       setCustomerPhone('')
       setDiscountTotal(0)
+      setDiscountAuthorizedBy(null)
       setPaymentMethod('cash')
       setPaymentReference('')
       setMixedFirstMethod('cash')
@@ -892,10 +902,28 @@ export function ManualInvoicesPage() {
               min={0}
               value={discountTotal === 0 ? '' : formatCopInput(discountTotal)}
               placeholder="0"
-              onChange={(event) => setDiscountTotal(Math.min(parseCopIntegerInput(event.target.value, 0), maxAllowedDiscount))}
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+              readOnly={user?.role === 'cashier' && pinRequired && !discountAuthorizedBy}
+              onClick={() => {
+                if (user?.role === 'cashier' && pinRequired && !discountAuthorizedBy) {
+                  setPinInput('')
+                  setPinFeedback(null)
+                  setPinModalOpen(true)
+                }
+              }}
+              onChange={(event) => {
+                const next = Math.min(parseCopIntegerInput(event.target.value, 0), maxAllowedDiscount)
+                setDiscountTotal(next)
+                if (next <= 0) {
+                  setDiscountAuthorizedBy(null)
+                }
+              }}
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none read-only:cursor-pointer"
             />
-            <span className="text-xs text-zinc-500">Máx: {formatCop(maxAllowedDiscount)}</span>
+            {user?.role === 'cashier' && pinRequired && !discountAuthorizedBy ? (
+              <span className="text-xs text-zinc-500">Toca para ingresar clave</span>
+            ) : (
+              <span className="text-xs text-zinc-500">Máx: {formatCop(maxAllowedDiscount)}</span>
+            )}
           </label>
 
           {allowsPaymentReference ? (
@@ -1146,6 +1174,67 @@ export function ManualInvoicesPage() {
 
       <ManualInvoiceReceipt invoice={selectedInvoice} receiptRef={receiptRef} />
       <ExpenseReceipt expense={selectedExpense} receiptRef={expenseReceiptRef} />
+
+      {pinModalOpen ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
+            <h3 className="text-lg font-semibold text-zinc-100">Autorizar descuento</h3>
+            <p className="mt-2 text-sm text-zinc-400">
+              Ingresa la clave de descuento configurada por el administrador.
+            </p>
+            <label className="mt-4 block space-y-1">
+              <span className="text-xs text-zinc-400">Clave de descuento</span>
+              <input
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={8}
+                autoComplete="new-password"
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
+                placeholder="mínimo 4 dígitos"
+                autoFocus
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-400 focus:outline-none"
+              />
+            </label>
+            {pinFeedback ? (
+              <p className="mt-3 text-sm text-rose-400">{pinFeedback}</p>
+            ) : null}
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => { setPinModalOpen(false); setPinInput(''); setPinFeedback(null) }}
+                className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isPinValidating || pinInput.length < 4}
+                onClick={async () => {
+                  if (!user?.storeId) return
+                  setIsPinValidating(true)
+                  setPinFeedback(null)
+                  try {
+                    const valid = await validateDiscountPin(user.storeId, pinInput)
+                    if (!valid) { setPinFeedback('Clave incorrecta.'); return }
+                    setDiscountAuthorizedBy('PIN')
+                    setPinInput('')
+                    setPinModalOpen(false)
+                  } catch {
+                    setPinFeedback('Error al validar la clave.')
+                  } finally {
+                    setIsPinValidating(false)
+                  }
+                }}
+                className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-zinc-900 disabled:opacity-70"
+              >
+                {isPinValidating ? 'Validando...' : 'Autorizar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {invoiceForEdit ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
