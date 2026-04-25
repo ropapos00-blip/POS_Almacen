@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
-import { ChevronRight, Package, Plus, Printer, Search, X } from 'lucide-react'
+import { Package, Plus, Printer, Search, X } from 'lucide-react'
 import { formatCop } from '../../../shared/utils/currency'
 import { formatCopInput, parseCopIntegerInput } from '../../../shared/utils/numberInput'
 import { formatDateTimeColombia } from '../../../shared/utils/dateTime'
@@ -503,11 +503,13 @@ export function LayawaysPage() {
                 const pending = l.total_amount - l.paid_amount
                 const isSelected = selectedId === l.id && panel === 'detail'
                 return (
-                  <button
+                  <div
                     key={l.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => openDetail(l)}
-                    className={`w-full rounded-xl border p-4 text-left transition ${
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openDetail(l) }}
+                    className={`w-full cursor-pointer rounded-xl border p-4 text-left transition ${
                       isSelected
                         ? 'border-amber-400 bg-zinc-900'
                         : 'border-zinc-800 bg-zinc-950 hover:border-zinc-600'
@@ -522,9 +524,63 @@ export function LayawaysPage() {
                           <p className="text-xs text-zinc-500">{l.customer_phone}</p>
                         ) : null}
                       </div>
-                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${sc.cls}`}>
-                        {sc.label}
-                      </span>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {l.layaway_payments.length > 0 ? (() => {
+                          const firstPmt = [...l.layaway_payments].sort(
+                            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+                          )[0]!
+                          return (
+                            <button
+                              type="button"
+                              title="Reimprimir recibo inicial"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setLastReceipt({
+                                  customerName: l.customer_name,
+                                  customerPhone: l.customer_phone,
+                                  startDate: l.created_at.split('T')[0]!,
+                                  dueDate: l.due_date,
+                                  items: l.layaway_items.map((i) => ({
+                                    description: i.description,
+                                    quantity: i.quantity,
+                                    unitPrice: i.unit_price,
+                                  })),
+                                  totalAmount: l.total_amount,
+                                  paymentAmount: firstPmt.amount,
+                                  previouslyPaid: 0,
+                                  remainingBalance: l.total_amount - firstPmt.amount,
+                                  paymentMethod: firstPmt.payment_method,
+                                  paidAt: firstPmt.created_at,
+                                })
+                                setShouldPrint(true)
+                              }}
+                              className="rounded-lg border border-zinc-700 p-1 text-zinc-500 transition hover:border-amber-400/60 hover:text-amber-400"
+                            >
+                              <Printer size={12} />
+                            </button>
+                          )
+                        })() : null}
+                        {isAdmin && l.status === 'active' ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openDetail(l)
+                              setEditingId(l.id)
+                              setEditName(l.customer_name)
+                              setEditPhone(l.customer_phone ?? '')
+                              setEditFeedback(null)
+                              setConfirmCancelId(null)
+                            }}
+                            className="rounded-lg border border-zinc-700 px-2 py-0.5 text-xs text-zinc-400 transition hover:border-amber-400/60 hover:text-amber-400"
+                          >
+                            Editar
+                          </button>
+                        ) : null}
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${sc.cls}`}>
+                          {sc.label}
+                        </span>
+                      </div>
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-2 text-xs">
                       <span className="text-zinc-500">
@@ -541,7 +597,7 @@ export function LayawaysPage() {
                     {dueDsp ? (
                       <p className={`mt-1 text-xs ${dueDsp.cls}`}>{dueDsp.text}</p>
                     ) : null}
-                  </button>
+                  </div>
                 )
               })}
             </div>
@@ -779,6 +835,40 @@ export function LayawaysPage() {
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
+                  {selectedLayaway.layaway_payments.length > 0 ? (() => {
+                    const firstPayment = [...selectedLayaway.layaway_payments].sort(
+                      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+                    )[0]!
+                    return (
+                      <button
+                        type="button"
+                        title="Reimprimir recibo inicial"
+                        onClick={() => {
+                          setLastReceipt({
+                            customerName: selectedLayaway.customer_name,
+                            customerPhone: selectedLayaway.customer_phone,
+                            startDate: selectedLayaway.created_at.split('T')[0]!,
+                            dueDate: selectedLayaway.due_date,
+                            items: selectedLayaway.layaway_items.map((i) => ({
+                              description: i.description,
+                              quantity: i.quantity,
+                              unitPrice: i.unit_price,
+                            })),
+                            totalAmount: selectedLayaway.total_amount,
+                            paymentAmount: firstPayment.amount,
+                            previouslyPaid: 0,
+                            remainingBalance: selectedLayaway.total_amount - firstPayment.amount,
+                            paymentMethod: firstPayment.payment_method,
+                            paidAt: firstPayment.created_at,
+                          })
+                          setShouldPrint(true)
+                        }}
+                        className="rounded-lg border border-zinc-700 p-1.5 text-zinc-500 transition hover:border-amber-400/60 hover:text-amber-400"
+                      >
+                        <Printer size={14} />
+                      </button>
+                    )
+                  })() : null}
                   {isAdmin && selectedLayaway.status === 'active' ? (
                     <button
                       type="button"
@@ -929,7 +1019,15 @@ export function LayawaysPage() {
                     Abonos ({selectedLayaway.layaway_payments.length})
                   </p>
                   <div className="space-y-2">
-                    {selectedLayaway.layaway_payments.map((p) => (
+                    {selectedLayaway.layaway_payments.map((p) => {
+                      const paymentsOrdered = [...selectedLayaway.layaway_payments].sort(
+                        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+                      )
+                      const sortedIdx = paymentsOrdered.findIndex((x) => x.id === p.id)
+                      const previouslyPaid = paymentsOrdered
+                        .slice(0, sortedIdx)
+                        .reduce((sum, x) => sum + x.amount, 0)
+                      return (
                       <div
                         key={p.id}
                         className="flex items-center justify-between rounded-lg border border-zinc-800 px-4 py-2"
@@ -942,9 +1040,36 @@ export function LayawaysPage() {
                           </p>
                           {p.notes ? <p className="text-xs text-zinc-600">{p.notes}</p> : null}
                         </div>
-                        <ChevronRight size={14} className="shrink-0 text-zinc-700" />
+                        <button
+                          type="button"
+                          title="Reimprimir recibo"
+                          onClick={() => {
+                            setLastReceipt({
+                              customerName: selectedLayaway.customer_name,
+                              customerPhone: selectedLayaway.customer_phone,
+                              startDate: selectedLayaway.created_at.split('T')[0]!,
+                              dueDate: selectedLayaway.due_date,
+                              items: selectedLayaway.layaway_items.map((i) => ({
+                                description: i.description,
+                                quantity: i.quantity,
+                                unitPrice: i.unit_price,
+                              })),
+                              totalAmount: selectedLayaway.total_amount,
+                              paymentAmount: p.amount,
+                              previouslyPaid,
+                              remainingBalance: selectedLayaway.total_amount - previouslyPaid - p.amount,
+                              paymentMethod: p.payment_method,
+                              paidAt: p.created_at,
+                            })
+                            setShouldPrint(true)
+                          }}
+                          className="shrink-0 rounded-lg p-1.5 text-zinc-600 hover:bg-zinc-800 hover:text-amber-400 transition-colors"
+                        >
+                          <Printer size={14} />
+                        </button>
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               ) : null}
