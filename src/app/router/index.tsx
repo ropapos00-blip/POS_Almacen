@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import { Navigate, createBrowserRouter } from 'react-router-dom'
+import { useAuthStore } from '../../features/auth/model/useAuthStore'
 import { AppShell } from '../layouts/AppShell'
 import { ProtectedRoute } from './ProtectedRoute'
 import {
@@ -17,6 +18,11 @@ import {
   WholesaleInventoryPage,
   WholesalePage,
 } from './lazyPages'
+
+function RootRedirect() {
+  const role = useAuthStore((state) => state.user?.role)
+  return <Navigate to={role === 'cashier' ? '/pos' : '/dashboard'} replace />
+}
 
 function withFallback(node: React.ReactNode) {
   return (
@@ -47,11 +53,15 @@ export const appRouter = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <Navigate to="/dashboard" replace />,
+        element: <RootRedirect />,
       },
       {
         path: 'dashboard',
-        element: withFallback(<DashboardPage />),
+        element: withFallback(
+          <ProtectedRoute roles={['super_admin', 'admin']}>
+            <DashboardPage />
+          </ProtectedRoute>,
+        ),
       },
       {
         path: 'pos',
@@ -88,7 +98,7 @@ export const appRouter = createBrowserRouter([
       {
         path: 'sales',
         element: withFallback(
-          <ProtectedRoute roles={['super_admin', 'admin', 'cashier']}>
+          <ProtectedRoute roles={['super_admin', 'admin']}>
             <SalesPage />
           </ProtectedRoute>,
         ),

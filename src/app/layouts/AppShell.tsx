@@ -4,11 +4,11 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useAuthStore } from '../../features/auth/model/useAuthStore'
 
 const storeNavItems = [
-  { to: '/dashboard', label: 'Dashboard', icon: Store },
-  { to: '/pos', label: 'POS', icon: ShoppingCart },
-  { to: '/sales', label: 'Ventas', icon: ReceiptText },
-  { to: '/manual-invoices', label: 'Factura manual', icon: FileText },
-  { to: '/price-check', label: 'Consulta', icon: Package, roles: ['cashier'] },
+  { to: '/dashboard', label: 'Dashboard', icon: Store, roles: ['super_admin', 'admin'] },
+  { to: '/pos', label: 'POS', icon: ShoppingCart, roles: ['super_admin', 'admin', 'cashier'] },
+  { to: '/sales', label: 'Ventas', icon: ReceiptText, roles: ['super_admin', 'admin'] },
+  { to: '/manual-invoices', label: 'Factura manual', icon: FileText, roles: ['super_admin', 'admin', 'cashier'] },
+  { to: '/price-check', label: 'Consulta', icon: Package, roles: ['super_admin', 'admin'] },
   { to: '/inventory', label: 'Inventario', icon: ReceiptText, roles: ['super_admin', 'admin'] },
   { to: '/stock', label: 'Entrada Stock', icon: Package, roles: ['super_admin', 'admin'] },
   { to: '/customers', label: 'Clientes', icon: Users, roles: ['super_admin', 'admin', 'cashier'] },

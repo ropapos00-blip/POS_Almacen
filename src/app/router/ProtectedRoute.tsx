@@ -27,7 +27,7 @@ export function ProtectedRoute({
   }
 
   if (roles && !roles.includes(userRole)) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to={userRole === 'cashier' ? '/pos' : '/dashboard'} replace />
   }
 
   return children

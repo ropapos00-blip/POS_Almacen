@@ -209,8 +209,6 @@ export function CustomersPage() {
                 <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
                   <th className="px-4 py-3">Nombre</th>
                   <th className="px-4 py-3">Teléfono</th>
-                  <th className="px-4 py-3">Documento</th>
-                  <th className="px-4 py-3">Ciudad</th>
                   <th className="px-4 py-3">Estado</th>
                   <th className="px-4 py-3" />
                 </tr>
@@ -220,8 +218,6 @@ export function CustomersPage() {
                   <tr key={c.id} className={`border-b border-zinc-800/60 last:border-0 ${!c.is_active ? 'opacity-50' : ''}`}>
                     <td className="px-4 py-2 font-medium text-zinc-100">{c.full_name}</td>
                     <td className="px-4 py-2 text-zinc-400">{c.phone || '—'}</td>
-                    <td className="px-4 py-2 font-mono text-zinc-400">{c.document_id || '—'}</td>
-                    <td className="px-4 py-2 text-zinc-400">{c.city || '—'}</td>
                     <td className="px-4 py-2">
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${c.is_active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-700/60 text-zinc-500'}`}>
                         {c.is_active ? 'Activo' : 'Inactivo'}

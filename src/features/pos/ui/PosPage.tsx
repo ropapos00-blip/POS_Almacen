@@ -408,7 +408,7 @@ export function PosPage() {
                 value={discount === 0 ? '' : formatCopInput(discount)}
                 placeholder="0"
                 onChange={(e) => {
-                  const next = parseCopIntegerInput(e.target.value, 0)
+                  const next = Math.min(parseCopIntegerInput(e.target.value, 0), maxAllowedDiscount)
                   setDiscount(next)
                   if (next <= 0) {
                     setDiscountAuthorizedBy(null)

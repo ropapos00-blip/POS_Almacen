@@ -30,6 +30,7 @@ interface DraftItem {
   description: string
   quantity: number
   unitPrice: number
+  costPrice?: number
   variantId?: string
 }
 
@@ -174,6 +175,14 @@ export function ManualInvoicesPage() {
     return draftItems.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0)
   }, [draftItems])
 
+  const totalCost = useMemo(() => {
+    return draftItems.reduce((acc, item) => acc + (item.costPrice ?? 0) * item.quantity, 0)
+  }, [draftItems])
+
+  const maxAllowedDiscount = useMemo(() => {
+    return Math.max(0, Number((subtotal - totalCost).toFixed(2)))
+  }, [subtotal, totalCost])
+
   const total = useMemo(() => {
     return Math.max(0, subtotal - discountTotal)
   }, [discountTotal, subtotal])
@@ -271,13 +280,13 @@ export function ManualInvoicesPage() {
       if (emptyIdx !== -1) {
         return prev.map((item, i) =>
           i === emptyIdx
-            ? { ...item, description, unitPrice: Number(match.sale_price), variantId: match.id }
+            ? { ...item, description, unitPrice: Number(match.sale_price), costPrice: Number(match.cost_price), variantId: match.id }
             : item,
         )
       }
       return [
         ...prev,
-        { id: createClientId(), description, quantity: 1, unitPrice: Number(match.sale_price), variantId: match.id },
+        { id: createClientId(), description, quantity: 1, unitPrice: Number(match.sale_price), costPrice: Number(match.cost_price), variantId: match.id },
       ]
     })
     setBarcodeFeedback({ type: 'ok', msg: `✓ ${productName} — ${formatCop(Number(match.sale_price))}` })
@@ -297,7 +306,7 @@ export function ManualInvoicesPage() {
     Boolean(user?.storeId && user.id) &&
     cleanedItemsForValidation.length > 0 &&
     discountTotal >= 0 &&
-    discountTotal <= subtotal
+    discountTotal <= maxAllowedDiscount
 
   async function saveManualInvoice(): Promise<ManualInvoiceRow | null> {
     setFeedback(null)
@@ -319,8 +328,8 @@ export function ManualInvoicesPage() {
       return null
     }
 
-    if (discountTotal > subtotal) {
-      setFeedback('El descuento no puede superar el subtotal.')
+    if (discountTotal > maxAllowedDiscount) {
+      setFeedback(`Descuento inválido. Máximo permitido: ${formatCop(maxAllowedDiscount)}.`)
       return null
     }
 
@@ -883,9 +892,10 @@ export function ManualInvoicesPage() {
               min={0}
               value={discountTotal === 0 ? '' : formatCopInput(discountTotal)}
               placeholder="0"
-              onChange={(event) => setDiscountTotal(parseCopIntegerInput(event.target.value, 0))}
+              onChange={(event) => setDiscountTotal(Math.min(parseCopIntegerInput(event.target.value, 0), maxAllowedDiscount))}
               className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
             />
+            <span className="text-xs text-zinc-500">Máx: {formatCop(maxAllowedDiscount)}</span>
           </label>
 
           {allowsPaymentReference ? (
