@@ -3,6 +3,7 @@ import {
   addLayawayPayment,
   cancelLayaway,
   createLayaway,
+  getLayawayKpis,
   listLayaways,
   updateLayawayCustomer,
 } from '../services/layawayService'
@@ -60,5 +61,13 @@ export function useUpdateLayawayMutation(storeId?: string) {
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['layaways', storeId] })
     },
+  })
+}
+
+export function useLayawayKpisQuery(storeId?: string, enabled = true) {
+  return useQuery({
+    queryKey: ['layaways', 'kpis', storeId],
+    queryFn: () => getLayawayKpis(storeId!),
+    enabled: Boolean(storeId) && enabled,
   })
 }

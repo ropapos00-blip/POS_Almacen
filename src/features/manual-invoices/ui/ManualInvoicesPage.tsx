@@ -21,6 +21,7 @@ import {
 import type { ManualExpenseRow, ManualInvoiceRow, ManualPaymentMethod } from '../model/manualInvoices.types'
 import { useDiscountPinConfigQuery, usePosVariantsQuery } from '../../pos/model/usePosQueries'
 import { validateDiscountPin } from '../../pos/services/discountPinService'
+import { useLayawayKpisQuery } from '../../layaways/model/useLayawayQueries'
 import { ManualInvoiceReceipt } from './ManualInvoiceReceipt'
 import { ExpenseReceipt } from './ExpenseReceipt'
 import { CustomerPicker } from '../../customers/ui/CustomerPicker'
@@ -150,6 +151,7 @@ export function ManualInvoicesPage() {
 
   const invoicesQuery = useManualInvoicesQuery(user?.storeId)
   const manualKpisQuery = useManualInvoiceKpisQuery(user?.storeId, isAdminUser)
+  const layawayKpisQuery = useLayawayKpisQuery(user?.storeId, isAdminUser)
   const expensesQuery = useManualExpensesQuery(user?.storeId)
   const expenseKpisQuery = useManualExpenseKpisQuery(user?.storeId, isAdminUser)
   const createMutation = useCreateManualInvoiceMutation(user?.storeId)
@@ -678,6 +680,36 @@ export function ManualInvoicesPage() {
                 </p>
                 <p className="text-xs text-zinc-500">
                   Facturas: {manualKpisQuery.data?.yearCount ?? 0}
+                </p>
+              </article>
+            </div>
+            {/* KPIs separados */}
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-xs text-zinc-500">Separados del dia</p>
+                <p className="mt-1 text-lg font-semibold text-emerald-300">
+                  {formatCop(layawayKpisQuery.data?.dayTotal ?? 0)}
+                </p>
+                <p className="text-xs text-zinc-500">
+                  Abonos: {layawayKpisQuery.data?.dayCount ?? 0}
+                </p>
+              </article>
+              <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-xs text-zinc-500">Separados del mes</p>
+                <p className="mt-1 text-lg font-semibold text-amber-300">
+                  {formatCop(layawayKpisQuery.data?.monthTotal ?? 0)}
+                </p>
+                <p className="text-xs text-zinc-500">
+                  Abonos: {layawayKpisQuery.data?.monthCount ?? 0}
+                </p>
+              </article>
+              <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-xs text-zinc-500">Separados del año</p>
+                <p className="mt-1 text-lg font-semibold text-sky-300">
+                  {formatCop(layawayKpisQuery.data?.yearTotal ?? 0)}
+                </p>
+                <p className="text-xs text-zinc-500">
+                  Activos: {layawayKpisQuery.data?.activeCount ?? 0}
                 </p>
               </article>
             </div>
