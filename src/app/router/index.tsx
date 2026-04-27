@@ -120,7 +120,7 @@ export const appRouter = createBrowserRouter([
       {
         path: 'gastos',
         element: withFallback(
-          <ProtectedRoute roles={['super_admin', 'admin']}>
+          <ProtectedRoute roles={['super_admin', 'admin', 'cashier']}>
             <GastosPage />
           </ProtectedRoute>,
         ),
