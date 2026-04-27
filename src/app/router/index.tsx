@@ -23,7 +23,7 @@ import {
 
 function RootRedirect() {
   const role = useAuthStore((state) => state.user?.role)
-  return <Navigate to={role === 'cashier' ? '/pos' : '/dashboard'} replace />
+  return <Navigate to={role === 'cashier' ? '/manual-invoices' : '/dashboard'} replace />
 }
 
 function withFallback(node: React.ReactNode) {
