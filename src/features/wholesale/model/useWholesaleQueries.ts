@@ -6,6 +6,7 @@ import {
   listWholesaleFinanceMovements,
   listWholesaleReferenceOptions,
   listWholesaleInvoices,
+  patchWholesaleInvoiceDates,
   registerWholesalePayment,
   updateWholesaleInvoice,
   updateWholesaleInvoiceHeader,
@@ -79,6 +80,18 @@ export function useUpdateWholesaleInvoiceHeaderMutation(storeId?: string) {
         queryClient.invalidateQueries({ queryKey: ['wholesale', 'invoices', 'list', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),
       ])
+    },
+  })
+}
+
+export function usePatchWholesaleInvoiceDatesMutation(storeId?: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: { invoiceId: string; issuedDate: string; dueDate: string }) =>
+      patchWholesaleInvoiceDates(input.invoiceId, input.issuedDate, input.dueDate),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['wholesale', 'invoices', 'list', storeId] })
     },
   })
 }

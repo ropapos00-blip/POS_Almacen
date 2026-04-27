@@ -353,7 +353,7 @@ export function ClientesPage() {
 				{statsError ? <p className="mt-3 text-xs text-rose-300">{statsError}</p> : null}
 
 				{!loadingStats && !statsError ? (
-					<div className="mt-3 overflow-x-auto rounded-xl border border-zinc-800">
+					<div className="ghost-scrollbar mt-3 overflow-x-auto rounded-xl border border-zinc-800">
 						<table className="min-w-full text-sm">
 							<thead className="bg-zinc-900/90 text-xs uppercase tracking-[0.12em] text-zinc-500">
 								<tr>

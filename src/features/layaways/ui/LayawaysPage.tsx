@@ -671,7 +671,7 @@ export function LayawaysPage() {
 
               {/* Items table */}
               {draftItems.length > 0 ? (
-                <div className="mb-4 overflow-x-auto rounded-xl border border-zinc-800">
+                <div className="ghost-scrollbar mb-4 overflow-x-auto rounded-xl border border-zinc-800">
                   <div className="grid grid-cols-[1fr_48px_96px_88px_24px] border-b border-zinc-800 bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-500">
                     <span>Descripción</span>
                     <span className="text-center">Cant.</span>

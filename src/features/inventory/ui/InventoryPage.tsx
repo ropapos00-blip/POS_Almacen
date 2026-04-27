@@ -537,7 +537,7 @@ export function InventoryPage() {
                       Sin ítems. Usa "+ Agregar ítem" para registrar.
                     </p>
                   ) : (
-                    <div className="overflow-x-auto">
+                    <div className="ghost-scrollbar overflow-x-auto">
                       <table className="w-full text-xs">
                         <thead>
                           <tr className="border-b border-zinc-800 text-left text-zinc-500">

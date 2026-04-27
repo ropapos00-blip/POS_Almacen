@@ -369,6 +369,7 @@ export function WholesaleInventoryPage() {
   const [customCostItems, setCustomCostItems] = useState<CustomCostItemDraft[]>([])
   const [costeoHeader, setCosteoHeader] = useState<WholesaleCosteoHeader>(createEmptyCosteoHeader())
   const [deleteTarget, setDeleteTarget] = useState<WholesaleInventoryRow | null>(null)
+  const [detailTarget, setDetailTarget] = useState<WholesaleInventoryRow | null>(null)
   const [showResetInventoryModal, setShowResetInventoryModal] = useState(false)
   const [editTarget, setEditTarget] = useState<WholesaleInventoryRow | null>(null)
   const [editReference, setEditReference] = useState('')
@@ -970,7 +971,8 @@ export function WholesaleInventoryPage() {
 
   return (
     <section className="space-y-6">
-      <header className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+      <article className="min-w-0 space-y-5 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+      <header>
         <h1 className="text-2xl font-semibold text-zinc-100">Inventario Confeccion</h1>
         <p className="mt-2 text-sm text-zinc-400">
           Modulo aparte del inventario retail. Referencia, tallas, costos por insumo y valor unitario.
@@ -978,8 +980,8 @@ export function WholesaleInventoryPage() {
         {feedback ? <p className="mt-2 text-sm text-amber-300">{feedback}</p> : null}
       </header>
 
-      <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
-        <h2 className="text-lg font-semibold text-zinc-100">Crear referencia</h2>
+      <div>
+        <h2 className="text-sm font-semibold text-zinc-100">Crear referencia</h2>
         <p className="mt-1 text-xs text-zinc-500">
           Cada referencia inicia en cero por defecto y es exclusiva de confeccion.
         </p>
@@ -1190,7 +1192,7 @@ export function WholesaleInventoryPage() {
               <p className="text-xs text-zinc-500">Usa la primera linea para empezar y luego agrega las que necesites.</p>
             ) : null}
             {colorSizeRows.length > 0 && stockEntryMode === 'matrix' ? (
-              <div className="overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-950/40">
+              <div className="ghost-scrollbar overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-950/40">
                 <table className="min-w-full border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-zinc-800">
@@ -1436,9 +1438,10 @@ export function WholesaleInventoryPage() {
             {createMutation.isPending ? 'Guardando...' : 'Crear referencia'}
           </button>
         </div>
+      </div>
       </article>
 
-      <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+      <article className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
         <div className="grid gap-2 md:grid-cols-[1fr_auto]">
           <input
             value={searchText}
@@ -1456,40 +1459,21 @@ export function WholesaleInventoryPage() {
           </button>
         </div>
 
-        <ul className="mt-4 space-y-2">
+        <ul className="ghost-scrollbar mt-4 max-h-80 space-y-2 overflow-y-auto pr-1">
           {filteredRows.map((row) => (
             <li key={row.variantId} className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2">
               <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-zinc-200">{row.reference}</p>
-                  <p className="text-xs text-zinc-500">
-                    Tallas activas: {Object.entries(row.sizeQuantities)
-                      .filter((entry) => entry[1] > 0)
-                      .map((entry) => `${entry[0]} (${entry[1]})`)
-                      .join(', ') || 'Sin tallas cargadas'}
-                  </p>
-                  <p className="text-xs text-zinc-500">
-                    Colores activos: {Object.entries(row.colorQuantities)
-                      .filter((entry) => Object.values(entry[1] ?? {}).some((qty) => Number(qty) > 0))
-                      .map((entry) => entry[0])
-                      .join(', ') || 'Sin colores cargados'}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-zinc-500">Valor unitario</p>
-                  <p className="text-xs text-zinc-300">{formatCop(row.unitPrice)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-zinc-500">Inversion total</p>
-                  <p className="text-xs text-zinc-300">{formatCop(row.totalInvestment)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-zinc-500">Cantidad</p>
-                  <p className="text-lg font-semibold text-emerald-300">{row.quantityOnHand}</p>
-                </div>
+                <p className="text-sm font-semibold text-zinc-200">{row.reference}</p>
+                <p className="text-xl font-semibold text-emerald-300">{row.quantityOnHand}</p>
               </div>
-
               <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDetailTarget(row)}
+                  className="rounded-md border border-amber-400/40 px-2 py-1 text-xs text-amber-300"
+                >
+                  Detalles
+                </button>
                 <button
                   type="button"
                   onClick={() => openEditModal(row)}
@@ -1509,6 +1493,66 @@ export function WholesaleInventoryPage() {
           ))}
         </ul>
       </article>
+
+      {detailTarget ? (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
+          onClick={() => setDetailTarget(null)}
+        >
+          <div
+            className="ghost-scrollbar w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-900 p-5"
+            onClick={(event) => { event.stopPropagation() }}
+          >
+            <h3 className="text-lg font-semibold text-zinc-100">{detailTarget.reference}</h3>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div>
+                <p className="text-xs text-zinc-500">Cantidad</p>
+                <p className="text-2xl font-bold text-emerald-300">{detailTarget.quantityOnHand}</p>
+              </div>
+              <div>
+                <p className="text-xs text-zinc-500">Valor unitario</p>
+                <p className="text-sm font-semibold text-zinc-200">{formatCop(detailTarget.unitPrice)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-zinc-500">Inversion total</p>
+                <p className="text-sm font-semibold text-zinc-200">{formatCop(detailTarget.totalInvestment)}</p>
+              </div>
+            </div>
+            <div className="mt-4">
+              <p className="text-xs font-semibold text-zinc-400">Tallas activas</p>
+              <p className="mt-1 text-xs text-zinc-300">
+                {Object.entries(detailTarget.sizeQuantities)
+                  .filter(([, v]) => v > 0)
+                  .map(([k, v]) => `${k} (${v})`)
+                  .join(', ') || 'Sin tallas cargadas'}
+              </p>
+            </div>
+            <div className="mt-3">
+              <p className="text-xs font-semibold text-zinc-400">Colores y tallas activos</p>
+              <div className="mt-1 space-y-1">
+                {Object.entries(detailTarget.colorQuantities)
+                  .filter(([, sizes]) => Object.values(sizes ?? {}).some((qty) => Number(qty) > 0))
+                  .map(([color, sizes]) => (
+                    <p key={color} className="text-xs text-zinc-300">
+                      <span className="font-medium text-zinc-200">{color}:</span>{' '}
+                      {Object.entries(sizes ?? {})
+                        .filter(([, v]) => Number(v) > 0)
+                        .map(([size, qty]) => `${size} (${qty})`)
+                        .join(', ')}
+                    </p>
+                  ))}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDetailTarget(null)}
+              className="mt-5 rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-200"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {deleteTarget ? (
         <div
@@ -1768,7 +1812,7 @@ export function WholesaleInventoryPage() {
                   <p className="text-xs text-zinc-500">Usa la primera linea para empezar y luego agrega las que necesites.</p>
                 ) : null}
                 {editColorSizeRows.length > 0 && editStockEntryMode === 'matrix' ? (
-                  <div className="overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-950/40">
+                  <div className="ghost-scrollbar overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-950/40">
                     <table className="min-w-full border-collapse text-xs">
                       <thead>
                         <tr className="border-b border-zinc-800">

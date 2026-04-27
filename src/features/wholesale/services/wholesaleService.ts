@@ -180,6 +180,20 @@ export async function updateWholesaleInvoiceHeader(input: UpdateWholesaleInvoice
   }
 }
 
+export async function patchWholesaleInvoiceDates(invoiceId: string, issuedDate: string, dueDate: string) {
+  const { error } = await supabase
+    .from('wholesale_invoices')
+    .update({
+      issued_at: `${issuedDate}T00:00:00`,
+      due_date: dueDate,
+    })
+    .eq('id', invoiceId)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+}
+
 export async function updateWholesaleInvoice(input: UpdateWholesaleInvoiceInput) {
   const { data, error } = await supabase.rpc('update_wholesale_invoice_transaction', {
     p_invoice_id: input.invoiceId,

@@ -15,7 +15,6 @@ import {
   useVariantMutations,
   useVariantsQuery,
 } from '../../model/useCatalogQueries'
-import { CatalogCrudSection } from '../../ui/CatalogCrudSection'
 import { VariantBarcodeLabel } from '../../ui/VariantBarcodeLabel'
 import { useAuthStore } from '../../../auth/model/useAuthStore'
 import { formatCopInput, parseCopIntegerInput } from '../../../../shared/utils/numberInput'
@@ -174,30 +173,32 @@ export function ProductsPage() {
   }
 
   return (
-    <section className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-zinc-100">Catalogo</h1>
-        <p className="mt-2 text-zinc-400">
-          CRUD conectado a Supabase para categorias, productos y variantes.
-        </p>
-        {feedback ? <p className="mt-2 text-sm text-amber-300">{feedback}</p> : null}
-        <button
-          type="button"
-          disabled={!selectedLabelVariant}
-          onClick={() => {
-            void handlePrintLabel()
-          }}
-          className="mt-3 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Imprimir etiqueta seleccionada
-        </button>
-      </header>
+    <section className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+      {/* ── LEFT: forms ────────────────────────────────────────── */}
+      <article className="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+        <header>
+          <h1 className="text-2xl font-semibold text-zinc-100">Catalogo</h1>
+          <p className="mt-2 text-sm text-zinc-400">
+            CRUD conectado a Supabase para categorias, productos y variantes.
+          </p>
+          {feedback ? <p className="mt-2 text-sm text-amber-300">{feedback}</p> : null}
+          <button
+            type="button"
+            disabled={!selectedLabelVariant}
+            onClick={() => {
+              void handlePrintLabel()
+            }}
+            className="mt-3 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Imprimir etiqueta seleccionada
+          </button>
+        </header>
 
-      <CatalogCrudSection
-        title="Categorias"
-        subtitle="Organiza el catalogo por lineas de producto"
-        form={
-          <form className="space-y-3" onSubmit={onCategorySubmit}>
+        {/* Categories form */}
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+          <h2 className="text-sm font-semibold text-zinc-100">Categorias</h2>
+          <p className="mt-0.5 text-xs text-zinc-500">Organiza el catalogo por lineas de producto</p>
+          <form className="mt-3 space-y-3" onSubmit={onCategorySubmit}>
             <input
               placeholder="Nombre"
               {...categoryForm.register('name')}
@@ -212,54 +213,13 @@ export function ProductsPage() {
               {editingCategory ? 'Actualizar categoria' : 'Crear categoria'}
             </button>
           </form>
-        }
-      >
-        <ul className="space-y-2">
-          {(categoryOptions ?? []).map((item) => (
-            <li
-              key={item.id}
-              className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2"
-            >
-              <div>
-                <p className="text-sm font-medium text-zinc-200">{item.name}</p>
-                <p className="text-xs text-zinc-500">{item.slug}</p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-300"
-                  onClick={() => {
-                    setEditingCategory(item)
-                    categoryForm.reset({ name: item.name, slug: item.slug })
-                  }}
-                >
-                  Editar
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border border-rose-800 px-2 py-1 text-xs text-rose-300"
-                  onClick={async () => {
-                    try {
-                      await categoryMutations.deleteMutation.mutateAsync(item.id)
-                      setFeedback('Categoria eliminada.')
-                    } catch (error) {
-                      setFeedback(getErrorMessage(error))
-                    }
-                  }}
-                >
-                  Eliminar
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </CatalogCrudSection>
+        </div>
 
-      <CatalogCrudSection
-        title="Productos"
-        subtitle="Informacion base para venta e inventario"
-        form={
-          <form className="space-y-3" onSubmit={onProductSubmit}>
+        {/* Products form */}
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+          <h2 className="text-sm font-semibold text-zinc-100">Productos</h2>
+          <p className="mt-0.5 text-xs text-zinc-500">Informacion base para venta e inventario</p>
+          <form className="mt-3 space-y-3" onSubmit={onProductSubmit}>
             <select
               {...productForm.register('categoryId')}
               className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm"
@@ -300,61 +260,13 @@ export function ProductsPage() {
               {editingProduct ? 'Actualizar producto' : 'Crear producto'}
             </button>
           </form>
-        }
-      >
-        <ul className="space-y-2">
-          {(productOptions ?? []).map((item) => (
-            <li
-              key={item.id}
-              className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2"
-            >
-              <div>
-                <p className="text-sm font-medium text-zinc-200">{item.name}</p>
-                <p className="text-xs text-zinc-500">{item.brand ?? 'Sin marca'}</p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-300"
-                  onClick={() => {
-                    setEditingProduct(item)
-                    productForm.reset({
-                      categoryId: item.category_id,
-                      name: item.name,
-                      description: item.description ?? '',
-                      brand: item.brand ?? '',
-                      gender: item.gender ?? '',
-                      season: item.season ?? '',
-                    })
-                  }}
-                >
-                  Editar
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border border-rose-800 px-2 py-1 text-xs text-rose-300"
-                  onClick={async () => {
-                    try {
-                      await productMutations.deleteMutation.mutateAsync(item.id)
-                      setFeedback('Producto eliminado.')
-                    } catch (error) {
-                      setFeedback(getErrorMessage(error))
-                    }
-                  }}
-                >
-                  Eliminar
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </CatalogCrudSection>
+        </div>
 
-      <CatalogCrudSection
-        title="Variantes"
-        subtitle="Talla y color con precio, SKU y codigo de barras"
-        form={
-          <form className="space-y-3" onSubmit={onVariantSubmit}>
+        {/* Variants form */}
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+          <h2 className="text-sm font-semibold text-zinc-100">Variantes</h2>
+          <p className="mt-0.5 text-xs text-zinc-500">Talla y color con precio, SKU y codigo de barras</p>
+          <form className="mt-3 space-y-3" onSubmit={onVariantSubmit}>
             <select
               {...variantForm.register('productId')}
               className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm"
@@ -418,65 +330,170 @@ export function ProductsPage() {
               {editingVariant ? 'Actualizar variante' : 'Crear variante'}
             </button>
           </form>
-        }
-      >
-        <ul className="space-y-2">
-          {(variantsQuery.data ?? []).map((item) => (
-            <li
-              key={item.id}
-              className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2"
-            >
-              <div>
-                <p className="text-sm font-medium text-zinc-200">
-                  {item.sku} · {item.size} · {item.color}
-                </p>
-                <p className="text-xs text-zinc-500">Barcode: {item.barcode}</p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-300"
-                  onClick={() => {
-                    setEditingVariant(item)
-                    variantForm.reset({
-                      productId: item.product_id,
-                      size: item.size,
-                      color: item.color,
-                      costPrice: item.cost_price,
-                      salePrice: item.sale_price,
-                      sku: item.sku,
-                      barcode: item.barcode,
-                    })
-                  }}
-                >
-                  Editar
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border border-amber-600/40 px-2 py-1 text-xs text-amber-300"
-                  onClick={() => setSelectedLabelVariant(item)}
-                >
-                  Etiqueta
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border border-rose-800 px-2 py-1 text-xs text-rose-300"
-                  onClick={async () => {
-                    try {
-                      await variantMutations.deleteMutation.mutateAsync(item.id)
-                      setFeedback('Variante eliminada.')
-                    } catch (error) {
-                      setFeedback(getErrorMessage(error))
-                    }
-                  }}
-                >
-                  Eliminar
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </CatalogCrudSection>
+        </div>
+      </article>
+
+      {/* ── RIGHT: lists ───────────────────────────────────────── */}
+      <article className="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+        {/* Categories list */}
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-100">Lista de categorias</h2>
+          <p className="mt-0.5 text-xs text-zinc-500">{categoryOptions.length} categorias</p>
+          <ul className="ghost-scrollbar mt-3 max-h-52 space-y-2 overflow-y-auto pr-1">
+            {categoryOptions.map((item) => (
+              <li
+                key={item.id}
+                className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2"
+              >
+                <div>
+                  <p className="text-sm font-medium text-zinc-200">{item.name}</p>
+                  <p className="text-xs text-zinc-500">{item.slug}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-300"
+                    onClick={() => {
+                      setEditingCategory(item)
+                      categoryForm.reset({ name: item.name, slug: item.slug })
+                    }}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border border-rose-800 px-2 py-1 text-xs text-rose-300"
+                    onClick={async () => {
+                      try {
+                        await categoryMutations.deleteMutation.mutateAsync(item.id)
+                        setFeedback('Categoria eliminada.')
+                      } catch (error) {
+                        setFeedback(getErrorMessage(error))
+                      }
+                    }}
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Products list */}
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-100">Lista de productos</h2>
+          <p className="mt-0.5 text-xs text-zinc-500">{productOptions.length} productos</p>
+          <ul className="ghost-scrollbar mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
+            {productOptions.map((item) => (
+              <li
+                key={item.id}
+                className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2"
+              >
+                <div>
+                  <p className="text-sm font-medium text-zinc-200">{item.name}</p>
+                  <p className="text-xs text-zinc-500">{item.brand ?? 'Sin marca'}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-300"
+                    onClick={() => {
+                      setEditingProduct(item)
+                      productForm.reset({
+                        categoryId: item.category_id,
+                        name: item.name,
+                        description: item.description ?? '',
+                        brand: item.brand ?? '',
+                        gender: item.gender ?? '',
+                        season: item.season ?? '',
+                      })
+                    }}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border border-rose-800 px-2 py-1 text-xs text-rose-300"
+                    onClick={async () => {
+                      try {
+                        await productMutations.deleteMutation.mutateAsync(item.id)
+                        setFeedback('Producto eliminado.')
+                      } catch (error) {
+                        setFeedback(getErrorMessage(error))
+                      }
+                    }}
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Variants list */}
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-100">Lista de variantes</h2>
+          <p className="mt-0.5 text-xs text-zinc-500">{variantsQuery.data?.length ?? 0} variantes</p>
+          <ul className="ghost-scrollbar mt-3 max-h-80 space-y-2 overflow-y-auto pr-1">
+            {(variantsQuery.data ?? []).map((item) => (
+              <li
+                key={item.id}
+                className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2"
+              >
+                <div>
+                  <p className="text-sm font-medium text-zinc-200">
+                    {item.sku} · {item.size} · {item.color}
+                  </p>
+                  <p className="text-xs text-zinc-500">Barcode: {item.barcode}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-300"
+                    onClick={() => {
+                      setEditingVariant(item)
+                      variantForm.reset({
+                        productId: item.product_id,
+                        size: item.size,
+                        color: item.color,
+                        costPrice: item.cost_price,
+                        salePrice: item.sale_price,
+                        sku: item.sku,
+                        barcode: item.barcode,
+                      })
+                    }}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border border-amber-600/40 px-2 py-1 text-xs text-amber-300"
+                    onClick={() => setSelectedLabelVariant(item)}
+                  >
+                    Etiqueta
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border border-rose-800 px-2 py-1 text-xs text-rose-300"
+                    onClick={async () => {
+                      try {
+                        await variantMutations.deleteMutation.mutateAsync(item.id)
+                        setFeedback('Variante eliminada.')
+                      } catch (error) {
+                        setFeedback(getErrorMessage(error))
+                      }
+                    }}
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </article>
 
       <VariantBarcodeLabel variant={selectedLabelVariant} labelRef={labelRef} />
     </section>

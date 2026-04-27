@@ -1,4 +1,4 @@
-import { CustomerForm } from './CustomerForm'
+import { CustomerSelector } from './CustomerSelector'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
@@ -17,6 +17,7 @@ import {
   useCreateWholesaleFinanceMovementMutation,
   useCreateWholesaleInvoiceMutation,
   useDeleteWholesaleFinanceMovementMutation,
+  usePatchWholesaleInvoiceDatesMutation,
   useUpdateWholesaleInvoiceMutation,
   useVoidWholesaleInvoiceMutation,
   useWholesaleFinanceMovementsQuery,
@@ -233,6 +234,7 @@ export function WholesalePage() {
   const user = useAuthStore((state) => state.user)
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
+  const [invoiceDate, setInvoiceDate] = useState(today)
   const [discountTotal, setDiscountTotal] = useState(0)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [paymentFeedback, setPaymentFeedback] = useState<string | null>(null)
@@ -294,10 +296,12 @@ export function WholesalePage() {
   }, [financeMovementForDelete])
 
   const printRef = useRef<HTMLDivElement>(null)
+  const dateInputRef = useRef<HTMLInputElement>(null)
   const invoicesQuery = useWholesaleInvoicesQuery(user?.storeId)
   const financeMovementsQuery = useWholesaleFinanceMovementsQuery(user?.storeId)
   const referenceOptionsQuery = useWholesaleReferenceOptionsQuery(user?.storeId)
   const createMutation = useCreateWholesaleInvoiceMutation(user?.storeId)
+  const patchDatesMutation = usePatchWholesaleInvoiceDatesMutation(user?.storeId)
   const updateInvoiceMutation = useUpdateWholesaleInvoiceMutation(user?.storeId)
   const voidInvoiceMutation = useVoidWholesaleInvoiceMutation(user?.storeId, user?.id)
   const paymentMutation = useRegisterWholesalePaymentMutation(user?.storeId)
@@ -933,7 +937,7 @@ export function WholesalePage() {
     }
 
     try {
-      const issuedDate = getTodayIsoDateColombia()
+      const issuedDate = invoiceDate
       const creditDueDate = addDaysToIsoDate(issuedDate, 30)
 
       const result = await createMutation.mutateAsync({
@@ -953,15 +957,20 @@ export function WholesalePage() {
         })),
       })
 
-      const issuedAt = new Date().toISOString()
-      const dueDate = addDaysToIsoDate(issuedAt.slice(0, 10), 30)
+      // Patch issued_at and due_date to the user-selected date (RPC uses now() by default)
+      await patchDatesMutation.mutateAsync({
+        invoiceId: result.invoiceId,
+        issuedDate,
+        dueDate: creditDueDate,
+      })
+
       const invoice: WholesaleInvoiceRow = {
         id: result.invoiceId,
         invoice_number: result.invoiceNumber,
         customer_name: customerName.trim() || null,
         customer_phone: customerPhone.trim() || null,
-        issued_at: issuedAt,
-        due_date: dueDate,
+        issued_at: `${issuedDate}T00:00:00`,
+        due_date: creditDueDate,
         subtotal,
         discount_total: discountTotal,
         grand_total: total,
@@ -990,6 +999,7 @@ export function WholesalePage() {
       setFeedback(`Factura de confeccion creada: ${result.invoiceNumber}`)
       setCustomerName('')
       setCustomerPhone('')
+      setInvoiceDate(getTodayIsoDateColombia())
       setDiscountTotal(0)
       setDraftItems([createDraftItem()])
       return invoice
@@ -1546,17 +1556,17 @@ export function WholesalePage() {
 
       {isSalesView ? (
       <>
-      <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+      <article className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
         <h1 className="text-2xl font-semibold text-zinc-100">Sub POS Confeccion</h1>
         <p className="mt-2 text-sm text-zinc-400">
           Factura en formato carta para confeccion y cartera, separada del POS retail.
         </p>
 
-        <div className="mt-5 space-y-2">
+        <div className="ghost-scrollbar mt-5 space-y-2 overflow-x-auto">
           {draftItems.map((item, index) => (
             <div
               key={item.id}
-              className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1fr_90px_90px_90px_120px_100px_auto]"
+              className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1fr_90px_90px_90px_120px_100px_auto] min-w-0"
             >
               <input
                 list="wholesale-reference-options"
@@ -1668,21 +1678,31 @@ export function WholesalePage() {
         </div>
 
         <div className="mt-4">
-          <CustomerForm
+          <CustomerSelector
             storeId={user?.storeId || ''}
+            selectedName={customerName}
+            selectedPhone={customerPhone}
             onSelect={(customer) => {
               setCustomerName(customer.full_name)
               setCustomerPhone(customer.phone)
+            }}
+            onClear={() => {
+              setCustomerName('')
+              setCustomerPhone('')
             }}
           />
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <label className="space-y-1">
-            <span className="text-xs text-zinc-400">Condición de pago</span>
+            <span className="text-xs text-zinc-400">Fecha de emisión</span>
             <input
-              value="Credito automatico a 30 dias"
-              readOnly
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
+              ref={dateInputRef}
+              type="date"
+              value={invoiceDate}
+              onChange={(event) => setInvoiceDate(event.target.value)}
+              onClick={() => dateInputRef.current?.showPicker()}
+              readOnly={false}
+              className="w-full cursor-pointer rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
             />
           </label>
           <label className="space-y-1">
@@ -1701,7 +1721,7 @@ export function WholesalePage() {
             />
           </label>
           <p className="md:col-span-2 text-xs text-zinc-500">
-            La fecha de vencimiento se asigna automaticamente a 30 dias desde la emision.
+            Crédito a 30 días · vence el {formatDateColombia(addDaysToIsoDate(invoiceDate, 30))}.
           </p>
         </div>
 
@@ -1741,10 +1761,10 @@ export function WholesalePage() {
           </button>
         </div>
       </article>
-      <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+      <article className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
         <h2 className="text-lg font-semibold text-zinc-100">Facturas confeccion recientes</h2>
         <p className="mt-1 text-xs text-zinc-500">Ultimas ventas creadas desde Confeccion</p>
-        <ul className="mt-4 space-y-2">
+        <ul className="ghost-scrollbar mt-4 max-h-[68vh] space-y-2 overflow-y-auto pr-1">
           {salesRecentInvoices.slice(0, 30).map((invoice) => (
             <li key={invoice.id} className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2">
               <div className="flex items-center justify-between gap-2">
@@ -1985,16 +2005,17 @@ export function WholesalePage() {
       ) : null}
 
       {isExpensesView ? (
-      <>
-      <header className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
-        <h1 className="text-2xl font-semibold text-zinc-100">Gastos Confeccion</h1>
-        <p className="mt-2 text-sm text-zinc-400">
-          Registro diario de gastos y seguimiento de indicadores con calendario mensual.
-        </p>
-      </header>
+      <section className="space-y-6">
+      <article className="space-y-5 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+        <header>
+          <h1 className="text-2xl font-semibold text-zinc-100">Gastos Confeccion</h1>
+          <p className="mt-2 text-sm text-zinc-400">
+            Registro diario de gastos y seguimiento de indicadores con calendario mensual.
+          </p>
+        </header>
 
-      <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
-        <h2 className="text-lg font-semibold text-zinc-100">Indicadores por periodo</h2>
+      <div>
+        <h2 className="text-sm font-semibold text-zinc-100">Indicadores por periodo</h2>
         <p className="mt-1 text-xs text-zinc-500">Ganancia = Ingresos - Gastos - Inversion.</p>
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
@@ -2034,10 +2055,10 @@ export function WholesalePage() {
             </p>
           </div>
         </div>
-      </article>
+      </div>
 
-      <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
-        <h2 className="text-lg font-semibold text-zinc-100">Gasto diario</h2>
+      <div>
+        <h2 className="text-sm font-semibold text-zinc-100">Gasto diario</h2>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <label className="space-y-1">
             <span className="text-xs text-zinc-400">Fecha</span>
@@ -2089,6 +2110,7 @@ export function WholesalePage() {
         >
           {createFinanceMovementMutation.isPending ? 'Guardando...' : 'Guardar gasto'}
         </button>
+      </div>
       </article>
 
       <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
@@ -2103,7 +2125,8 @@ export function WholesalePage() {
           />
         </label>
 
-        <div className="mt-4 space-y-2">
+        <div className="ghost-scrollbar mt-4 max-h-80 space-y-4 overflow-y-auto pr-1">
+        <div className="space-y-2">
           {Object.entries(
             monthlyExpenseMovements
               .reduce<Record<string, number>>((acc, row) => {
@@ -2192,8 +2215,9 @@ export function WholesalePage() {
             ))
           )}
         </div>
+        </div>
       </article>
-      </>
+      </section>
       ) : null}
 
       {!isDashboardView && !isSalesView && !isCarteraView && !isExpensesView ? (
