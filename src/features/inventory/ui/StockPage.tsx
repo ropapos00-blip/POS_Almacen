@@ -145,7 +145,7 @@ export function StockPage() {
           </div>
 
           {/* Stock counter */}
-          <div className="flex items-center gap-6 rounded-xl border border-zinc-800 bg-zinc-950 px-5 py-4">
+          <div className="flex flex-wrap items-center justify-center gap-4 rounded-xl border border-zinc-800 bg-zinc-950 px-5 py-4">
             <div className="text-center">
               <p className="text-xs text-zinc-500">Stock actual</p>
               <p className="text-3xl font-bold text-zinc-100">{found.quantity}</p>

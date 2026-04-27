@@ -370,6 +370,7 @@ export function InventoryPage() {
   const deleteItem = useDeleteInventoryItemMutation(user?.storeId)
 
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
+  const [categorySearch, setCategorySearch] = useState('')
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [renameCategoryTarget, setRenameCategoryTarget] = useState<{ id: string; name: string } | null>(null)
   const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<{ id: string; name: string } | null>(null)
@@ -439,7 +440,7 @@ export function InventoryPage() {
 
   return (
     <section className="space-y-6">
-      <header className="flex items-start justify-between gap-4">
+      <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-zinc-100">Inventario</h1>
           <p className="mt-1 text-sm text-zinc-400">
@@ -466,8 +467,21 @@ export function InventoryPage() {
         </div>
       )}
 
-      <div className="space-y-3">
-        {categories.map((cat) => {
+      <input
+        type="text"
+        placeholder="Buscar categoría…"
+        value={categorySearch}
+        onChange={(e) => setCategorySearch(e.target.value)}
+        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-amber-400 focus:outline-none"
+      />
+
+      <div className="ghost-scrollbar max-h-[70vh] space-y-3 overflow-y-auto pr-1">
+        {categories
+          .filter((cat) =>
+            categorySearch.trim() === '' ||
+            cat.name.toLowerCase().includes(categorySearch.trim().toLowerCase())
+          )
+          .map((cat) => {
           const catItems = items.filter((it) => it.categoryId === cat.id)
           const isExpanded = expandedCategories.has(cat.id)
 
@@ -478,15 +492,15 @@ export function InventoryPage() {
                 tabIndex={0}
                 onClick={() => toggleCategory(cat.id)}
                 onKeyDown={(e) => e.key === 'Enter' && toggleCategory(cat.id)}
-                className="flex w-full cursor-pointer items-center justify-between rounded-2xl px-4 py-3 text-left hover:bg-zinc-800/40"
+                className="flex w-full cursor-pointer flex-wrap items-center gap-x-2 gap-y-2 rounded-2xl px-4 py-3 text-left hover:bg-zinc-800/40"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
                   <span className="text-base font-semibold text-zinc-100">{cat.name}</span>
                   <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
                     {catItems.length} {catItems.length === 1 ? 'ítem' : 'ítems'}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="ml-auto flex items-center gap-2">
                   <button
                     type="button"
                     onClick={(e) => {

@@ -69,3 +69,26 @@ input:-webkit-autofill:active {
 .store-logo-font {
   font-family: 'Dolce Vita', 'Space Grotesk', 'Segoe UI', sans-serif;
 }
+
+/* Ghost scrollbar: thin, invisible until hover */
+.ghost-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.ghost-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.ghost-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ghost-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 9999px;
+  transition: background 0.2s;
+}
+.ghost-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: #27272a; /* zinc-800 */
+}
+.ghost-scrollbar:hover {
+  scrollbar-color: #27272a transparent;
+}

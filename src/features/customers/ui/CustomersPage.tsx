@@ -200,12 +200,12 @@ export function CustomersPage() {
 
       {/* Customer list */}
       {loadedOnce && (
-        <div className="overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-900/80">
+        <div className="ghost-scrollbar overflow-x-auto overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900/80" style={{ maxHeight: 'calc(100vh - 260px)' }}>
           {displayed.length === 0 ? (
             <p className="p-6 text-center text-sm text-zinc-500">No hay clientes.</p>
           ) : (
             <table className="w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 z-10 bg-zinc-900">
                 <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
                   <th className="px-4 py-3">Nombre</th>
                   <th className="px-4 py-3">Teléfono</th>

@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
-import { searchConfeccionCustomers, createConfeccionCustomer } from '../services/confeccionCustomerService';
-import type { ConfeccionCustomer } from '../services/confeccionCustomerService';
+import { useState } from 'react';
+import { searchConfeccionCustomers, createConfeccionCustomer, ConfeccionCustomer } from '../services/confeccionCustomerService';
 
 interface CustomerFormProps {
   storeId: string;
@@ -21,27 +20,21 @@ export function CustomerForm({ storeId, onSelect }: CustomerFormProps) {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
 
-  async function fetchCustomers(searchTerm: string) {
+  async function handleSearch(e: React.ChangeEvent<HTMLInputElement>) {
+    setQuery(e.target.value);
+    if (e.target.value.length < 2) {
+      setResults([]);
+      return;
+    }
     setLoading(true);
     try {
-      const found = await searchConfeccionCustomers(storeId, searchTerm, 100);
+      const found = await searchConfeccionCustomers(storeId, e.target.value);
       setResults(found);
     } catch {
       setResults([]);
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   }
-
-  async function handleSearch(e: React.ChangeEvent<HTMLInputElement>) {
-    const nextQuery = e.target.value;
-    setQuery(nextQuery);
-    await fetchCustomers(nextQuery);
-  }
-
-  useEffect(() => {
-    void fetchCustomers('');
-  }, [storeId]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -56,14 +49,35 @@ export function CustomerForm({ storeId, onSelect }: CustomerFormProps) {
       setForm({ full_name: '', phone: '', address: '', document_id: '', city: '' });
       setQuery('');
       setResults([]);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error al crear cliente');
+    } catch (err: any) {
+      setError(err.message || 'Error al crear cliente');
     }
     setCreating(false);
   }
 
   return (
     <div className="space-y-4">
+      <input
+        value={query}
+        onChange={handleSearch}
+        placeholder="Buscar cliente por nombre, cédula o teléfono"
+        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+      />
+      {loading && <div className="text-xs text-zinc-400">Buscando...</div>}
+      {results.length > 0 && (
+        <ul className="border border-zinc-800 rounded-lg bg-zinc-900 max-h-60 overflow-y-auto">
+          {results.map((customer) => (
+            <li
+              key={customer.id}
+              className="px-3 py-2 hover:bg-zinc-800 cursor-pointer text-sm"
+              onClick={() => onSelect(customer)}
+            >
+              <span className="font-medium text-zinc-100">{customer.full_name}</span>
+              <span className="ml-2 text-xs text-zinc-400">{customer.document_id} · {customer.phone}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       <form onSubmit={handleCreate} className="grid gap-2 md:grid-cols-2">
         <input
           required
@@ -109,30 +123,6 @@ export function CustomerForm({ storeId, onSelect }: CustomerFormProps) {
         </button>
         {error && <div className="md:col-span-2 text-xs text-rose-400">{error}</div>}
       </form>
-
-      <div className="space-y-2">
-        <input
-          value={query}
-          onChange={handleSearch}
-          placeholder="Buscar cliente por nombre, cédula o teléfono"
-          className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-        />
-        {loading ? <div className="text-xs text-zinc-400">Buscando...</div> : null}
-        {results.length > 0 ? (
-          <ul className="border border-zinc-800 rounded-lg bg-zinc-900 max-h-72 overflow-y-auto">
-            {results.map((customer) => (
-              <li
-                key={customer.id}
-                className="cursor-pointer px-3 py-2 text-sm hover:bg-zinc-800"
-                onClick={() => onSelect(customer)}
-              >
-                <span className="font-medium text-zinc-100">{customer.full_name}</span>
-                <span className="ml-2 text-xs text-zinc-400">{customer.document_id} · {customer.phone}</span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
     </div>
   );
 }

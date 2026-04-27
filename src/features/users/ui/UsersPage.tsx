@@ -34,6 +34,7 @@ const STORE_NAV_ROUTE_OPTIONS = [
   { route: '/pos', label: 'POS' },
   { route: '/sales', label: 'Ventas' },
   { route: '/manual-invoices', label: 'Factura manual' },
+  { route: '/gastos', label: 'Gastos' },
   { route: '/inventory', label: 'Inventario' },
   { route: '/stock', label: 'Entrada Stock' },
   { route: '/layaways', label: 'Separados' },
@@ -598,7 +599,7 @@ export function UsersPage() {
         </article>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_1.5fr]">
+      <div className="grid gap-4 lg:grid-cols-[1fr_1.5fr]">
         <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
           <h2 className="text-lg font-semibold text-zinc-100">Crear usuario</h2>
           <form className="mt-4 space-y-3" onSubmit={onSubmit}>

@@ -178,7 +178,7 @@ export function SalesPage() {
         </div>
       </article>
 
-      <div className="grid gap-4 xl:grid-cols-[1.3fr_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
         <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
           <ul className="space-y-2">
             {(salesQuery.data ?? []).map((sale) => (

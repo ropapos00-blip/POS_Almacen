@@ -369,8 +369,9 @@ export function PosPage() {
                   key={item.variantId}
                   className="rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 space-y-2"
                 >
-                  <div className="flex items-center gap-2">
-                    <p className="min-w-0 flex-1 truncate text-sm text-zinc-200">{item.name}</p>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                    <p className="w-full truncate text-sm text-zinc-200 sm:flex-1 sm:w-auto">{item.name}</p>
+                    <div className="ml-auto flex items-center gap-2">
                     <input
                       type="number"
                       inputMode="numeric"
@@ -382,7 +383,7 @@ export function PosPage() {
                       }
                       className="w-16 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-center text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
                     />
-                    <p className="w-28 shrink-0 text-right text-sm font-semibold text-emerald-300">
+                    <p className="w-24 shrink-0 text-right text-sm font-semibold text-emerald-300">
                       {formatCop(item.unitPrice * item.quantity)}
                     </p>
                     <button
@@ -392,6 +393,7 @@ export function PosPage() {
                     >
                       Quitar
                     </button>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-zinc-500 shrink-0">Dcto:</span>

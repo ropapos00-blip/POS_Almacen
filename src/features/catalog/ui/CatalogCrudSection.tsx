@@ -19,7 +19,7 @@ export function CatalogCrudSection({
         <h2 className="text-lg font-semibold text-zinc-100">{title}</h2>
         <p className="mt-1 text-xs text-zinc-400">{subtitle}</p>
       </header>
-      <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1.5fr]">
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1.5fr]">
         <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">{form}</div>
         <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">{children}</div>
       </div>

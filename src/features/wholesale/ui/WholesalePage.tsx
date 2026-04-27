@@ -1,4 +1,4 @@
-import { CustomerSelector } from './CustomerSelector'
+import { CustomerForm } from './CustomerForm'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
@@ -32,8 +32,6 @@ import type {
 } from '../model/wholesale.types'
 import { WholesaleInvoiceLetter } from './WholesaleInvoiceLetter'
 
-const MAX_REFERENCE_UNIT_DISCOUNT_COP = 2000
-
 interface DraftItem {
   id: string
   variantId: string
@@ -41,8 +39,6 @@ interface DraftItem {
   color: string
   size: string
   productName: string
-  baseUnitPrice: number
-  unitDiscount: number
   stockAvailable: number
   sizeQuantities: Record<string, number>
   colorQuantities: Record<string, Record<string, number>>
@@ -75,11 +71,9 @@ function createDraftItem(): DraftItem {
     id: createClientId(),
     variantId: '',
     reference: '',
-    color: 'UNICO',
-    size: 'UNICO',
+    color: '',
+    size: '',
     productName: '',
-    baseUnitPrice: 0,
-    unitDiscount: 0,
     stockAvailable: 0,
     sizeQuantities: {},
     colorQuantities: {},
@@ -227,16 +221,6 @@ function invoiceActionButtonClass(variant: 'print' | 'edit' | 'delete' | 'view' 
   return `${base} border-zinc-700 bg-zinc-900/60 text-zinc-200 hover:bg-zinc-800`
 }
 
-interface WholesaleRpcItem {
-  variantId: string
-  color: string
-  size: string
-  quantity: number
-  reference: string
-  productName: string
-  unitPrice: number
-}
-
 export function WholesalePage() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -249,6 +233,10 @@ export function WholesalePage() {
   const user = useAuthStore((state) => state.user)
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
+  const [customerAddress, setCustomerAddress] = useState('')
+  const [customerDocumentId, setCustomerDocumentId] = useState('')
+  const [customerCity, setCustomerCity] = useState('')
+  const [discountTotal, setDiscountTotal] = useState(0)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [paymentFeedback, setPaymentFeedback] = useState<string | null>(null)
   const [selectedInvoice, setSelectedInvoice] = useState<WholesaleInvoiceRow | null>(null)
@@ -367,10 +355,6 @@ export function WholesalePage() {
     return map
   }, [referenceOptionsQuery.data])
 
-  const applyItemUnitDiscount = (baseUnitPrice: number, unitDiscount: number) => {
-    return Math.max(0, Number(baseUnitPrice || 0) - Math.max(0, Number(unitDiscount || 0)))
-  }
-
   useEffect(() => {
     if (!isCarteraView) {
       return
@@ -421,14 +405,7 @@ export function WholesalePage() {
   })
 
   const subtotal = useMemo(() => {
-    return draftItems.reduce((acc, item) => acc + item.quantity * item.baseUnitPrice, 0)
-  }, [draftItems])
-
-  const discountTotal = useMemo(() => {
-    return draftItems.reduce((acc, item) => {
-      const applied = Math.min(item.baseUnitPrice, Math.max(0, Number(item.unitDiscount || 0)))
-      return acc + item.quantity * applied
-    }, 0)
+    return draftItems.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0)
   }, [draftItems])
 
   const total = useMemo(() => {
@@ -757,29 +734,67 @@ export function WholesalePage() {
           return item
         }
 
+        const sizeStock = getStockForColorSize(
+          item.colorQuantities,
+          item.sizeQuantities,
+          item.color,
+          item.size,
+        )
+
         return {
           ...item,
-          quantity: Math.max(0, Math.min(quantity, item.stockAvailable)),
+          quantity: Math.max(0, Math.min(quantity, sizeStock || item.stockAvailable)),
         }
       }),
     )
   }
 
-  function updateDraftUnitDiscount(id: string, discount: number) {
+  function updateDraftSize(id: string, rawSize: string) {
+    const size = normalizeSizeValue(rawSize)
+
     setDraftItems((prev) =>
       prev.map((item) => {
         if (item.id !== id) {
           return item
         }
 
-        const normalizedDiscount = Math.max(
-          0,
-          Math.min(discount, item.baseUnitPrice, MAX_REFERENCE_UNIT_DISCOUNT_COP),
+        const sizeStock = getStockForColorSize(
+          item.colorQuantities,
+          item.sizeQuantities,
+          item.color,
+          size,
         )
         return {
           ...item,
-          unitDiscount: normalizedDiscount,
-          unitPrice: applyItemUnitDiscount(item.baseUnitPrice, normalizedDiscount),
+          size,
+          stockAvailable: sizeStock,
+          quantity: item.quantity <= 0 ? 0 : Math.min(item.quantity, sizeStock),
+        }
+      }),
+    )
+  }
+
+  function updateDraftColor(id: string, rawColor: string) {
+    const color = normalizeColorValue(rawColor)
+
+    setDraftItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) {
+          return item
+        }
+
+        const sizeStock = getStockForColorSize(
+          item.colorQuantities,
+          item.sizeQuantities,
+          color,
+          item.size,
+        )
+
+        return {
+          ...item,
+          color,
+          stockAvailable: sizeStock,
+          quantity: item.quantity <= 0 ? 0 : Math.min(item.quantity, sizeStock),
         }
       }),
     )
@@ -801,11 +816,9 @@ export function WholesalePage() {
             reference,
             variantId: '',
             productName: '',
-            baseUnitPrice: 0,
-            unitDiscount: 0,
             stockAvailable: 0,
-            color: 'UNICO',
-            size: 'UNICO',
+            color: '',
+            size: '',
             sizeQuantities: {},
             colorQuantities: {},
             availableColors: [],
@@ -813,24 +826,56 @@ export function WholesalePage() {
           }
         }
 
+        const availableColorOptions = getColorOptions(
+          selected.availableColors,
+          selected.colorQuantities,
+          item.color,
+        )
+        const currentColor = normalizeColorValue(item.color)
+        const nextColor =
+          currentColor ||
+          availableColorOptions.find((color) => {
+            const sizeMap = selected.colorQuantities[normalizeColorValue(color)] ?? {}
+            return Object.values(sizeMap).some((qty) => qty > 0)
+          }) ||
+          availableColorOptions[0] ||
+          ''
+        const currentSize = normalizeSizeValue(item.size)
+        const sizeOptions = getSizeOptions(
+          selected.sizeQuantities,
+          selected.colorQuantities,
+          nextColor,
+          item.size,
+        )
+        const nextSize =
+          currentSize ||
+          sizeOptions.find((size) =>
+            nextColor
+              ? Number((selected.colorQuantities[nextColor] ?? {})[size] ?? 0) > 0
+              : selected.sizeQuantities[size] > 0,
+          ) ||
+          sizeOptions[0] ||
+          ''
+        const sizeStock = getStockForColorSize(
+          selected.colorQuantities,
+          selected.sizeQuantities,
+          nextColor,
+          nextSize,
+        )
+
         return {
           ...item,
           reference,
           variantId: selected.variantId,
           productName: selected.productName,
-          color: 'UNICO',
-          size: 'UNICO',
-          baseUnitPrice: selected.unitPrice,
+          color: nextColor,
+          size: nextSize,
           sizeQuantities: selected.sizeQuantities,
           colorQuantities: selected.colorQuantities,
           availableColors: selected.availableColors,
-          stockAvailable: Math.max(0, selected.quantityOnHand),
-          unitDiscount: Math.min(item.unitDiscount, selected.unitPrice, MAX_REFERENCE_UNIT_DISCOUNT_COP),
-          unitPrice: applyItemUnitDiscount(
-            selected.unitPrice,
-            Math.min(item.unitDiscount, selected.unitPrice, MAX_REFERENCE_UNIT_DISCOUNT_COP),
-          ),
-          quantity: item.quantity <= 0 ? 0 : Math.min(item.quantity, Math.max(0, selected.quantityOnHand)),
+          stockAvailable: sizeStock,
+          unitPrice: selected.unitPrice,
+          quantity: item.quantity <= 0 ? 0 : Math.min(item.quantity, sizeStock),
         }
       }),
     )
@@ -847,111 +892,19 @@ export function WholesalePage() {
     })
   }
 
-  function allocateDraftItemForRpc(item: DraftItem): WholesaleRpcItem[] {
-    let remaining = Math.max(0, Number(item.quantity || 0))
-    const allocations: WholesaleRpcItem[] = []
-
-    if (remaining <= 0 || !item.variantId) {
-      return allocations
-    }
-
-    const colorEntries = Object.entries(item.colorQuantities ?? {})
-      .map(([color, sizeMap]) => [normalizeColorValue(color), sizeMap] as const)
-      .filter(([color]) => color.length > 0)
-      .sort(([a], [b]) => a.localeCompare(b, 'es'))
-
-    if (colorEntries.length > 0) {
-      for (const [color, sizeMap] of colorEntries) {
-        const sizeEntries = Object.entries(sizeMap ?? {})
-          .map(([size, qty]) => [normalizeSizeValue(size), Math.max(0, Number(qty ?? 0))] as const)
-          .filter(([size, qty]) => size.length > 0 && qty > 0)
-          .sort(([a], [b]) => a.localeCompare(b, 'es'))
-
-        for (const [size, available] of sizeEntries) {
-          if (remaining <= 0) {
-            break
-          }
-
-          const take = Math.min(available, remaining)
-          if (take > 0) {
-            allocations.push({
-              variantId: item.variantId,
-              color,
-              size,
-              quantity: take,
-              reference: item.reference,
-              productName: item.productName,
-              unitPrice: item.unitPrice,
-            })
-            remaining -= take
-          }
-        }
-
-        if (remaining <= 0) {
-          break
-        }
-      }
-    } else {
-      const sizeEntries = Object.entries(item.sizeQuantities ?? {})
-        .map(([size, qty]) => [normalizeSizeValue(size), Math.max(0, Number(qty ?? 0))] as const)
-        .filter(([size, qty]) => size.length > 0 && qty > 0)
-        .sort(([a], [b]) => a.localeCompare(b, 'es'))
-
-      for (const [size, available] of sizeEntries) {
-        if (remaining <= 0) {
-          break
-        }
-
-        const take = Math.min(available, remaining)
-        if (take > 0) {
-          allocations.push({
-            variantId: item.variantId,
-            color: 'UNICO',
-            size,
-            quantity: take,
-            reference: item.reference,
-            productName: item.productName,
-            unitPrice: item.unitPrice,
-          })
-          remaining -= take
-        }
-      }
-    }
-
-    if (allocations.length === 0) {
-      allocations.push({
-        variantId: item.variantId,
-        color: 'UNICO',
-        size: 'UNICA',
-        quantity: Math.max(0, Number(item.quantity || 0)),
-        reference: item.reference,
-        productName: item.productName,
-        unitPrice: item.unitPrice,
-      })
-      remaining = 0
-    }
-
-    if (remaining > 0) {
-      throw new Error(
-        `No se pudo distribuir ${item.quantity} unidades para ${item.reference} en tallas/colores disponibles.`,
-      )
-    }
-
-    return allocations
-  }
-
   const cleanedItemsForValidation = draftItems
     .map((item) => ({
       variantId: item.variantId,
       reference: item.reference,
-      color: 'UNICO',
-      size: 'UNICO',
+      color: normalizeColorValue(item.color),
+      size: normalizeSizeValue(item.size),
+      requiresColor: item.availableColors.length > 0 || Object.keys(item.colorQuantities).length > 0,
       productName: item.productName,
       stockAvailable: item.stockAvailable,
       quantity: Math.max(0, Number(item.quantity || 0)),
       unitPrice: Math.max(0, Number(item.unitPrice || 0)),
     }))
-    .filter((item) => item.variantId && item.quantity > 0)
+    .filter((item) => item.variantId && item.size && item.quantity > 0 && (!item.requiresColor || !!item.color))
 
   const hasInvalidStockRequest = cleanedItemsForValidation.some(
     (item) => item.quantity > item.stockAvailable,
@@ -959,7 +912,6 @@ export function WholesalePage() {
 
   const canSubmit =
     Boolean(user?.storeId && user.id) &&
-    customerName.trim().length > 0 &&
     cleanedItemsForValidation.length > 0 &&
     !hasInvalidStockRequest &&
     discountTotal >= 0 &&
@@ -983,23 +935,9 @@ export function WholesalePage() {
       return null
     }
 
-    if (!customerName.trim()) {
-      setFeedback('Debes seleccionar un cliente de Confección antes de facturar.')
-      return null
-    }
-
     try {
       const issuedDate = getTodayIsoDateColombia()
       const creditDueDate = addDaysToIsoDate(issuedDate, 30)
-      const selectedDraftItems = draftItems
-        .map((item) => ({
-          ...item,
-          quantity: Math.max(0, Number(item.quantity || 0)),
-          unitPrice: Math.max(0, Number(item.unitPrice || 0)),
-        }))
-        .filter((item) => item.variantId && item.quantity > 0)
-
-      const rpcItems = selectedDraftItems.flatMap((item) => allocateDraftItemForRpc(item))
 
       const result = await createMutation.mutateAsync({
         storeId: user.storeId,
@@ -1010,10 +948,10 @@ export function WholesalePage() {
         paymentMethod: 'credit',
         isCredit: true,
         dueDate: creditDueDate,
-        items: rpcItems.map((item) => ({
+        items: cleanedItemsForValidation.map((item) => ({
           variantId: item.variantId,
           color: item.color || 'UNICO',
-          size: item.size || 'UNICA',
+          size: item.size,
           quantity: item.quantity,
         })),
       })
@@ -1037,7 +975,7 @@ export function WholesalePage() {
         payment_method: 'credit',
         payment_reference: null,
         notes: null,
-        wholesale_invoice_items: rpcItems.map((item, index) => ({
+        wholesale_invoice_items: cleanedItemsForValidation.map((item, index) => ({
           id: `${result.invoiceId}-${index}`,
           variant_id: item.variantId,
           reference: item.reference,
@@ -1055,6 +993,7 @@ export function WholesalePage() {
       setFeedback(`Factura de confeccion creada: ${result.invoiceNumber}`)
       setCustomerName('')
       setCustomerPhone('')
+      setDiscountTotal(0)
       setDraftItems([createDraftItem()])
       return invoice
     } catch (error) {
@@ -1529,7 +1468,7 @@ export function WholesalePage() {
   }
 
   return (
-    <section className={isSalesView ? 'grid gap-6 xl:grid-cols-[1.35fr_1fr]' : 'space-y-6'}>
+    <section className={isSalesView ? 'grid gap-6 lg:grid-cols-[1.35fr_1fr]' : 'space-y-6'}>
       {isDashboardView ? (
         <>
           <header className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
@@ -1616,27 +1555,11 @@ export function WholesalePage() {
           Factura en formato carta para confeccion y cartera, separada del POS retail.
         </p>
 
-        <div className="mt-4">
-          <CustomerSelector
-            storeId={user?.storeId || ''}
-            selectedName={customerName}
-            selectedPhone={customerPhone}
-            onSelect={(customer) => {
-              setCustomerName(customer.full_name)
-              setCustomerPhone(customer.phone)
-            }}
-            onClear={() => {
-              setCustomerName('')
-              setCustomerPhone('')
-            }}
-          />
-        </div>
-
         <div className="mt-5 space-y-2">
           {draftItems.map((item, index) => (
             <div
               key={item.id}
-              className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1fr_100px_120px_120px_100px_auto]"
+              className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1fr_90px_90px_90px_120px_100px_auto]"
             >
               <input
                 list="wholesale-reference-options"
@@ -1645,6 +1568,32 @@ export function WholesalePage() {
                 placeholder={`Referencia ${index + 1}`}
                 className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
               />
+              <select
+                value={item.color}
+                onChange={(event) => updateDraftColor(item.id, event.target.value)}
+                className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                disabled={!item.variantId || getColorOptions(item.availableColors, item.colorQuantities, item.color).length === 0}
+              >
+                <option value="">Color</option>
+                {getColorOptions(item.availableColors, item.colorQuantities, item.color).map((color) => (
+                  <option key={color} value={color}>
+                    {color}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={item.size}
+                onChange={(event) => updateDraftSize(item.id, event.target.value)}
+                className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                disabled={!item.variantId || getSizeOptions(item.sizeQuantities, item.colorQuantities, item.color, item.size).length === 0}
+              >
+                <option value="">Talla</option>
+                {getSizeOptions(item.sizeQuantities, item.colorQuantities, item.color, item.size).map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
               <input
                 type="number"
                 inputMode="numeric"
@@ -1654,18 +1603,6 @@ export function WholesalePage() {
                 max={Math.max(1, item.stockAvailable)}
                 onChange={(event) =>
                   updateDraftQuantity(item.id, parseIntegerInput(event.target.value, 0))
-                }
-                className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-              />
-              <input
-                type="text"
-                inputMode="numeric"
-                min={0}
-                step={1}
-                value={item.unitDiscount === 0 ? '' : formatCopInput(item.unitDiscount)}
-                placeholder="Desc/u"
-                onChange={(event) =>
-                  updateDraftUnitDiscount(item.id, parseCopIntegerInput(event.target.value, 0))
                 }
                 className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
               />
@@ -1692,12 +1629,22 @@ export function WholesalePage() {
                 <p className="md:col-span-7 text-xs text-zinc-500">{item.productName}</p>
               ) : null}
               {item.reference && !item.variantId ? (
-                <p className="md:col-span-6 text-xs text-rose-300">
+                <p className="md:col-span-7 text-xs text-rose-300">
                   Referencia no encontrada. Selecciona una referencia existente.
                 </p>
               ) : null}
+              {item.variantId && !item.size ? (
+                <p className="md:col-span-7 text-xs text-rose-300">
+                  Debes indicar la talla para facturar esta referencia.
+                </p>
+              ) : null}
+              {item.variantId && (item.availableColors.length > 0 || Object.keys(item.colorQuantities).length > 0) && !item.color ? (
+                <p className="md:col-span-7 text-xs text-rose-300">
+                  Debes indicar el color para facturar esta referencia.
+                </p>
+              ) : null}
               {item.variantId && item.quantity > item.stockAvailable ? (
-                <p className="md:col-span-6 text-xs text-rose-300">
+                <p className="md:col-span-7 text-xs text-rose-300">
                   Cantidad solicitada supera disponible ({item.stockAvailable}).
                 </p>
               ) : null}
@@ -1723,7 +1670,19 @@ export function WholesalePage() {
           </button>
         </div>
 
-        <div className="mt-4 grid gap-3">
+        <div className="mt-4">
+          <CustomerForm
+            storeId={user?.storeId || ''}
+            onSelect={(customer) => {
+              setCustomerName(customer.full_name)
+              setCustomerPhone(customer.phone)
+              setCustomerAddress(customer.address)
+              setCustomerDocumentId(customer.document_id)
+              setCustomerCity(customer.city)
+            }}
+          />
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
           <label className="space-y-1">
             <span className="text-xs text-zinc-400">Condición de pago</span>
             <input
@@ -1732,11 +1691,23 @@ export function WholesalePage() {
               className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
             />
           </label>
-          <p className="text-xs text-zinc-500">
+          <label className="space-y-1">
+            <span className="text-xs text-zinc-400">Descuento (COP)</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              min={0}
+              step={1}
+              value={discountTotal === 0 ? '' : formatCopInput(discountTotal)}
+              placeholder="0"
+              onChange={(event) =>
+                setDiscountTotal(Math.max(0, parseCopIntegerInput(event.target.value, 0)))
+              }
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+            />
+          </label>
+          <p className="md:col-span-2 text-xs text-zinc-500">
             La fecha de vencimiento se asigna automaticamente a 30 dias desde la emision.
-          </p>
-          <p className="text-xs text-zinc-500">
-            El descuento por referencia esta limitado a {formatCop(MAX_REFERENCE_UNIT_DISCOUNT_COP)} por unidad.
           </p>
         </div>
 

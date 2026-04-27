@@ -25,7 +25,7 @@ export function DashboardPage() {
         </p>
       </header>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
           <p className="text-sm text-zinc-400">Ventas del dia</p>
           <p className="mt-3 text-2xl font-semibold text-zinc-100">{data?.salesToday ?? 0}</p>
@@ -60,7 +60,7 @@ export function DashboardPage() {
               <h2 className="text-lg font-semibold text-zinc-100">Top productos</h2>
               <span className="text-xs text-zinc-500">Mes actual</span>
             </div>
-            <ul className="mt-4 space-y-2">
+            <ul className="ghost-scrollbar mt-4 max-h-64 space-y-2 overflow-y-auto pr-1">
               {(data?.topProducts ?? []).map((row) => (
                 <li key={row.name} className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2">
                   <p className="text-sm font-medium text-zinc-200">{row.name}</p>
@@ -75,7 +75,7 @@ export function DashboardPage() {
               <h2 className="text-lg font-semibold text-zinc-100">Ventas por vendedor</h2>
               <span className="text-xs text-zinc-500">Mes actual</span>
             </div>
-            <ul className="mt-4 space-y-2">
+            <ul className="ghost-scrollbar mt-4 max-h-64 space-y-2 overflow-y-auto pr-1">
               {(data?.salesBySeller ?? []).map((row) => (
                 <li key={row.sellerId} className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2">
                   <p className="text-sm font-medium text-zinc-200">{row.sellerName}</p>

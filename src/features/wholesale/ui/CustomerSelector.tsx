@@ -114,7 +114,7 @@ export function CustomerSelector({
 			{error ? <p className="text-xs text-rose-300">{error}</p> : null}
 
 			{results.length > 0 ? (
-				<ul className="max-h-52 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-900">
+				<ul className="ghost-scrollbar max-h-52 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-900 pr-1">
 					{results.map((customer) => (
 						<li
 							key={customer.id}
