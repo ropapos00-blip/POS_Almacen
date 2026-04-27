@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { searchConfeccionCustomers, createConfeccionCustomer, ConfeccionCustomer } from '../services/confeccionCustomerService';
+import { searchConfeccionCustomers, createConfeccionCustomer } from '../services/confeccionCustomerService';
+import type { ConfeccionCustomer } from '../services/confeccionCustomerService';
 
 interface CustomerFormProps {
   storeId: string;

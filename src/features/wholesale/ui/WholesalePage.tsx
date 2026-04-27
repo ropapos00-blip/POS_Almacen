@@ -233,9 +233,6 @@ export function WholesalePage() {
   const user = useAuthStore((state) => state.user)
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
-  const [customerAddress, setCustomerAddress] = useState('')
-  const [customerDocumentId, setCustomerDocumentId] = useState('')
-  const [customerCity, setCustomerCity] = useState('')
   const [discountTotal, setDiscountTotal] = useState(0)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [paymentFeedback, setPaymentFeedback] = useState<string | null>(null)
@@ -1676,9 +1673,6 @@ export function WholesalePage() {
             onSelect={(customer) => {
               setCustomerName(customer.full_name)
               setCustomerPhone(customer.phone)
-              setCustomerAddress(customer.address)
-              setCustomerDocumentId(customer.document_id)
-              setCustomerCity(customer.city)
             }}
           />
         </div>
