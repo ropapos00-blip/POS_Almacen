@@ -68,7 +68,7 @@ export const appRouter = createBrowserRouter([
       {
         path: 'pos',
         element: withFallback(
-          <ProtectedRoute roles={['super_admin', 'admin', 'cashier']}>
+          <ProtectedRoute roles={['super_admin', 'admin']}>
             <PosPage />
           </ProtectedRoute>,
         ),
