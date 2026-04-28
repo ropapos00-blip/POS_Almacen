@@ -132,12 +132,19 @@ export async function createWholesaleInvoice(input: CreateWholesaleInvoiceInput)
     p_payment_method: input.isCredit ? 'credit' : input.paymentMethod,
     p_payment_reference: null,
     p_notes: null,
-    p_items: input.items.map((item) => ({
-      reference_id: item.variantId,
-      color: item.color,
-      size: item.size,
-      quantity: item.quantity,
-    })),
+    p_items: [
+      ...input.items.map((item) => ({
+        reference_id: item.variantId,
+        color: item.color,
+        size: item.size,
+        quantity: item.quantity,
+      })),
+      ...(input.manualItems ?? []).map((item) => ({
+        description: item.description,
+        unit_price: item.unitPrice,
+        quantity: item.quantity,
+      })),
+    ],
   })
 
   if (error) {
@@ -202,12 +209,19 @@ export async function updateWholesaleInvoice(input: UpdateWholesaleInvoiceInput)
     p_customer_name: input.customerName.trim() || null,
     p_customer_phone: input.customerPhone.trim() || null,
     p_discount_total: input.discountTotal,
-    p_items: input.items.map((item) => ({
-      reference_id: item.variantId,
-      color: item.color,
-      size: item.size,
-      quantity: item.quantity,
-    })),
+    p_items: [
+      ...input.items.map((item) => ({
+        reference_id: item.variantId,
+        color: item.color,
+        size: item.size,
+        quantity: item.quantity,
+      })),
+      ...(input.manualItems ?? []).map((item) => ({
+        description: item.description,
+        unit_price: item.unitPrice,
+        quantity: item.quantity,
+      })),
+    ],
   })
 
   if (error) {

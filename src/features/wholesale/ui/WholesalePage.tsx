@@ -48,6 +48,13 @@ interface DraftItem {
   unitPrice: number
 }
 
+interface DraftManualItem {
+  id: string
+  description: string
+  quantity: number
+  unitPrice: number
+}
+
 interface EditDraftItem {
   id: string
   variantId: string
@@ -79,6 +86,15 @@ function createDraftItem(): DraftItem {
     sizeQuantities: {},
     colorQuantities: {},
     availableColors: [],
+    quantity: 0,
+    unitPrice: 0,
+  }
+}
+
+function createManualItem(): DraftManualItem {
+  return {
+    id: createClientId(),
+    description: '',
     quantity: 0,
     unitPrice: 0,
   }
@@ -247,12 +263,14 @@ export function WholesalePage() {
   const [selectedCustomer, setSelectedCustomer] = useState('all')
   const [portfolioFilter, setPortfolioFilter] = useState<'all' | 'receivable' | 'overdue' | 'paid'>('overdue')
   const [draftItems, setDraftItems] = useState<DraftItem[]>([createDraftItem()])
+  const [manualItems, setManualItems] = useState<DraftManualItem[]>([])
   const [invoiceForEdit, setInvoiceForEdit] = useState<WholesaleInvoiceRow | null>(null)
   const [editInvoiceNumber, setEditInvoiceNumber] = useState('')
   const [editCustomerName, setEditCustomerName] = useState('')
   const [editCustomerPhone, setEditCustomerPhone] = useState('')
   const [editDiscountTotal, setEditDiscountTotal] = useState(0)
   const [editItems, setEditItems] = useState<EditDraftItem[]>([createEditDraftItem()])
+  const [editManualItems, setEditManualItems] = useState<DraftManualItem[]>([])
   const [invoiceForDelete, setInvoiceForDelete] = useState<WholesaleInvoiceRow | null>(null)
   const [financeMovementForDelete, setFinanceMovementForDelete] =
     useState<WholesaleFinanceMovementRow | null>(null)
@@ -406,8 +424,10 @@ export function WholesalePage() {
   })
 
   const subtotal = useMemo(() => {
-    return draftItems.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0)
-  }, [draftItems])
+    const inventorySubtotal = draftItems.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0)
+    const manualSubtotal = manualItems.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0)
+    return inventorySubtotal + manualSubtotal
+  }, [draftItems, manualItems])
 
   const total = useMemo(() => {
     return Math.max(0, subtotal - discountTotal)
@@ -750,57 +770,6 @@ export function WholesalePage() {
     )
   }
 
-  function updateDraftSize(id: string, rawSize: string) {
-    const size = normalizeSizeValue(rawSize)
-
-    setDraftItems((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) {
-          return item
-        }
-
-        const sizeStock = getStockForColorSize(
-          item.colorQuantities,
-          item.sizeQuantities,
-          item.color,
-          size,
-        )
-        return {
-          ...item,
-          size,
-          stockAvailable: sizeStock,
-          quantity: item.quantity <= 0 ? 0 : Math.min(item.quantity, sizeStock),
-        }
-      }),
-    )
-  }
-
-  function updateDraftColor(id: string, rawColor: string) {
-    const color = normalizeColorValue(rawColor)
-
-    setDraftItems((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) {
-          return item
-        }
-
-        const sizeStock = getStockForColorSize(
-          item.colorQuantities,
-          item.sizeQuantities,
-          color,
-          item.size,
-        )
-
-        return {
-          ...item,
-          color,
-          stockAvailable: sizeStock,
-          quantity: item.quantity <= 0 ? 0 : Math.min(item.quantity, sizeStock),
-        }
-      }),
-    )
-  }
-
   function updateDraftReference(id: string, rawReference: string) {
     const reference = rawReference.trim()
     const selected = referenceByCode.get(reference.toLowerCase())
@@ -897,15 +866,22 @@ export function WholesalePage() {
     .map((item) => ({
       variantId: item.variantId,
       reference: item.reference,
-      color: normalizeColorValue(item.color),
-      size: normalizeSizeValue(item.size),
-      requiresColor: item.availableColors.length > 0 || Object.keys(item.colorQuantities).length > 0,
+      color: normalizeColorValue(item.color) || 'UNICO',
+      size: normalizeSizeValue(item.size) || 'UNICA',
       productName: item.productName,
       stockAvailable: item.stockAvailable,
       quantity: Math.max(0, Number(item.quantity || 0)),
       unitPrice: Math.max(0, Number(item.unitPrice || 0)),
     }))
-    .filter((item) => item.variantId && item.size && item.quantity > 0 && (!item.requiresColor || !!item.color))
+    .filter((item) => item.variantId && item.quantity > 0)
+
+  const cleanedManualItemsForValidation = manualItems
+    .map((item) => ({
+      description: item.description.trim(),
+      quantity: Math.max(0, Number(item.quantity || 0)),
+      unitPrice: Math.max(0, Number(item.unitPrice || 0)),
+    }))
+    .filter((item) => item.quantity > 0 && item.description.length > 0)
 
   const hasInvalidStockRequest = cleanedItemsForValidation.some(
     (item) => item.quantity > item.stockAvailable,
@@ -913,7 +889,7 @@ export function WholesalePage() {
 
   const canSubmit =
     Boolean(user?.storeId && user.id) &&
-    cleanedItemsForValidation.length > 0 &&
+    (cleanedItemsForValidation.length > 0 || cleanedManualItemsForValidation.length > 0) &&
     !hasInvalidStockRequest &&
     discountTotal >= 0 &&
     discountTotal <= subtotal
@@ -926,8 +902,8 @@ export function WholesalePage() {
       return null
     }
 
-    if (cleanedItemsForValidation.length === 0) {
-      setFeedback('Agrega al menos una referencia valida para facturar.')
+    if (cleanedItemsForValidation.length === 0 && cleanedManualItemsForValidation.length === 0) {
+      setFeedback('Agrega al menos una referencia o item manual para facturar.')
       return null
     }
 
@@ -951,10 +927,11 @@ export function WholesalePage() {
         dueDate: creditDueDate,
         items: cleanedItemsForValidation.map((item) => ({
           variantId: item.variantId,
-          color: item.color || 'UNICO',
+          color: item.color,
           size: item.size,
           quantity: item.quantity,
         })),
+        manualItems: cleanedManualItemsForValidation,
       })
 
       // Patch issued_at and due_date to the user-selected date (RPC uses now() by default)
@@ -963,6 +940,31 @@ export function WholesalePage() {
         issuedDate,
         dueDate: creditDueDate,
       })
+
+      const allItemsForDisplay = [
+        ...cleanedItemsForValidation.map((item, index) => ({
+          id: `${result.invoiceId}-${index}`,
+          variant_id: item.variantId,
+          reference: item.reference,
+          color: item.color || null,
+          size: item.size,
+          description: item.productName,
+          quantity: item.quantity,
+          unit_price: item.unitPrice,
+          line_total: item.quantity * item.unitPrice,
+        })),
+        ...cleanedManualItemsForValidation.map((item, index) => ({
+          id: `${result.invoiceId}-manual-${index}`,
+          variant_id: null,
+          reference: '',
+          color: null,
+          size: null,
+          description: item.description,
+          quantity: item.quantity,
+          unit_price: item.unitPrice,
+          line_total: item.quantity * item.unitPrice,
+        })),
+      ]
 
       const invoice: WholesaleInvoiceRow = {
         id: result.invoiceId,
@@ -981,17 +983,7 @@ export function WholesalePage() {
         payment_method: 'credit',
         payment_reference: null,
         notes: null,
-        wholesale_invoice_items: cleanedItemsForValidation.map((item, index) => ({
-          id: `${result.invoiceId}-${index}`,
-          variant_id: item.variantId,
-          reference: item.reference,
-          color: item.color || null,
-          size: item.size,
-          description: item.productName,
-          quantity: item.quantity,
-          unit_price: item.unitPrice,
-          line_total: item.quantity * item.unitPrice,
-        })),
+        wholesale_invoice_items: allItemsForDisplay,
         wholesale_payments: null,
       }
 
@@ -1002,6 +994,7 @@ export function WholesalePage() {
       setInvoiceDate(getTodayIsoDateColombia())
       setDiscountTotal(0)
       setDraftItems([createDraftItem()])
+      setManualItems([])
       return invoice
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : 'No se pudo crear la factura de confeccion.')
@@ -1022,7 +1015,7 @@ export function WholesalePage() {
   }
 
   function handleSaveAndPrintClick() {
-    if (cleanedItemsForValidation.length === 0 || total <= 0) {
+    if (cleanedItemsForValidation.length === 0 && cleanedManualItemsForValidation.length === 0) {
       setShowMissingProductModal(true)
       return
     }
@@ -1054,7 +1047,10 @@ export function WholesalePage() {
 
   function openEditInvoiceModal(invoice: WholesaleInvoiceRow) {
     const invoiceItems = invoice.wholesale_invoice_items ?? []
-    const mappedItems: EditDraftItem[] = invoiceItems.map((item) => {
+    const inventoryItems = invoiceItems.filter((item) => !!(item.wholesale_reference_id ?? item.variant_id))
+    const manualInvoiceItems = invoiceItems.filter((item) => !(item.wholesale_reference_id ?? item.variant_id))
+
+    const mappedItems: EditDraftItem[] = inventoryItems.map((item) => {
       const variantId = item.wholesale_reference_id ?? item.variant_id ?? ''
       const refOption = variantId ? referenceByVariantId.get(variantId) : undefined
 
@@ -1083,12 +1079,20 @@ export function WholesalePage() {
       }
     })
 
+    const mappedManualItems: DraftManualItem[] = manualInvoiceItems.map((item) => ({
+      id: item.id,
+      description: item.description ?? '',
+      quantity: item.quantity,
+      unitPrice: item.unit_price,
+    }))
+
     setInvoiceForEdit(invoice)
     setEditInvoiceNumber(invoice.invoice_number)
     setEditCustomerName(invoice.customer_name ?? '')
     setEditCustomerPhone(invoice.customer_phone ?? '')
     setEditDiscountTotal(invoice.discount_total)
     setEditItems(mappedItems.length > 0 ? mappedItems : [createEditDraftItem()])
+    setEditManualItems(mappedManualItems)
   }
 
   function closeEditInvoiceModal() {
@@ -1098,6 +1102,7 @@ export function WholesalePage() {
     setEditCustomerPhone('')
     setEditDiscountTotal(0)
     setEditItems([createEditDraftItem()])
+    setEditManualItems([])
   }
 
   function updateEditItemQuantity(id: string, quantity: number) {
@@ -1116,70 +1121,6 @@ export function WholesalePage() {
         return {
           ...item,
           quantity: Math.max(0, Math.min(quantity, maxAvailable)),
-        }
-      }),
-    )
-  }
-
-  function updateEditItemSize(id: string, rawSize: string) {
-    const nextSize = normalizeSizeValue(rawSize)
-
-    setEditItems((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) {
-          return item
-        }
-
-        const sizeStock = getStockForColorSize(
-          item.colorQuantities,
-          item.sizeQuantities,
-          item.color,
-          nextSize,
-        )
-        const sameOriginalSlot =
-          item.variantId === item.initialVariantId &&
-          item.color === item.initialColor &&
-          nextSize === item.initialSize
-        const maxAvailable = sizeStock + (sameOriginalSlot ? item.originalQuantity : 0)
-
-        return {
-          ...item,
-          size: nextSize,
-          stockAvailable: sizeStock,
-          originalQuantity: sameOriginalSlot ? item.originalQuantity : 0,
-          quantity: item.quantity <= 0 ? 0 : Math.min(item.quantity, maxAvailable),
-        }
-      }),
-    )
-  }
-
-  function updateEditItemColor(id: string, rawColor: string) {
-    const nextColor = normalizeColorValue(rawColor)
-
-    setEditItems((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) {
-          return item
-        }
-
-        const sizeStock = getStockForColorSize(
-          item.colorQuantities,
-          item.sizeQuantities,
-          nextColor,
-          item.size,
-        )
-        const sameOriginalSlot =
-          item.variantId === item.initialVariantId &&
-          nextColor === item.initialColor &&
-          item.size === item.initialSize
-        const maxAvailable = sizeStock + (sameOriginalSlot ? item.originalQuantity : 0)
-
-        return {
-          ...item,
-          color: nextColor,
-          stockAvailable: sizeStock,
-          originalQuantity: sameOriginalSlot ? item.originalQuantity : 0,
-          quantity: item.quantity <= 0 ? 0 : Math.min(item.quantity, maxAvailable),
         }
       }),
     )
@@ -1288,23 +1229,32 @@ export function WholesalePage() {
   const cleanedEditItemsForValidation = editItems
     .map((item) => ({
       variantId: item.variantId,
-      color: normalizeColorValue(item.color),
-      size: normalizeSizeValue(item.size),
-      requiresColor: item.availableColors.length > 0 || Object.keys(item.colorQuantities).length > 0,
+      color: normalizeColorValue(item.color) || 'UNICO',
+      size: normalizeSizeValue(item.size) || 'UNICA',
       quantity: Math.max(0, Number(item.quantity || 0)),
       unitPrice: Math.max(0, Number(item.unitPrice || 0)),
       stockAvailable: Math.max(0, Number(item.stockAvailable || 0)),
       originalQuantity: Math.max(0, Number(item.originalQuantity || 0)),
     }))
-    .filter((item) => item.variantId && item.size && item.quantity > 0 && (!item.requiresColor || !!item.color))
+    .filter((item) => item.variantId && item.quantity > 0)
+
+  const cleanedEditManualItemsForValidation = editManualItems
+    .map((item) => ({
+      description: item.description.trim(),
+      quantity: Math.max(0, Number(item.quantity || 0)),
+      unitPrice: Math.max(0, Number(item.unitPrice || 0)),
+    }))
+    .filter((item) => item.quantity > 0 && item.description.length > 0)
 
   const hasInvalidEditStockRequest = cleanedEditItemsForValidation.some(
     (item) => item.quantity > item.stockAvailable + item.originalQuantity,
   )
 
   const editSubtotal = useMemo(() => {
-    return editItems.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0)
-  }, [editItems])
+    const inventorySub = editItems.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0)
+    const manualSub = editManualItems.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0)
+    return inventorySub + manualSub
+  }, [editItems, editManualItems])
 
   const editGrandTotal = useMemo(() => {
     return Math.max(0, editSubtotal - editDiscountTotal)
@@ -1321,8 +1271,8 @@ export function WholesalePage() {
       return
     }
 
-    if (cleanedEditItemsForValidation.length === 0) {
-      setFeedback('Agrega al menos una referencia valida para guardar la edicion.')
+    if (cleanedEditItemsForValidation.length === 0 && cleanedEditManualItemsForValidation.length === 0) {
+      setFeedback('Agrega al menos una referencia o item manual para guardar la edicion.')
       return
     }
 
@@ -1346,10 +1296,11 @@ export function WholesalePage() {
         discountTotal: editDiscountTotal,
         items: cleanedEditItemsForValidation.map((item) => ({
           variantId: item.variantId,
-          color: item.color || 'UNICO',
+          color: item.color,
           size: item.size,
           quantity: item.quantity,
         })),
+        manualItems: cleanedEditManualItemsForValidation,
       })
       setFeedback(`Factura ${invoiceForEdit.invoice_number} actualizada.`)
       closeEditInvoiceModal()
@@ -1475,7 +1426,7 @@ export function WholesalePage() {
   }
 
   return (
-    <section className={isSalesView ? 'grid gap-6 lg:grid-cols-[1.35fr_1fr]' : 'space-y-6'}>
+    <section className="space-y-6">
       {isDashboardView ? (
         <>
           <header className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
@@ -1562,11 +1513,27 @@ export function WholesalePage() {
           Factura en formato carta para confeccion y cartera, separada del POS retail.
         </p>
 
+        <div className="mt-4">
+          <CustomerSelector
+            storeId={user?.storeId || ''}
+            selectedName={customerName}
+            selectedPhone={customerPhone}
+            onSelect={(customer) => {
+              setCustomerName(customer.full_name)
+              setCustomerPhone(customer.phone)
+            }}
+            onClear={() => {
+              setCustomerName('')
+              setCustomerPhone('')
+            }}
+          />
+        </div>
+
         <div className="ghost-scrollbar mt-5 space-y-2 overflow-x-auto">
           {draftItems.map((item, index) => (
             <div
               key={item.id}
-              className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1fr_90px_90px_90px_120px_100px_auto] min-w-0"
+              className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1fr_90px_120px_auto] min-w-0"
             >
               <input
                 list="wholesale-reference-options"
@@ -1575,32 +1542,6 @@ export function WholesalePage() {
                 placeholder={`Referencia ${index + 1}`}
                 className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
               />
-              <select
-                value={item.color}
-                onChange={(event) => updateDraftColor(item.id, event.target.value)}
-                className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-                disabled={!item.variantId || getColorOptions(item.availableColors, item.colorQuantities, item.color).length === 0}
-              >
-                <option value="">Color</option>
-                {getColorOptions(item.availableColors, item.colorQuantities, item.color).map((color) => (
-                  <option key={color} value={color}>
-                    {color}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={item.size}
-                onChange={(event) => updateDraftSize(item.id, event.target.value)}
-                className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-                disabled={!item.variantId || getSizeOptions(item.sizeQuantities, item.colorQuantities, item.color, item.size).length === 0}
-              >
-                <option value="">Talla</option>
-                {getSizeOptions(item.sizeQuantities, item.colorQuantities, item.color, item.size).map((size) => (
-                  <option key={size} value={size}>
-                    {size}
-                  </option>
-                ))}
-              </select>
               <input
                 type="number"
                 inputMode="numeric"
@@ -1619,12 +1560,6 @@ export function WholesalePage() {
                 readOnly
                 className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
               />
-              <input
-                type="number"
-                value={item.stockAvailable}
-                readOnly
-                className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
-              />
               <button
                 type="button"
                 onClick={() => removeDraftItem(item.id)}
@@ -1633,25 +1568,15 @@ export function WholesalePage() {
                 Quitar
               </button>
               {item.productName ? (
-                <p className="md:col-span-7 text-xs text-zinc-500">{item.productName}</p>
+                <p className="md:col-span-4 text-xs text-zinc-500">{item.productName}</p>
               ) : null}
               {item.reference && !item.variantId ? (
-                <p className="md:col-span-7 text-xs text-rose-300">
+                <p className="md:col-span-4 text-xs text-rose-300">
                   Referencia no encontrada. Selecciona una referencia existente.
                 </p>
               ) : null}
-              {item.variantId && !item.size ? (
-                <p className="md:col-span-7 text-xs text-rose-300">
-                  Debes indicar la talla para facturar esta referencia.
-                </p>
-              ) : null}
-              {item.variantId && (item.availableColors.length > 0 || Object.keys(item.colorQuantities).length > 0) && !item.color ? (
-                <p className="md:col-span-7 text-xs text-rose-300">
-                  Debes indicar el color para facturar esta referencia.
-                </p>
-              ) : null}
               {item.variantId && item.quantity > item.stockAvailable ? (
-                <p className="md:col-span-7 text-xs text-rose-300">
+                <p className="md:col-span-4 text-xs text-rose-300">
                   Cantidad solicitada supera disponible ({item.stockAvailable}).
                 </p>
               ) : null}
@@ -1659,6 +1584,74 @@ export function WholesalePage() {
           ))}
         </div>
 
+        {manualItems.length > 0 ? (
+          <div className="mt-3 space-y-2">
+            {manualItems.map((item, index) => (
+              <div
+                key={item.id}
+                className="grid gap-2 rounded-xl border border-zinc-700 bg-zinc-950/60 p-3 md:grid-cols-[auto_1fr_90px_120px_auto] min-w-0"
+              >
+                <span className="self-center rounded bg-amber-500/20 px-2 py-1 text-xs font-semibold text-amber-300">
+                  MANUAL
+                </span>
+                <input
+                  type="text"
+                  value={item.description}
+                  onChange={(event) =>
+                    setManualItems((prev) =>
+                      prev.map((mi) =>
+                        mi.id === item.id ? { ...mi, description: event.target.value } : mi,
+                      ),
+                    )
+                  }
+                  placeholder={`Descripcion item ${index + 1}`}
+                  className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                />
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  value={item.quantity === 0 ? '' : item.quantity}
+                  placeholder="0"
+                  onChange={(event) =>
+                    setManualItems((prev) =>
+                      prev.map((mi) =>
+                        mi.id === item.id
+                          ? { ...mi, quantity: parseIntegerInput(event.target.value, 0) }
+                          : mi,
+                      ),
+                    )
+                  }
+                  className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                />
+                <input
+                  type="text"
+                  value={item.unitPrice === 0 ? '' : formatCopInput(item.unitPrice)}
+                  placeholder="Precio"
+                  onChange={(event) =>
+                    setManualItems((prev) =>
+                      prev.map((mi) =>
+                        mi.id === item.id
+                          ? { ...mi, unitPrice: parseCopIntegerInput(event.target.value, 0) }
+                          : mi,
+                      ),
+                    )
+                  }
+                  className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setManualItems((prev) => prev.filter((mi) => mi.id !== item.id))
+                  }
+                  className="rounded-lg border border-rose-500/40 px-3 py-2 text-xs text-rose-300"
+                >
+                  Quitar
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
         <datalist id="wholesale-reference-options">
           {(referenceOptionsQuery.data ?? []).map((item) => (
             <option key={item.variantId} value={item.reference}>
@@ -1675,22 +1668,13 @@ export function WholesalePage() {
           >
             Agregar referencia
           </button>
-        </div>
-
-        <div className="mt-4">
-          <CustomerSelector
-            storeId={user?.storeId || ''}
-            selectedName={customerName}
-            selectedPhone={customerPhone}
-            onSelect={(customer) => {
-              setCustomerName(customer.full_name)
-              setCustomerPhone(customer.phone)
-            }}
-            onClear={() => {
-              setCustomerName('')
-              setCustomerPhone('')
-            }}
-          />
+          <button
+            type="button"
+            onClick={() => setManualItems((prev) => [...prev, createManualItem()])}
+            className="rounded-lg border border-amber-500/40 px-3 py-2 text-sm text-amber-300"
+          >
+            Agregar item manual
+          </button>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <label className="space-y-1">
@@ -2287,7 +2271,7 @@ export function WholesalePage() {
               {editItems.map((item, index) => (
                 <div
                   key={item.id}
-                  className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1fr_90px_90px_90px_120px_100px_auto]"
+                  className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1fr_90px_120px_auto]"
                 >
                   <input
                     list="edit-wholesale-reference-options"
@@ -2296,32 +2280,6 @@ export function WholesalePage() {
                     placeholder={`Referencia ${index + 1}`}
                     className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
                   />
-                  <select
-                    value={item.color}
-                    onChange={(event) => updateEditItemColor(item.id, event.target.value)}
-                    className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-                    disabled={!item.variantId || getColorOptions(item.availableColors, item.colorQuantities, item.color).length === 0}
-                  >
-                    <option value="">Color</option>
-                    {getColorOptions(item.availableColors, item.colorQuantities, item.color).map((color) => (
-                      <option key={color} value={color}>
-                        {color}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={item.size}
-                    onChange={(event) => updateEditItemSize(item.id, event.target.value)}
-                    className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-                    disabled={!item.variantId || getSizeOptions(item.sizeQuantities, item.colorQuantities, item.color, item.size).length === 0}
-                  >
-                    <option value="">Talla</option>
-                    {getSizeOptions(item.sizeQuantities, item.colorQuantities, item.color, item.size).map((size) => (
-                      <option key={size} value={size}>
-                        {size}
-                      </option>
-                    ))}
-                  </select>
                   <input
                     type="number"
                     inputMode="numeric"
@@ -2340,12 +2298,6 @@ export function WholesalePage() {
                     readOnly
                     className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
                   />
-                  <input
-                    type="number"
-                    value={item.stockAvailable + item.originalQuantity}
-                    readOnly
-                    className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
-                  />
                   <button
                     type="button"
                     onClick={() => removeEditItem(item.id)}
@@ -2354,30 +2306,89 @@ export function WholesalePage() {
                     Quitar
                   </button>
                   {item.productName ? (
-                    <p className="text-xs text-zinc-500 md:col-span-7">{item.productName}</p>
+                    <p className="text-xs text-zinc-500 md:col-span-4">{item.productName}</p>
                   ) : null}
                   {item.reference && !item.variantId ? (
-                    <p className="text-xs text-rose-300 md:col-span-7">
+                    <p className="text-xs text-rose-300 md:col-span-4">
                       Referencia no encontrada. Selecciona una referencia existente.
                     </p>
                   ) : null}
-                  {item.variantId && !item.size ? (
-                    <p className="text-xs text-rose-300 md:col-span-7">
-                      Debes indicar la talla para facturar esta referencia.
-                    </p>
-                  ) : null}
-                  {item.variantId && (item.availableColors.length > 0 || Object.keys(item.colorQuantities).length > 0) && !item.color ? (
-                    <p className="text-xs text-rose-300 md:col-span-7">
-                      Debes indicar el color para facturar esta referencia.
-                    </p>
-                  ) : null}
                   {item.variantId && item.quantity > item.stockAvailable + item.originalQuantity ? (
-                    <p className="text-xs text-rose-300 md:col-span-7">
+                    <p className="text-xs text-rose-300 md:col-span-4">
                       Cantidad solicitada supera disponible ({item.stockAvailable + item.originalQuantity}).
                     </p>
                   ) : null}
                 </div>
               ))}
+
+              {editManualItems.length > 0 ? (
+                <div className="space-y-2">
+                  {editManualItems.map((item, index) => (
+                    <div
+                      key={item.id}
+                      className="grid gap-2 rounded-xl border border-zinc-700 bg-zinc-950/60 p-3 md:grid-cols-[auto_1fr_90px_120px_auto]"
+                    >
+                      <span className="self-center rounded bg-amber-500/20 px-2 py-1 text-xs font-semibold text-amber-300">
+                        MANUAL
+                      </span>
+                      <input
+                        type="text"
+                        value={item.description}
+                        onChange={(event) =>
+                          setEditManualItems((prev) =>
+                            prev.map((mi) =>
+                              mi.id === item.id ? { ...mi, description: event.target.value } : mi,
+                            ),
+                          )
+                        }
+                        placeholder={`Descripcion item ${index + 1}`}
+                        className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                      />
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        value={item.quantity === 0 ? '' : item.quantity}
+                        placeholder="0"
+                        onChange={(event) =>
+                          setEditManualItems((prev) =>
+                            prev.map((mi) =>
+                              mi.id === item.id
+                                ? { ...mi, quantity: parseIntegerInput(event.target.value, 0) }
+                                : mi,
+                            ),
+                          )
+                        }
+                        className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                      />
+                      <input
+                        type="text"
+                        value={item.unitPrice === 0 ? '' : formatCopInput(item.unitPrice)}
+                        placeholder="Precio"
+                        onChange={(event) =>
+                          setEditManualItems((prev) =>
+                            prev.map((mi) =>
+                              mi.id === item.id
+                                ? { ...mi, unitPrice: parseCopIntegerInput(event.target.value, 0) }
+                                : mi,
+                            ),
+                          )
+                        }
+                        className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditManualItems((prev) => prev.filter((mi) => mi.id !== item.id))
+                        }
+                        className="rounded-lg border border-rose-500/40 px-3 py-2 text-xs text-rose-300"
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
 
               <datalist id="edit-wholesale-reference-options">
                 {(referenceOptionsQuery.data ?? []).map((item) => (
@@ -2388,13 +2399,22 @@ export function WholesalePage() {
               </datalist>
             </div>
 
-            <button
-              type="button"
-              onClick={addEditItem}
-              className="mt-3 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200"
-            >
-              Agregar referencia
-            </button>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={addEditItem}
+                className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200"
+              >
+                Agregar referencia
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditManualItems((prev) => [...prev, createManualItem()])}
+                className="rounded-lg border border-amber-500/40 px-3 py-2 text-sm text-amber-300"
+              >
+                Agregar item manual
+              </button>
+            </div>
 
             <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 text-sm text-zinc-200">
               <div className="flex justify-between">
