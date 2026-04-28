@@ -46,6 +46,7 @@ interface DraftItem {
   availableColors: string[]
   quantity: number
   unitPrice: number
+  discount: number
 }
 
 interface DraftManualItem {
@@ -53,6 +54,7 @@ interface DraftManualItem {
   description: string
   quantity: number
   unitPrice: number
+  discount: number
 }
 
 interface EditDraftItem {
@@ -68,6 +70,7 @@ interface EditDraftItem {
   availableColors: string[]
   quantity: number
   unitPrice: number
+  discount: number
   originalQuantity: number
   initialVariantId: string
   initialColor: string
@@ -88,6 +91,7 @@ function createDraftItem(): DraftItem {
     availableColors: [],
     quantity: 0,
     unitPrice: 0,
+    discount: 0,
   }
 }
 
@@ -97,6 +101,7 @@ function createManualItem(): DraftManualItem {
     description: '',
     quantity: 0,
     unitPrice: 0,
+    discount: 0,
   }
 }
 
@@ -114,6 +119,7 @@ function createEditDraftItem(): EditDraftItem {
     availableColors: [],
     quantity: 0,
     unitPrice: 0,
+    discount: 0,
     originalQuantity: 0,
     initialVariantId: '',
     initialColor: '',
@@ -173,49 +179,6 @@ function getStockForColorSize(
   return Math.max(0, Number(sizeMap[normalizedSize] ?? 0))
 }
 
-function getColorOptions(
-  availableColors: string[],
-  colorQuantities: Record<string, Record<string, number>>,
-  currentColor = '',
-) {
-  const fromMap = Object.keys(colorQuantities)
-    .map((color) => normalizeColorValue(color))
-    .filter((color) => color.length > 0)
-  const fromAvailable = availableColors
-    .map((color) => normalizeColorValue(color))
-    .filter((color) => color.length > 0)
-  const current = normalizeColorValue(currentColor)
-
-  return Array.from(new Set([...fromMap, ...fromAvailable, ...(current ? [current] : [])])).sort((a, b) =>
-    a.localeCompare(b, 'es'),
-  )
-}
-
-function getSizeOptions(
-  sizeQuantities: Record<string, number>,
-  colorQuantities: Record<string, Record<string, number>>,
-  selectedColor: string,
-  currentSize = '',
-) {
-  const normalizedColor = normalizeColorValue(selectedColor)
-
-  let sizes: string[] = []
-  if (normalizedColor && colorQuantities[normalizedColor]) {
-    sizes = Object.keys(colorQuantities[normalizedColor] ?? {})
-  } else if (Object.keys(colorQuantities).length > 0) {
-    sizes = Object.values(colorQuantities).flatMap((sizeMap) => Object.keys(sizeMap ?? {}))
-  } else {
-    sizes = Object.keys(sizeQuantities)
-  }
-
-  const normalizedSizes = sizes.map((size) => normalizeSizeValue(size)).filter((size) => size.length > 0)
-  const normalizedCurrent = normalizeSizeValue(currentSize)
-
-  return Array.from(
-    new Set([...normalizedSizes, ...(normalizedCurrent ? [normalizedCurrent] : [])]),
-  ).sort((a, b) => a.localeCompare(b, 'es'))
-}
-
 function invoiceActionButtonClass(variant: 'print' | 'edit' | 'delete' | 'view' | 'pay') {
   const base = 'inline-flex h-8 items-center justify-center rounded-lg border px-3 text-xs font-medium transition-colors'
 
@@ -251,7 +214,6 @@ export function WholesalePage() {
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [invoiceDate, setInvoiceDate] = useState(today)
-  const [discountTotal, setDiscountTotal] = useState(0)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [paymentFeedback, setPaymentFeedback] = useState<string | null>(null)
   const [selectedInvoice, setSelectedInvoice] = useState<WholesaleInvoiceRow | null>(null)
@@ -268,7 +230,6 @@ export function WholesalePage() {
   const [editInvoiceNumber, setEditInvoiceNumber] = useState('')
   const [editCustomerName, setEditCustomerName] = useState('')
   const [editCustomerPhone, setEditCustomerPhone] = useState('')
-  const [editDiscountTotal, setEditDiscountTotal] = useState(0)
   const [editItems, setEditItems] = useState<EditDraftItem[]>([createEditDraftItem()])
   const [editManualItems, setEditManualItems] = useState<DraftManualItem[]>([])
   const [invoiceForDelete, setInvoiceForDelete] = useState<WholesaleInvoiceRow | null>(null)
@@ -427,6 +388,10 @@ export function WholesalePage() {
     const inventorySubtotal = draftItems.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0)
     const manualSubtotal = manualItems.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0)
     return inventorySubtotal + manualSubtotal
+  }, [draftItems, manualItems])
+
+  const discountTotal = useMemo(() => {
+    return draftItems.reduce((acc, item) => acc + item.discount, 0) + manualItems.reduce((acc, item) => acc + item.discount, 0)
   }, [draftItems, manualItems])
 
   const total = useMemo(() => {
@@ -796,56 +761,19 @@ export function WholesalePage() {
           }
         }
 
-        const availableColorOptions = getColorOptions(
-          selected.availableColors,
-          selected.colorQuantities,
-          item.color,
-        )
-        const currentColor = normalizeColorValue(item.color)
-        const nextColor =
-          currentColor ||
-          availableColorOptions.find((color) => {
-            const sizeMap = selected.colorQuantities[normalizeColorValue(color)] ?? {}
-            return Object.values(sizeMap).some((qty) => qty > 0)
-          }) ||
-          availableColorOptions[0] ||
-          ''
-        const currentSize = normalizeSizeValue(item.size)
-        const sizeOptions = getSizeOptions(
-          selected.sizeQuantities,
-          selected.colorQuantities,
-          nextColor,
-          item.size,
-        )
-        const nextSize =
-          currentSize ||
-          sizeOptions.find((size) =>
-            nextColor
-              ? Number((selected.colorQuantities[nextColor] ?? {})[size] ?? 0) > 0
-              : selected.sizeQuantities[size] > 0,
-          ) ||
-          sizeOptions[0] ||
-          ''
-        const sizeStock = getStockForColorSize(
-          selected.colorQuantities,
-          selected.sizeQuantities,
-          nextColor,
-          nextSize,
-        )
-
         return {
           ...item,
           reference,
           variantId: selected.variantId,
           productName: selected.productName,
-          color: nextColor,
-          size: nextSize,
+          color: '',
+          size: '',
           sizeQuantities: selected.sizeQuantities,
           colorQuantities: selected.colorQuantities,
           availableColors: selected.availableColors,
-          stockAvailable: sizeStock,
+          stockAvailable: selected.quantityOnHand,
           unitPrice: selected.unitPrice,
-          quantity: item.quantity <= 0 ? 0 : Math.min(item.quantity, sizeStock),
+          quantity: item.quantity <= 0 ? 0 : Math.min(item.quantity, selected.quantityOnHand),
         }
       }),
     )
@@ -890,9 +818,7 @@ export function WholesalePage() {
   const canSubmit =
     Boolean(user?.storeId && user.id) &&
     (cleanedItemsForValidation.length > 0 || cleanedManualItemsForValidation.length > 0) &&
-    !hasInvalidStockRequest &&
-    discountTotal >= 0 &&
-    discountTotal <= subtotal
+    !hasInvalidStockRequest
 
   async function saveInvoice(): Promise<WholesaleInvoiceRow | null> {
     setFeedback(null)
@@ -992,7 +918,6 @@ export function WholesalePage() {
       setCustomerName('')
       setCustomerPhone('')
       setInvoiceDate(getTodayIsoDateColombia())
-      setDiscountTotal(0)
       setDraftItems([createDraftItem()])
       setManualItems([])
       return invoice
@@ -1050,7 +975,7 @@ export function WholesalePage() {
     const inventoryItems = invoiceItems.filter((item) => !!(item.wholesale_reference_id ?? item.variant_id))
     const manualInvoiceItems = invoiceItems.filter((item) => !(item.wholesale_reference_id ?? item.variant_id))
 
-    const mappedItems: EditDraftItem[] = inventoryItems.map((item) => {
+    const mappedItems: EditDraftItem[] = inventoryItems.map((item, itemIndex) => {
       const variantId = item.wholesale_reference_id ?? item.variant_id ?? ''
       const refOption = variantId ? referenceByVariantId.get(variantId) : undefined
 
@@ -1061,17 +986,13 @@ export function WholesalePage() {
         color: normalizeColorValue(item.color ?? ''),
         size: normalizeSizeValue(item.size ?? ''),
         productName: refOption?.productName ?? item.description,
-        stockAvailable: getStockForColorSize(
-          refOption?.colorQuantities ?? {},
-          refOption?.sizeQuantities ?? {},
-          item.color ?? '',
-          item.size ?? '',
-        ),
+        stockAvailable: refOption?.quantityOnHand ?? 0,
         sizeQuantities: refOption?.sizeQuantities ?? {},
         colorQuantities: refOption?.colorQuantities ?? {},
         availableColors: refOption?.availableColors ?? [],
         quantity: item.quantity,
         unitPrice: refOption?.unitPrice ?? item.unit_price,
+        discount: itemIndex === 0 ? invoice.discount_total : 0,
         originalQuantity: item.quantity,
         initialVariantId: variantId,
         initialColor: normalizeColorValue(item.color ?? ''),
@@ -1079,18 +1000,18 @@ export function WholesalePage() {
       }
     })
 
-    const mappedManualItems: DraftManualItem[] = manualInvoiceItems.map((item) => ({
+    const mappedManualItems: DraftManualItem[] = manualInvoiceItems.map((item, itemIndex) => ({
       id: item.id,
       description: item.description ?? '',
       quantity: item.quantity,
       unitPrice: item.unit_price,
+      discount: inventoryItems.length === 0 && itemIndex === 0 ? invoice.discount_total : 0,
     }))
 
     setInvoiceForEdit(invoice)
     setEditInvoiceNumber(invoice.invoice_number)
     setEditCustomerName(invoice.customer_name ?? '')
     setEditCustomerPhone(invoice.customer_phone ?? '')
-    setEditDiscountTotal(invoice.discount_total)
     setEditItems(mappedItems.length > 0 ? mappedItems : [createEditDraftItem()])
     setEditManualItems(mappedManualItems)
   }
@@ -1100,7 +1021,6 @@ export function WholesalePage() {
     setEditInvoiceNumber('')
     setEditCustomerName('')
     setEditCustomerPhone('')
-    setEditDiscountTotal(0)
     setEditItems([createEditDraftItem()])
     setEditManualItems([])
   }
@@ -1153,54 +1073,15 @@ export function WholesalePage() {
           }
         }
 
-        const colorOptions = getColorOptions(
-          selected.availableColors,
-          selected.colorQuantities,
-          item.color,
-        )
-        const previousColor = normalizeColorValue(item.color)
-        const chosenColor =
-          previousColor ||
-          colorOptions.find((color) => {
-            const sizeMap = selected.colorQuantities[normalizeColorValue(color)] ?? {}
-            return Object.values(sizeMap).some((qty) => qty > 0)
-          }) ||
-          colorOptions[0] ||
-          ''
-        const previousSize = normalizeSizeValue(item.size)
-        const sizeOptions = getSizeOptions(
-          selected.sizeQuantities,
-          selected.colorQuantities,
-          chosenColor,
-          item.size,
-        )
-        const chosenSize =
-          previousSize ||
-          sizeOptions.find((size) =>
-            chosenColor
-              ? Number((selected.colorQuantities[chosenColor] ?? {})[size] ?? 0) > 0
-              : selected.sizeQuantities[size] > 0,
-          ) ||
-          sizeOptions[0] ||
-          ''
-        const sizeStock = getStockForColorSize(
-          selected.colorQuantities,
-          selected.sizeQuantities,
-          chosenColor,
-          chosenSize,
-        )
-        const keepsOriginalQty =
-          selected.variantId === item.initialVariantId &&
-          chosenColor === item.initialColor &&
-          chosenSize === item.initialSize
+        const keepsOriginalQty = selected.variantId === item.initialVariantId
         return {
           ...item,
           reference,
           variantId: selected.variantId,
-          color: chosenColor,
-          size: chosenSize,
+          color: '',
+          size: '',
           productName: selected.productName,
-          stockAvailable: sizeStock,
+          stockAvailable: selected.quantityOnHand,
           sizeQuantities: selected.sizeQuantities,
           colorQuantities: selected.colorQuantities,
           availableColors: selected.availableColors,
@@ -1209,7 +1090,10 @@ export function WholesalePage() {
           quantity:
             item.quantity <= 0
               ? 0
-              : Math.min(item.quantity, sizeStock + (keepsOriginalQty ? item.originalQuantity : 0)),
+              : Math.min(
+                  item.quantity,
+                  selected.quantityOnHand + (keepsOriginalQty ? item.originalQuantity : 0),
+                ),
         }
       }),
     )
@@ -1256,6 +1140,10 @@ export function WholesalePage() {
     return inventorySub + manualSub
   }, [editItems, editManualItems])
 
+  const editDiscountTotal = useMemo(() => {
+    return editItems.reduce((acc, item) => acc + item.discount, 0) + editManualItems.reduce((acc, item) => acc + item.discount, 0)
+  }, [editItems, editManualItems])
+
   const editGrandTotal = useMemo(() => {
     return Math.max(0, editSubtotal - editDiscountTotal)
   }, [editDiscountTotal, editSubtotal])
@@ -1278,11 +1166,6 @@ export function WholesalePage() {
 
     if (hasInvalidEditStockRequest) {
       setFeedback('Alguna referencia supera la cantidad disponible para guardar la edicion.')
-      return
-    }
-
-    if (editDiscountTotal < 0 || editDiscountTotal > editSubtotal) {
-      setFeedback('El descuento editado no es valido frente al subtotal.')
       return
     }
 
@@ -1533,7 +1416,7 @@ export function WholesalePage() {
           {draftItems.map((item, index) => (
             <div
               key={item.id}
-              className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1fr_90px_120px_auto] min-w-0"
+              className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1fr_90px_90px_120px_auto] min-w-0"
             >
               <input
                 list="wholesale-reference-options"
@@ -1556,6 +1439,22 @@ export function WholesalePage() {
               />
               <input
                 type="text"
+                inputMode="numeric"
+                value={item.discount === 0 ? '' : formatCopInput(item.discount)}
+                placeholder="Descuento"
+                onChange={(event) =>
+                  setDraftItems((prev) =>
+                    prev.map((di) =>
+                      di.id === item.id
+                        ? { ...di, discount: Math.max(0, parseCopIntegerInput(event.target.value, 0)) }
+                        : di,
+                    ),
+                  )
+                }
+                className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+              />
+              <input
+                type="text"
                 value={formatCop(item.unitPrice)}
                 readOnly
                 className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
@@ -1567,16 +1466,21 @@ export function WholesalePage() {
               >
                 Quitar
               </button>
-              {item.productName ? (
-                <p className="md:col-span-4 text-xs text-zinc-500">{item.productName}</p>
+              {item.variantId ? (
+                <p className="md:col-span-5 flex items-center gap-3 text-xs text-zinc-500">
+                  <span>{item.productName}</span>
+                  <span className="font-medium text-emerald-400">Disp: {item.stockAvailable}</span>
+                </p>
+              ) : item.productName ? (
+                <p className="md:col-span-5 text-xs text-zinc-500">{item.productName}</p>
               ) : null}
               {item.reference && !item.variantId ? (
-                <p className="md:col-span-4 text-xs text-rose-300">
+                <p className="md:col-span-5 text-xs text-rose-300">
                   Referencia no encontrada. Selecciona una referencia existente.
                 </p>
               ) : null}
               {item.variantId && item.quantity > item.stockAvailable ? (
-                <p className="md:col-span-4 text-xs text-rose-300">
+                <p className="md:col-span-5 text-xs text-rose-300">
                   Cantidad solicitada supera disponible ({item.stockAvailable}).
                 </p>
               ) : null}
@@ -1589,7 +1493,7 @@ export function WholesalePage() {
             {manualItems.map((item, index) => (
               <div
                 key={item.id}
-                className="grid gap-2 rounded-xl border border-zinc-700 bg-zinc-950/60 p-3 md:grid-cols-[auto_1fr_90px_120px_auto] min-w-0"
+                className="grid gap-2 rounded-xl border border-zinc-700 bg-zinc-950/60 p-3 md:grid-cols-[auto_1fr_90px_90px_120px_auto] min-w-0"
               >
                 <span className="self-center rounded bg-amber-500/20 px-2 py-1 text-xs font-semibold text-amber-300">
                   MANUAL
@@ -1618,6 +1522,22 @@ export function WholesalePage() {
                       prev.map((mi) =>
                         mi.id === item.id
                           ? { ...mi, quantity: parseIntegerInput(event.target.value, 0) }
+                          : mi,
+                      ),
+                    )
+                  }
+                  className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={item.discount === 0 ? '' : formatCopInput(item.discount)}
+                  placeholder="Descuento"
+                  onChange={(event) =>
+                    setManualItems((prev) =>
+                      prev.map((mi) =>
+                        mi.id === item.id
+                          ? { ...mi, discount: Math.max(0, parseCopIntegerInput(event.target.value, 0)) }
                           : mi,
                       ),
                     )
@@ -1676,7 +1596,7 @@ export function WholesalePage() {
             Agregar item manual
           </button>
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="mt-4 grid gap-3 md:grid-cols-1">
           <label className="space-y-1">
             <span className="text-xs text-zinc-400">Fecha de emisión</span>
             <input
@@ -1689,22 +1609,7 @@ export function WholesalePage() {
               className="w-full cursor-pointer rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
             />
           </label>
-          <label className="space-y-1">
-            <span className="text-xs text-zinc-400">Descuento (COP)</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              min={0}
-              step={1}
-              value={discountTotal === 0 ? '' : formatCopInput(discountTotal)}
-              placeholder="0"
-              onChange={(event) =>
-                setDiscountTotal(Math.max(0, parseCopIntegerInput(event.target.value, 0)))
-              }
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-            />
-          </label>
-          <p className="md:col-span-2 text-xs text-zinc-500">
+          <p className="text-xs text-zinc-500">
             Crédito a 30 días · vence el {formatDateColombia(addDaysToIsoDate(invoiceDate, 30))}.
           </p>
         </div>
@@ -2249,29 +2154,13 @@ export function WholesalePage() {
                   className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
                 />
               </label>
-
-              <label className="space-y-1">
-                <span className="text-xs text-zinc-400">Descuento (COP)</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  min={0}
-                  step={1}
-                  value={editDiscountTotal === 0 ? '' : formatCopInput(editDiscountTotal)}
-                  placeholder="0"
-                  onChange={(event) =>
-                    setEditDiscountTotal(Math.max(0, parseCopIntegerInput(event.target.value, 0)))
-                  }
-                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-                />
-              </label>
             </div>
 
             <div className="mt-4 space-y-2">
               {editItems.map((item, index) => (
                 <div
                   key={item.id}
-                  className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1fr_90px_120px_auto]"
+                  className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 md:grid-cols-[1fr_90px_90px_120px_auto]"
                 >
                   <input
                     list="edit-wholesale-reference-options"
@@ -2294,6 +2183,22 @@ export function WholesalePage() {
                   />
                   <input
                     type="text"
+                    inputMode="numeric"
+                    value={item.discount === 0 ? '' : formatCopInput(item.discount)}
+                    placeholder="Descuento"
+                    onChange={(event) =>
+                      setEditItems((prev) =>
+                        prev.map((ei) =>
+                          ei.id === item.id
+                            ? { ...ei, discount: Math.max(0, parseCopIntegerInput(event.target.value, 0)) }
+                            : ei,
+                        ),
+                      )
+                    }
+                    className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="text"
                     value={formatCop(item.unitPrice)}
                     readOnly
                     className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
@@ -2305,16 +2210,21 @@ export function WholesalePage() {
                   >
                     Quitar
                   </button>
-                  {item.productName ? (
-                    <p className="text-xs text-zinc-500 md:col-span-4">{item.productName}</p>
+                  {item.variantId ? (
+                    <p className="md:col-span-5 flex items-center gap-3 text-xs text-zinc-500">
+                      <span>{item.productName}</span>
+                      <span className="font-medium text-emerald-400">Disp: {item.stockAvailable + item.originalQuantity}</span>
+                    </p>
+                  ) : item.productName ? (
+                    <p className="text-xs text-zinc-500 md:col-span-5">{item.productName}</p>
                   ) : null}
                   {item.reference && !item.variantId ? (
-                    <p className="text-xs text-rose-300 md:col-span-4">
+                    <p className="text-xs text-rose-300 md:col-span-5">
                       Referencia no encontrada. Selecciona una referencia existente.
                     </p>
                   ) : null}
                   {item.variantId && item.quantity > item.stockAvailable + item.originalQuantity ? (
-                    <p className="text-xs text-rose-300 md:col-span-4">
+                    <p className="text-xs text-rose-300 md:col-span-5">
                       Cantidad solicitada supera disponible ({item.stockAvailable + item.originalQuantity}).
                     </p>
                   ) : null}
@@ -2326,7 +2236,7 @@ export function WholesalePage() {
                   {editManualItems.map((item, index) => (
                     <div
                       key={item.id}
-                      className="grid gap-2 rounded-xl border border-zinc-700 bg-zinc-950/60 p-3 md:grid-cols-[auto_1fr_90px_120px_auto]"
+                      className="grid gap-2 rounded-xl border border-zinc-700 bg-zinc-950/60 p-3 md:grid-cols-[auto_1fr_90px_90px_120px_auto]"
                     >
                       <span className="self-center rounded bg-amber-500/20 px-2 py-1 text-xs font-semibold text-amber-300">
                         MANUAL
@@ -2355,6 +2265,22 @@ export function WholesalePage() {
                             prev.map((mi) =>
                               mi.id === item.id
                                 ? { ...mi, quantity: parseIntegerInput(event.target.value, 0) }
+                                : mi,
+                            ),
+                          )
+                        }
+                        className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                      />
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={item.discount === 0 ? '' : formatCopInput(item.discount)}
+                        placeholder="Descuento"
+                        onChange={(event) =>
+                          setEditManualItems((prev) =>
+                            prev.map((mi) =>
+                              mi.id === item.id
+                                ? { ...mi, discount: Math.max(0, parseCopIntegerInput(event.target.value, 0)) }
                                 : mi,
                             ),
                           )
