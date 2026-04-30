@@ -33,7 +33,7 @@ export async function listStoreCustomers(
     .from('store_customers')
     .select('*')
     .eq('store_id', storeId)
-    .order('full_name', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(options?.limit ?? 500)
 
   if (!options?.includeInactive) {
@@ -52,7 +52,7 @@ export async function searchStoreCustomers(storeId: string, term: string, limit 
     .eq('store_id', storeId)
     .eq('is_active', true)
     .or(`full_name.ilike.%${term}%,document_id.ilike.%${term}%,phone.ilike.%${term}%`)
-    .order('full_name', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(limit)
 
   if (error) throw new Error(error.message)

@@ -683,21 +683,30 @@ export function ManualInvoicesPage() {
                     }
                     className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
                   />
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    min={0}
-                    value={item.unitPrice === 0 ? '' : formatCopInput(item.unitPrice)}
-                    placeholder="Precio"
-                    onChange={(event) =>
-                      updateDraftItem(
-                        item.id,
-                        'unitPrice',
-                        Math.max(0, parseCopIntegerInput(event.target.value, 0)),
-                      )
-                    }
-                    className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-                  />
+                  {item.variantId ? (
+                    <div className="flex flex-col justify-center rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-2">
+                      <span className="text-[10px] leading-none text-zinc-500 select-none">precio fijo</span>
+                      <span className="text-sm font-semibold text-emerald-300 select-none">
+                        {formatCopInput(item.unitPrice)}
+                      </span>
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      min={0}
+                      value={item.unitPrice === 0 ? '' : formatCopInput(item.unitPrice)}
+                      placeholder="Precio"
+                      onChange={(event) =>
+                        updateDraftItem(
+                          item.id,
+                          'unitPrice',
+                          Math.max(0, parseCopIntegerInput(event.target.value, 0)),
+                        )
+                      }
+                      className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                    />
+                  )}
                   <button
                     type="button"
                     onClick={() => removeDraftItem(item.id)}
