@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { formatCop } from '../../../shared/utils/currency'
-import { formatDateTimeColombia } from '../../../shared/utils/dateTime'
+import { formatDateTimeColombia, getTodayIsoDateColombia } from '../../../shared/utils/dateTime'
 import { createClientId } from '../../../shared/utils/id'
 import { formatCopInput, parseCopIntegerInput, parseIntegerInput } from '../../../shared/utils/numberInput'
 import { useAuthStore } from '../../auth/model/useAuthStore'
@@ -83,7 +83,8 @@ function invoiceActionButtonClass(variant: 'print' | 'edit' | 'delete') {
 export function ManualInvoicesPage() {
   const user = useAuthStore((state) => state.user)
   const isAdminUser = user?.role === 'admin' || user?.role === 'super_admin'
-  const paymentKpisQuery = useManualInvoicePaymentKpisQuery(user?.storeId, isAdminUser)
+  const [filterDate, setFilterDate] = useState(getTodayIsoDateColombia)
+  const paymentKpisQuery = useManualInvoicePaymentKpisQuery(user?.storeId, isAdminUser, filterDate)
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [discountAuthorizedBy, setDiscountAuthorizedBy] = useState<string | null>(null)
@@ -555,7 +556,28 @@ export function ManualInvoicesPage() {
             </div>
             {/* KPIs de cierre de caja por método de pago */}
             <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-              <p className="text-xs text-zinc-400 font-semibold mb-2">Cierre de caja por método de pago</p>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-zinc-400 font-semibold">Cierre de caja por método de pago</p>
+                <label className="flex items-center gap-2">
+                  <span className="text-xs text-zinc-500">Día:</span>
+                  <input
+                    type="date"
+                    value={filterDate}
+                    max={getTodayIsoDateColombia()}
+                    onChange={(e) => { if (e.target.value) setFilterDate(e.target.value) }}
+                    className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 focus:border-amber-400 focus:outline-none"
+                  />
+                  {filterDate !== getTodayIsoDateColombia() && (
+                    <button
+                      type="button"
+                      onClick={() => setFilterDate(getTodayIsoDateColombia())}
+                      className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+                    >
+                      Hoy
+                    </button>
+                  )}
+                </label>
+              </div>
               {paymentKpisQuery.isLoading ? (
                 <p className="text-xs text-zinc-500">Cargando cierre de caja...</p>
               ) : (
@@ -564,7 +586,11 @@ export function ManualInvoicesPage() {
                     <thead>
                       <tr className="text-zinc-500">
                         <th className="px-2 py-1 text-left">Método</th>
-                        <th className="px-2 py-1 text-right">Día</th>
+                        <th className="px-2 py-1 text-right text-amber-300">
+                          {new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'short' }).format(
+                            new Date(`${filterDate}T12:00:00`)
+                          )}
+                        </th>
                         <th className="px-2 py-1 text-right">Mes</th>
                         <th className="px-2 py-1 text-right">Año</th>
                       </tr>
@@ -573,7 +599,7 @@ export function ManualInvoicesPage() {
                       {['cash','addi','credilondon','dataphone','bancolombia','daviplata','nequi'].map((method) => (
                         <tr key={method}>
                           <td className="px-2 py-1">{paymentLabel(method as ManualPaymentMethod)}</td>
-                          <td className="px-2 py-1 text-right">{formatCop(paymentKpisQuery.data?.[method]?.day ?? 0)}</td>
+                          <td className="px-2 py-1 text-right font-medium text-amber-200">{formatCop(paymentKpisQuery.data?.[method]?.day ?? 0)}</td>
                           <td className="px-2 py-1 text-right">{formatCop(paymentKpisQuery.data?.[method]?.month ?? 0)}</td>
                           <td className="px-2 py-1 text-right">{formatCop(paymentKpisQuery.data?.[method]?.year ?? 0)}</td>
                         </tr>

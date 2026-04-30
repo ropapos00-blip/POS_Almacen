@@ -6,6 +6,7 @@ import { ProtectedRoute } from './ProtectedRoute'
 import {
   DashboardPage,
   ClientesPage,
+  CierresCajaPage,
   CustomersRetailPage,
   GastosPage,
   InventoryPage,
@@ -146,6 +147,14 @@ export const appRouter = createBrowserRouter([
         element: withFallback(
           <ProtectedRoute roles={['super_admin', 'admin']}>
             <UsersPage />
+          </ProtectedRoute>,
+        ),
+      },
+      {
+        path: 'cierre-caja',
+        element: withFallback(
+          <ProtectedRoute roles={['super_admin', 'admin', 'cashier']}>
+            <CierresCajaPage />
           </ProtectedRoute>,
         ),
       },

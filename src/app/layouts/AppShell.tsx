@@ -1,4 +1,4 @@
-import { Bookmark, FileText, LayoutDashboard, LogOut, Menu, Package, ReceiptText, ShoppingCart, Store, Users, Wallet, X } from 'lucide-react'
+import { Bookmark, Calculator, FileText, LayoutDashboard, LogOut, Menu, Package, ReceiptText, ShoppingCart, Store, Users, Wallet, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuthStore } from '../../features/auth/model/useAuthStore'
@@ -14,6 +14,7 @@ const storeNavItems = [
   { to: '/layaways', label: 'Separados', icon: Bookmark, roles: ['super_admin', 'admin', 'cashier'] },
   { to: '/customers', label: 'Clientes', icon: Users, roles: ['super_admin', 'admin', 'cashier'] },
   { to: '/users', label: 'Usuarios', icon: Store, roles: ['super_admin', 'admin'] },
+  { to: '/cierre-caja', label: 'Cierre de Caja', icon: Calculator, roles: ['super_admin', 'admin', 'cashier'] },
 ]
 
 const confeccionNavItems = [

@@ -1,7 +1,8 @@
 // KPIs agrupados por método de pago para cierre de caja
-export async function listManualInvoicePaymentKpis(storeId: string) {
+export async function listManualInvoicePaymentKpis(storeId: string, filterDate?: string) {
   const todayIso = getTodayIsoDateColombia();
-  const yearStartIso = `${todayIso.slice(0, 4)}-01-01`;
+  const selectedIso = filterDate ?? todayIso;
+  const yearStartIso = `${selectedIso.slice(0, 4)}-01-01`;
   const { data, error } = await supabase
     .from('manual_invoices')
     .select('grand_total, created_at, payment_method')
@@ -15,7 +16,7 @@ export async function listManualInvoicePaymentKpis(storeId: string) {
     throw new Error(error.message);
   }
 
-  const todayMonth = todayIso.slice(0, 7);
+  const selectedMonth = selectedIso.slice(0, 7);
   const paymentMethods = [
     'cash',
     'addi',
@@ -43,10 +44,10 @@ export async function listManualInvoicePaymentKpis(storeId: string) {
     const method = row.payment_method;
     if (!result[method]) return;
     result[method].year += amount;
-    if (createdIsoDate.slice(0, 7) === todayMonth) {
+    if (createdIsoDate.slice(0, 7) === selectedMonth) {
       result[method].month += amount;
     }
-    if (createdIsoDate === todayIso) {
+    if (createdIsoDate === selectedIso) {
       result[method].day += amount;
     }
   });

@@ -1,10 +1,10 @@
 // KPIs de cierre de caja por método de pago
 import { listManualInvoicePaymentKpis } from '../services/manualInvoicesService';
 
-export function useManualInvoicePaymentKpisQuery(storeId?: string, enabled = true) {
+export function useManualInvoicePaymentKpisQuery(storeId?: string, enabled = true, filterDate?: string) {
   return useQuery({
-    queryKey: ['manual-invoices', 'payment-kpis', storeId],
-    queryFn: () => listManualInvoicePaymentKpis(storeId as string),
+    queryKey: ['manual-invoices', 'payment-kpis', storeId, filterDate],
+    queryFn: () => listManualInvoicePaymentKpis(storeId as string, filterDate),
     enabled: Boolean(storeId) && enabled,
   });
 }

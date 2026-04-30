@@ -58,6 +58,12 @@ export const WholesalePage = lazy(() =>
   })),
 )
 
+export const CierresCajaPage = lazy(() =>
+  import('../../features/cash-register/ui/CierresCajaPage').then((m) => ({
+    default: m.CierresCajaPage,
+  })),
+)
+
 export const CustomersRetailPage = lazy(() =>
   import('../../features/customers/ui/CustomersPage').then((m) => ({
     default: m.CustomersPage,
