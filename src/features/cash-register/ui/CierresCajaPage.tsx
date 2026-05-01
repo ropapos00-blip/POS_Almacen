@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { formatCop } from '../../../shared/utils/currency'
-import { getTodayIsoDateColombia } from '../../../shared/utils/dateTime'
+import { addDaysToIsoDate, getTodayIsoDateColombia } from '../../../shared/utils/dateTime'
 import { formatCopInput, parseCopIntegerInput } from '../../../shared/utils/numberInput'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import {
@@ -22,6 +22,7 @@ export function CierresCajaPage() {
   const storeId = user?.storeId
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin'
   const todayIso = getTodayIsoDateColombia()
+  const tomorrowIso = addDaysToIsoDate(todayIso, 1)
 
   const cierreReceiptRef = useRef<HTMLDivElement>(null)
 
@@ -56,6 +57,11 @@ export function CierresCajaPage() {
   const [editNotesOpen, setEditNotesOpen] = useState('')
   const [editBaseFeedback, setEditBaseFeedback] = useState<string | null>(null)
 
+  // ─── Estado apertura siguiente dia ───────────────────────────────────────────
+  const [nextDayBaseInput, setNextDayBaseInput] = useState('')
+  const [nextDayNotesInput, setNextDayNotesInput] = useState('')
+  const [nextDayFeedback, setNextDayFeedback] = useState<string | null>(null)
+
   // ─── Estado modal historial (admin) ─────────────────────────────────────────
   const [showHistoryModal, setShowHistoryModal] = useState(false)
   const [selectedHistSession, setSelectedHistSession] = useState<CashRegisterSession | null>(null)
@@ -68,6 +74,14 @@ export function CierresCajaPage() {
     todayIso,
   )
   const historySessions = historyQuery.data ?? []
+
+  // sesion de mañana (para saber si ya fue preparada)
+  const tomorrowSessionQuery = useSessionsByRangeQuery(
+    session?.status === 'closed' && isAdmin ? storeId : undefined,
+    tomorrowIso,
+    tomorrowIso,
+  )
+  const tomorrowSession = tomorrowSessionQuery.data?.[0] ?? null
 
   // resumen de sesión histórica seleccionada
   const histSummaryQuery = useDaySalesSummaryQuery(
@@ -117,6 +131,51 @@ export function CierresCajaPage() {
       setNotesOpenInput('')
     } catch (e) {
       setOpenFeedback(e instanceof Error ? e.message : 'Error al abrir la sesion.')
+    }
+  }
+
+  async function handlePrepareTomorrow() {
+    setNextDayFeedback(null)
+    if (!storeId || !user?.id) return
+    const base = parseCopIntegerInput(nextDayBaseInput)
+    if (base < 0) {
+      setNextDayFeedback('La base no puede ser negativa.')
+      return
+    }
+    try {
+      await openMutation.mutateAsync({
+        storeId,
+        openedBy: user.id,
+        cashBase: base,
+        notesOpen: nextDayNotesInput,
+        sessionDate: tomorrowIso,
+      })
+      setNextDayBaseInput('')
+      setNextDayNotesInput('')
+    } catch (e) {
+      setNextDayFeedback(e instanceof Error ? e.message : 'Error al preparar la sesion.')
+    }
+  }
+
+  async function handleUpdateTomorrow() {
+    setNextDayFeedback(null)
+    if (!tomorrowSession) return
+    const base = parseCopIntegerInput(nextDayBaseInput || String(Math.trunc(tomorrowSession.cash_base)))
+    if (base < 0) {
+      setNextDayFeedback('La base no puede ser negativa.')
+      return
+    }
+    try {
+      await updateBaseMutation.mutateAsync({
+        sessionId: tomorrowSession.id,
+        cashBase: base,
+        notesOpen: nextDayNotesInput !== '' ? nextDayNotesInput : (tomorrowSession.notes_open ?? ''),
+      })
+      setNextDayBaseInput('')
+      setNextDayNotesInput('')
+      setNextDayFeedback('✓ Base actualizada.')
+    } catch (e) {
+      setNextDayFeedback(e instanceof Error ? e.message : 'Error al actualizar la base.')
     }
   }
 
@@ -557,6 +616,117 @@ export function CierresCajaPage() {
               ) : null}
             </article>
           </div>
+
+          {/* ── Preparar apertura del dia siguiente (solo admin) ─────────────── */}
+          {isAdmin ? (
+            <article className="rounded-2xl border border-zinc-700 bg-zinc-900/80 p-5">
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-semibold text-zinc-100">Apertura del dia siguiente</h2>
+                {tomorrowSession ? (
+                  <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-300">
+                    Preparada
+                  </span>
+                ) : null}
+              </div>
+
+              {tomorrowSession ? (
+                <div className="mt-4 space-y-3">
+                  <p className="text-xs text-zinc-500">
+                    La sesion del{' '}
+                    {new Intl.DateTimeFormat('es-CO', {
+                      timeZone: 'America/Bogota',
+                      weekday: 'long',
+                      day: 'numeric',
+                      month: 'long',
+                    }).format(new Date(`${tomorrowIso}T12:00:00`))}{' '}
+                    ya fue preparada. Puedes ajustar la base antes de que inicie el dia.
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="space-y-1">
+                      <span className="text-xs text-zinc-400">Base en efectivo</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={nextDayBaseInput || formatCopInput(Math.trunc(tomorrowSession.cash_base))}
+                        onChange={(e) => {
+                          setNextDayBaseInput(formatCopInput(e.target.value))
+                          setNextDayFeedback(null)
+                        }}
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs text-zinc-400">Observaciones (opcional)</span>
+                      <input
+                        type="text"
+                        value={nextDayNotesInput !== '' ? nextDayNotesInput : (tomorrowSession.notes_open ?? '')}
+                        onChange={(e) => setNextDayNotesInput(e.target.value)}
+                        placeholder="Notas de apertura..."
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                      />
+                    </label>
+                  </div>
+                  {nextDayFeedback ? (
+                    <p className={`text-xs ${nextDayFeedback.startsWith('✓') ? 'text-emerald-300' : 'text-amber-300'}`}>
+                      {nextDayFeedback}
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => { void handleUpdateTomorrow() }}
+                    disabled={updateBaseMutation.isPending}
+                    className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-900 disabled:opacity-50"
+                  >
+                    {updateBaseMutation.isPending ? 'Guardando...' : 'Guardar cambios'}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Configura la base en efectivo para que el cajero pueda empezar a trabajar
+                    mañana sin esperas.
+                  </p>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <label className="space-y-1">
+                      <span className="text-xs text-zinc-400">Base en efectivo</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={nextDayBaseInput}
+                        onChange={(e) => {
+                          setNextDayBaseInput(formatCopInput(e.target.value))
+                          setNextDayFeedback(null)
+                        }}
+                        placeholder="Ej: 200.000"
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs text-zinc-400">Observaciones (opcional)</span>
+                      <input
+                        type="text"
+                        value={nextDayNotesInput}
+                        onChange={(e) => setNextDayNotesInput(e.target.value)}
+                        placeholder="Notas de apertura..."
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
+                      />
+                    </label>
+                  </div>
+                  {nextDayFeedback ? (
+                    <p className="mt-2 text-xs text-amber-300">{nextDayFeedback}</p>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => { void handlePrepareTomorrow() }}
+                    disabled={openMutation.isPending || !nextDayBaseInput}
+                    className="mt-4 rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-900 disabled:opacity-50"
+                  >
+                    {openMutation.isPending ? 'Preparando...' : 'Preparar apertura de mañana'}
+                  </button>
+                </>
+              )}
+            </article>
+          ) : null}
         </div>
       )}
 

@@ -5,7 +5,7 @@ export async function listManualInvoicePaymentKpis(storeId: string, filterDate?:
   const yearStartIso = `${selectedIso.slice(0, 4)}-01-01`;
   const { data, error } = await supabase
     .from('manual_invoices')
-    .select('grand_total, created_at, payment_method')
+    .select('grand_total, created_at, payment_method, payment_reference')
     .eq('store_id', storeId)
     .eq('source', 'provisional')
     .eq('is_active', true)
@@ -33,6 +33,13 @@ export async function listManualInvoicePaymentKpis(storeId: string, filterDate?:
     result[method] = { day: 0, month: 0, year: 0 };
   }
 
+  function addToResult(method: string, amount: number, dateIso: string) {
+    if (!result[method]) return;
+    result[method].year += amount;
+    if (dateIso.slice(0, 7) === selectedMonth) result[method].month += amount;
+    if (dateIso === selectedIso) result[method].day += amount;
+  }
+
   (data ?? []).forEach((row) => {
     const createdIsoDate = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/Bogota',
@@ -40,16 +47,27 @@ export async function listManualInvoicePaymentKpis(storeId: string, filterDate?:
       month: '2-digit',
       day: '2-digit',
     }).format(new Date(String(row.created_at)));
+
+    const method = row.payment_method as string;
+
+    if (method === 'mixed') {
+      // payment_reference format: "method1:amount1:method2:amount2"
+      const ref = row.payment_reference as string | null;
+      if (!ref) return;
+      const parts = ref.split(':');
+      if (parts.length >= 4) {
+        const m1 = parts[0];
+        const a1 = Math.max(0, Number(parts[1]) || 0);
+        const m2 = parts[2];
+        const a2 = Math.max(0, Number(parts[3]) || 0);
+        addToResult(m1, a1, createdIsoDate);
+        addToResult(m2, a2, createdIsoDate);
+      }
+      return;
+    }
+
     const amount = Math.max(0, Number(row.grand_total ?? 0));
-    const method = row.payment_method;
-    if (!result[method]) return;
-    result[method].year += amount;
-    if (createdIsoDate.slice(0, 7) === selectedMonth) {
-      result[method].month += amount;
-    }
-    if (createdIsoDate === selectedIso) {
-      result[method].day += amount;
-    }
+    addToResult(method, amount, createdIsoDate);
   });
 
   return result;

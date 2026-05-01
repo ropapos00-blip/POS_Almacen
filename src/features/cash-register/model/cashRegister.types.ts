@@ -37,6 +37,8 @@ export interface OpenSessionInput {
   openedBy: string
   cashBase: number
   notesOpen: string
+  /** ISO date (YYYY-MM-DD) para pre-abrir una sesion futura. Por defecto: hoy. */
+  sessionDate?: string
 }
 
 export interface CloseSessionInput {

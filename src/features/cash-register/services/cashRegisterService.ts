@@ -49,13 +49,13 @@ export async function getSessionsByRange(
 }
 
 export async function openSession(input: OpenSessionInput): Promise<CashRegisterSession> {
-  const today = getTodayIsoDateColombia()
+  const sessionDate = input.sessionDate ?? getTodayIsoDateColombia()
 
   const { data, error } = await supabase
     .from('cash_register_sessions')
     .insert({
       store_id: input.storeId,
-      session_date: today,
+      session_date: sessionDate,
       opened_by: input.openedBy,
       cash_base: input.cashBase,
       notes_open: input.notesOpen || null,

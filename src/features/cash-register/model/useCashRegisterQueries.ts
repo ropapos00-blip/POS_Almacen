@@ -51,6 +51,7 @@ export function useOpenSessionMutation(storeId?: string) {
     mutationFn: (input: OpenSessionInput) => openSession(input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['cash-register', 'today', storeId] })
+      void queryClient.invalidateQueries({ queryKey: ['cash-register', 'history', storeId] })
     },
   })
 }
