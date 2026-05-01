@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { useReactToPrint } from 'react-to-print'
 import { formatCop } from '../../../shared/utils/currency'
 import { getTodayIsoDateColombia } from '../../../shared/utils/dateTime'
 import { formatCopInput, parseCopIntegerInput } from '../../../shared/utils/numberInput'
@@ -8,15 +9,21 @@ import {
   useDaySalesSummaryQuery,
   useLastSessionQuery,
   useOpenSessionMutation,
+  useSessionsByRangeQuery,
   useTodaySessionQuery,
   useUpdateCashBaseMutation,
 } from '../model/useCashRegisterQueries'
+import type { CashRegisterSession } from '../model/cashRegister.types'
+import { CierreReceipt } from './CierreReceipt'
+import type { CierreReceiptData } from './CierreReceipt'
 
 export function CierresCajaPage() {
   const user = useAuthStore((state) => state.user)
   const storeId = user?.storeId
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin'
   const todayIso = getTodayIsoDateColombia()
+
+  const cierreReceiptRef = useRef<HTMLDivElement>(null)
 
   // ─── Queries ────────────────────────────────────────────────────────────────
   const sessionQuery = useTodaySessionQuery(storeId)
@@ -48,6 +55,26 @@ export function CierresCajaPage() {
   const [editBaseInput, setEditBaseInput] = useState('')
   const [editNotesOpen, setEditNotesOpen] = useState('')
   const [editBaseFeedback, setEditBaseFeedback] = useState<string | null>(null)
+
+  // ─── Estado modal historial (admin) ─────────────────────────────────────────
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [selectedHistSession, setSelectedHistSession] = useState<CashRegisterSession | null>(null)
+
+  // rango: mes actual para el historial
+  const monthStart = todayIso.slice(0, 8) + '01'
+  const historyQuery = useSessionsByRangeQuery(
+    isAdmin && showHistoryModal ? storeId : undefined,
+    monthStart,
+    todayIso,
+  )
+  const historySessions = historyQuery.data ?? []
+
+  // resumen de sesión histórica seleccionada
+  const histSummaryQuery = useDaySalesSummaryQuery(
+    isAdmin && selectedHistSession ? storeId : undefined,
+    selectedHistSession?.session_date ?? '',
+  )
+  const histSummary = histSummaryQuery.data
 
   // ─── Calculos ────────────────────────────────────────────────────────────────
   const cashBase = session?.cash_base ?? 0
@@ -148,6 +175,10 @@ export function CierresCajaPage() {
     }
   }
 
+  function printCierre() {
+    handlePrintCierre()
+  }
+
   function diffColor(diff: number) {
     if (diff > 0) return 'text-emerald-300'
     if (diff < 0) return 'text-rose-300'
@@ -159,6 +190,38 @@ export function CierresCajaPage() {
     if (diff < 0) return `Faltante ${formatCop(Math.abs(diff))}`
     return 'Cuadra exacto'
   }
+
+  const invoiceByMethod = summary?.invoiceByMethod ?? {}
+
+  const cierreReceiptData: CierreReceiptData | null =
+    session?.status === 'closed'
+      ? {
+          sessionDate: new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(`${session.session_date}T12:00:00`)),
+          closedAt: session.closed_at
+            ? new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' }).format(new Date(session.closed_at))
+            : null,
+          cashBase,
+          posCash,
+          posCard: summary?.posCard ?? 0,
+          posTransfer: summary?.posTransfer ?? 0,
+          posTotal: summary?.posTotal ?? 0,
+          invoiceCash,
+          invoiceByMethod,
+          invoiceTotal: summary?.invoiceTotal ?? 0,
+          expenses,
+          expectedCash,
+          cashCounted: session.cash_counted ?? 0,
+          difference: (session.cash_counted ?? 0) - expectedCash,
+          notesClose: session.notes_close ?? null,
+          cashierName: user?.fullName ?? user?.email ?? '—',
+        }
+      : null
+
+  const handlePrintCierre = useReactToPrint({
+    contentRef: cierreReceiptRef,
+    documentTitle: `cierre-${session?.session_date ?? todayIso}`,
+    pageStyle: '@page { size: 56mm auto; margin: 0mm; } html, body { margin: 0 !important; padding: 0 !important; height: auto !important; min-height: 0 !important; background: white !important; }',
+  })
 
   if (sessionQuery.isLoading) {
     return (
@@ -173,10 +236,21 @@ export function CierresCajaPage() {
 
   return (
     <section className="space-y-6">
-      {/* Encabezado */}
-      <header>
-        <h1 className="text-2xl font-semibold text-zinc-100">Cierre de Caja</h1>
-        <p className="mt-2 text-zinc-400">{todayLabel}</p>
+      {/* ── HEADER con botón historial (admin) ─────────────────────────────── */}
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-zinc-100">Cierre de Caja</h1>
+          <p className="mt-2 text-zinc-400">{todayLabel}</p>
+        </div>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setShowHistoryModal(true)}
+            className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:text-zinc-100"
+          >
+            Historial del mes
+          </button>
+        )}
       </header>
 
       {/* ── KPIs del dia ──────────────────────────────────────────────────────── */}
@@ -305,6 +379,7 @@ export function CierresCajaPage() {
             posTransfer={summary?.posTransfer ?? 0}
             posTotal={summary?.posTotal ?? 0}
             invoiceCash={invoiceCash}
+            invoiceByMethod={invoiceByMethod}
             invoiceTotal={summary?.invoiceTotal ?? 0}
             expenses={expenses}
             expectedCash={expectedCash}
@@ -362,6 +437,7 @@ export function CierresCajaPage() {
               posTransfer={summary?.posTransfer ?? 0}
               posTotal={summary?.posTotal ?? 0}
               invoiceCash={invoiceCash}
+              invoiceByMethod={invoiceByMethod}
               invoiceTotal={summary?.invoiceTotal ?? 0}
               expenses={expenses}
               expectedCash={expectedCash}
@@ -432,6 +508,7 @@ export function CierresCajaPage() {
               posTransfer={summary?.posTransfer ?? 0}
               posTotal={summary?.posTotal ?? 0}
               invoiceCash={invoiceCash}
+              invoiceByMethod={invoiceByMethod}
               invoiceTotal={summary?.invoiceTotal ?? 0}
               expenses={expenses}
               expectedCash={expectedCash}
@@ -440,7 +517,16 @@ export function CierresCajaPage() {
 
             {/* Resultado del cierre */}
             <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
-              <h2 className="text-xl font-semibold text-zinc-100">Resultado del cierre</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-zinc-100">Resultado del cierre</h2>
+                <button
+                  type="button"
+                  onClick={printCierre}
+                  className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200"
+                >
+                  🖨️ Imprimir
+                </button>
+              </div>
 
               <div className="mt-4 space-y-2 text-sm">
                 <div className="flex justify-between">
@@ -626,6 +712,139 @@ export function CierresCajaPage() {
           </div>
         </div>
       ) : null}
+
+      {/* ── MODAL: historial del mes (admin) ───────────────────────────── */}
+      {showHistoryModal ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+          <div className="w-full max-w-2xl rounded-2xl border border-zinc-700 bg-zinc-900 p-5 space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between shrink-0">
+              <h3 className="text-lg font-semibold text-zinc-100">Historial de cierres — mes actual</h3>
+              <button
+                type="button"
+                onClick={() => { setShowHistoryModal(false); setSelectedHistSession(null) }}
+                className="text-zinc-500 hover:text-zinc-200 text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            {selectedHistSession ? (
+              // Vista detalle de sesión histórica
+              <div className="overflow-y-auto ghost-scrollbar space-y-4">
+                <button
+                  type="button"
+                  onClick={() => setSelectedHistSession(null)}
+                  className="text-xs text-zinc-400 hover:text-zinc-200"
+                >
+                  ← Volver al historial
+                </button>
+                <p className="text-sm font-semibold text-zinc-300">
+                  {new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', weekday: 'long', day: 'numeric', month: 'long' }).format(
+                    new Date(`${selectedHistSession.session_date}T12:00:00`)
+                  )}
+                </p>
+                {histSummaryQuery.isLoading ? (
+                  <p className="text-xs text-zinc-500">Cargando detalle...</p>
+                ) : (
+                  <div className="space-y-3 text-sm">
+                    {/* Movimientos */}
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Movimientos</p>
+                      <div className="flex justify-between"><span className="text-zinc-400">Base apertura</span><span className="text-zinc-200">{formatCop(selectedHistSession.cash_base)}</span></div>
+                      <div className="flex justify-between"><span className="text-zinc-400">Efectivo POS</span><span className="text-zinc-200">{formatCop(histSummary?.posCash ?? 0)}</span></div>
+                      <div className="flex justify-between"><span className="text-zinc-400">Tarjeta POS</span><span className="text-zinc-200">{formatCop(histSummary?.posCard ?? 0)}</span></div>
+                      <div className="flex justify-between"><span className="text-zinc-400">Transferencia POS</span><span className="text-zinc-200">{formatCop(histSummary?.posTransfer ?? 0)}</span></div>
+                      <div className="border-t border-zinc-800 pt-1 flex justify-between font-medium"><span className="text-zinc-300">Total POS</span><span className="text-emerald-300">{formatCop(histSummary?.posTotal ?? 0)}</span></div>
+                    </div>
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Facturas manuales</p>
+                      <div className="flex justify-between"><span className="text-zinc-400">Efectivo</span><span className="text-zinc-200">{formatCop(histSummary?.invoiceCash ?? 0)}</span></div>
+                      {Object.entries(histSummary?.invoiceByMethod ?? {}).map(([m, v]) => (
+                        <div key={m} className="flex justify-between">
+                          <span className="text-zinc-400">{{addi:'Addi',credilondon:'CREDILONDON',dataphone:'Datáfono',bancolombia:'Bancolombia',daviplata:'Daviplata',nequi:'Nequi'}[m] ?? m}</span>
+                          <span className="text-zinc-200">{formatCop(v)}</span>
+                        </div>
+                      ))}
+                      <div className="border-t border-zinc-800 pt-1 flex justify-between font-medium"><span className="text-zinc-300">Total facturas</span><span className="text-amber-300">{formatCop(histSummary?.invoiceTotal ?? 0)}</span></div>
+                    </div>
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Cierre</p>
+                      <div className="flex justify-between"><span className="text-zinc-400">Gastos</span><span className="text-rose-300">{formatCop(histSummary?.expensesTotal ?? 0)}</span></div>
+                      <div className="flex justify-between"><span className="text-zinc-400">Efectivo esperado</span><span className="text-zinc-200">{formatCop(selectedHistSession.cash_base + (histSummary?.posCash ?? 0) + (histSummary?.invoiceCash ?? 0) - (histSummary?.expensesTotal ?? 0))}</span></div>
+                      {selectedHistSession.status === 'closed' && (
+                        <>
+                          <div className="flex justify-between"><span className="text-zinc-400">Efectivo contado</span><span className="text-zinc-200">{formatCop(selectedHistSession.cash_counted ?? 0)}</span></div>
+                          <div className="border-t border-zinc-800 pt-1 flex justify-between font-semibold">
+                            <span className="text-zinc-300">Diferencia</span>
+                            <span className={(
+                              () => {
+                                const diff = (selectedHistSession.cash_counted ?? 0) - (selectedHistSession.cash_base + (histSummary?.posCash ?? 0) + (histSummary?.invoiceCash ?? 0) - (histSummary?.expensesTotal ?? 0))
+                                return diff > 0 ? 'text-emerald-300' : diff < 0 ? 'text-rose-300' : 'text-zinc-300'
+                              }
+                            )()}>
+                              {(() => {
+                                const diff = (selectedHistSession.cash_counted ?? 0) - (selectedHistSession.cash_base + (histSummary?.posCash ?? 0) + (histSummary?.invoiceCash ?? 0) - (histSummary?.expensesTotal ?? 0))
+                                if (diff > 0) return `Sobrante ${formatCop(diff)}`
+                                if (diff < 0) return `Faltante ${formatCop(Math.abs(diff))}`
+                                return 'Cuadra exacto'
+                              })()}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                      {selectedHistSession.status === 'open' && (
+                        <div className="rounded-md bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs text-amber-300">Sesión sin cerrar</div>
+                      )}
+                    </div>
+                    {selectedHistSession.notes_close ? (
+                      <p className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-400">Notas cierre: {selectedHistSession.notes_close}</p>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            ) : (
+              // Lista de sesiones
+              <div className="overflow-y-auto ghost-scrollbar space-y-2">
+                {historyQuery.isLoading ? (
+                  <p className="text-xs text-zinc-500">Cargando historial...</p>
+                ) : historySessions.length === 0 ? (
+                  <p className="text-xs text-zinc-500">No hay sesiones este mes.</p>
+                ) : (
+                  historySessions.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setSelectedHistSession(s)}
+                      className="w-full rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-left hover:border-zinc-600 flex items-center justify-between gap-3"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-zinc-200">
+                          {new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', weekday: 'short', day: 'numeric', month: 'short' }).format(
+                            new Date(`${s.session_date}T12:00:00`)
+                          )}
+                        </p>
+                        <p className="text-xs text-zinc-500">Base: {formatCop(s.cash_base)}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          s.status === 'closed'
+                            ? 'bg-zinc-800 text-zinc-400'
+                            : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
+                        }`}>
+                          {s.status === 'closed' ? 'Cerrada' : 'Abierta'}
+                        </span>
+                        <span className="text-xs text-zinc-500">›</span>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      <CierreReceipt receiptRef={cierreReceiptRef} data={cierreReceiptData} />
     </section>
   )
 }
@@ -656,10 +875,20 @@ interface SummaryBreakdownProps {
   posTransfer: number
   posTotal: number
   invoiceCash: number
+  invoiceByMethod: Record<string, number>
   invoiceTotal: number
   expenses: number
   expectedCash: number
   isLoading: boolean
+}
+
+const INVOICE_METHOD_LABELS: Record<string, string> = {
+  addi: 'Addi',
+  credilondon: 'CREDILONDON',
+  dataphone: 'Datáfono',
+  bancolombia: 'Bancolombia',
+  daviplata: 'Daviplata',
+  nequi: 'Nequi',
 }
 
 function SummaryBreakdown({
@@ -669,6 +898,7 @@ function SummaryBreakdown({
   posTransfer,
   posTotal,
   invoiceCash,
+  invoiceByMethod,
   invoiceTotal,
   expenses,
   expectedCash,
@@ -728,10 +958,12 @@ function SummaryBreakdown({
                 <span className="text-zinc-400">Efectivo</span>
                 <span className="text-zinc-200">{formatCop(invoiceCash)}</span>
               </div>
-              <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
-                <span className="text-zinc-400">Otros metodos</span>
-                <span className="text-zinc-200">{formatCop(invoiceTotal - invoiceCash)}</span>
-              </div>
+              {Object.entries(invoiceByMethod).map(([method, amount]) => (
+                <div key={method} className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
+                  <span className="text-zinc-400">{INVOICE_METHOD_LABELS[method] ?? method}</span>
+                  <span className="text-zinc-200">{formatCop(amount)}</span>
+                </div>
+              ))}
               <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm font-medium">
                 <span className="text-zinc-300">Total facturas</span>
                 <span className="text-amber-300">{formatCop(invoiceTotal)}</span>

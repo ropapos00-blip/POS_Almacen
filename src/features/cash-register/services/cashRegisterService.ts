@@ -143,7 +143,7 @@ export async function getDaySalesSummary(
 
     supabase
       .from('manual_invoices')
-      .select('grand_total, payment_method')
+      .select('grand_total, payment_method, payment_reference')
       .eq('store_id', storeId)
       .eq('source', 'provisional')
       .eq('is_active', true)
@@ -180,11 +180,29 @@ export async function getDaySalesSummary(
 
   let invoiceCash = 0
   let invoiceTotal = 0
+  const invoiceByMethod: Record<string, number> = {}
 
   for (const inv of invoicesResult.data ?? []) {
     const amount = Number(inv.grand_total ?? 0)
     invoiceTotal += amount
-    if (inv.payment_method === 'cash') invoiceCash += amount
+    if (inv.payment_method === 'cash') {
+      invoiceCash += amount
+    } else if (inv.payment_method === 'mixed' && inv.payment_reference) {
+      // payment_reference format: "method1:amount1:method2:amount2"
+      const parts = (inv.payment_reference as string).split(':')
+      if (parts.length >= 4) {
+        const m1 = parts[0]
+        const a1 = Number(parts[1]) || 0
+        const m2 = parts[2]
+        const a2 = Number(parts[3]) || 0
+        if (m1 === 'cash') invoiceCash += a1
+        else if (m1) invoiceByMethod[m1] = (invoiceByMethod[m1] ?? 0) + a1
+        if (m2 === 'cash') invoiceCash += a2
+        else if (m2) invoiceByMethod[m2] = (invoiceByMethod[m2] ?? 0) + a2
+      }
+    } else if (inv.payment_method) {
+      invoiceByMethod[inv.payment_method] = (invoiceByMethod[inv.payment_method] ?? 0) + amount
+    }
   }
 
   const expensesTotal = (expensesResult.data ?? []).reduce(
@@ -199,6 +217,7 @@ export async function getDaySalesSummary(
     posTotal,
     invoiceCash,
     invoiceTotal,
+    invoiceByMethod,
     expensesTotal,
   }
 }

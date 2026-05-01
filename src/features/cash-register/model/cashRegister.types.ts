@@ -26,6 +26,8 @@ export interface DaySalesSummary {
   invoiceCash: number
   /** Total facturas manuales activas */
   invoiceTotal: number
+  /** Desglose de facturas manuales por método (excluye efectivo) */
+  invoiceByMethod: Record<string, number>
   /** Total gastos del dia */
   expensesTotal: number
 }
