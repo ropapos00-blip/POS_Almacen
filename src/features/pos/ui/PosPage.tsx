@@ -69,8 +69,8 @@ export function PosPage() {
     return cart.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0)
   }, [cart])
 
-  // PIN is required only when the system is enabled AND a PIN has been configured.
-  // When disabled, cashiers can discount freely without a PIN.
+  // pinRequired: PIN modal is available only when the store has the system enabled AND a PIN configured.
+  // But the freeMax cap on cashiers applies regardless — if no PIN is set, cashiers simply cannot exceed freeMax.
   const pinRequired =
     discountPinQuery.data?.enabled === true && discountPinQuery.data?.hasPin === true
 
@@ -82,9 +82,9 @@ export function PosPage() {
     return Math.max(0, subtotal - totalDiscount)
   }, [subtotal, totalDiscount])
 
+  // Cashiers are always capped at freeMax regardless of PIN config.
   const needsDiscountAuthorization =
     user?.role === 'cashier' &&
-    pinRequired &&
     cart.some(item => item.discount > Math.max(0, (item.unitPrice - item.minSalePrice) * item.quantity))
 
   const hasValidDiscountAuthorization =
@@ -362,8 +362,9 @@ export function PosPage() {
             {cart.map((item) => {
               const freeMax = Math.max(0, (item.unitPrice - item.minSalePrice) * item.quantity)
               const costMax = Math.max(0, (item.unitPrice - item.costPrice) * item.quantity)
-              const effectiveMax = (discountAuthorizedBy || user?.role !== 'cashier' || !pinRequired) ? costMax : freeMax
-              const lockedForPin = user?.role === 'cashier' && pinRequired && !discountAuthorizedBy && freeMax === 0
+              // effectiveMax: admin/super_admin or already-authorized cashier → full margin; cashier without auth → free range only
+              const effectiveMax = (discountAuthorizedBy || user?.role !== 'cashier') ? costMax : freeMax
+              const lockedForPin = user?.role === 'cashier' && !discountAuthorizedBy && freeMax === 0
               return (
                 <div
                   key={item.variantId}
@@ -404,7 +405,7 @@ export function PosPage() {
                       placeholder="0"
                       readOnly={lockedForPin}
                       onClick={() => {
-                        if (lockedForPin) {
+                        if (lockedForPin && pinRequired) {
                           setPinInput('')
                           setAuthorizationFeedback(null)
                           setAuthorizationModalOpen(true)
@@ -412,10 +413,14 @@ export function PosPage() {
                       }}
                       onChange={(e) => {
                         const raw = parseCopIntegerInput(e.target.value, 0)
-                        if (user?.role === 'cashier' && pinRequired && !discountAuthorizedBy && raw > freeMax) {
-                          setPinInput('')
-                          setAuthorizationFeedback(null)
-                          setAuthorizationModalOpen(true)
+                        if (user?.role === 'cashier' && !discountAuthorizedBy && raw > freeMax) {
+                          // Only offer PIN modal if the store has it configured
+                          if (pinRequired) {
+                            setPinInput('')
+                            setAuthorizationFeedback(null)
+                            setAuthorizationModalOpen(true)
+                          }
+                          // Always block exceeding freeMax without authorization
                           return
                         }
                         updateCartItemDiscount(item.variantId, Math.min(raw, effectiveMax))
