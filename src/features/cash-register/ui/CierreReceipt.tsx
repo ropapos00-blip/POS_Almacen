@@ -3,6 +3,9 @@ import { formatCop } from '../../../shared/utils/currency'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 
 const METHOD_LABELS: Record<string, string> = {
+  cash: 'Efectivo',
+  card: 'Tarjeta',
+  transfer: 'Transferencia',
   addi: 'Addi',
   credilondon: 'CREDILONDON',
   dataphone: 'Datáfono',
@@ -15,6 +18,7 @@ export interface CierreReceiptData {
   sessionDate: string
   closedAt: string | null
   cashBase: number
+  posByMethod: Record<string, number>
   posCash: number
   posCard: number
   posTransfer: number
@@ -81,23 +85,13 @@ export function CierreReceipt({
         {/* Ventas POS */}
         <p className="my-1 border-t border-dashed border-black" />
         <p className="text-xs font-semibold">VENTAS POS</p>
-        {data.posCash > 0 && (
-          <div className="flex justify-between text-xs">
-            <span>Efectivo</span>
-            <span>{formatCop(data.posCash)}</span>
-          </div>
-        )}
-        {data.posCard > 0 && (
-          <div className="flex justify-between text-xs">
-            <span>Tarjeta</span>
-            <span>{formatCop(data.posCard)}</span>
-          </div>
-        )}
-        {data.posTransfer > 0 && (
-          <div className="flex justify-between text-xs">
-            <span>Transferencia</span>
-            <span>{formatCop(data.posTransfer)}</span>
-          </div>
+        {Object.entries(data.posByMethod).map(([method, amount]) =>
+          amount > 0 ? (
+            <div key={method} className="flex justify-between text-xs">
+              <span>{METHOD_LABELS[method] ?? method}</span>
+              <span>{formatCop(amount)}</span>
+            </div>
+          ) : null,
         )}
         <div className="flex justify-between text-xs font-bold">
           <span>Total POS</span>
@@ -143,15 +137,19 @@ export function CierreReceipt({
           <span>Efectivo esperado</span>
           <span>{formatCop(data.expectedCash)}</span>
         </div>
-        <div className="flex justify-between text-xs">
-          <span>Efectivo contado</span>
-          <span>{formatCop(data.cashCounted)}</span>
-        </div>
-        <p className="my-1 border-t border-dashed border-black" />
-        <div className="flex justify-between text-xs font-bold">
-          <span>{diff >= 0 ? 'Sobrante' : 'Faltante'}</span>
-          <span>{diffLabel}</span>
-        </div>
+        {data.cashCounted > 0 && (
+          <>
+            <div className="flex justify-between text-xs">
+              <span>Efectivo contado</span>
+              <span>{formatCop(data.cashCounted)}</span>
+            </div>
+            <p className="my-1 border-t border-dashed border-black" />
+            <div className="flex justify-between text-xs font-bold">
+              <span>{diff >= 0 ? 'Sobrante' : 'Faltante'}</span>
+              <span>{diffLabel}</span>
+            </div>
+          </>
+        )}
 
         {data.notesClose ? (
           <>

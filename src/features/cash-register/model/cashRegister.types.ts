@@ -16,12 +16,14 @@ export interface CashRegisterSession {
 export interface DaySalesSummary {
   /** Ventas POS pagadas en efectivo */
   posCash: number
-  /** Ventas POS pagadas con tarjeta */
+  /** Ventas POS pagadas con tarjeta (legacy) */
   posCard: number
-  /** Ventas POS pagadas por transferencia */
+  /** Ventas POS pagadas por transferencia (legacy) */
   posTransfer: number
   /** Total ventas POS confirmadas */
   posTotal: number
+  /** Desglose de ventas POS por metodo de pago */
+  posByMethod: Record<string, number>
   /** Facturas manuales pagadas en efectivo */
   invoiceCash: number
   /** Total facturas manuales activas */

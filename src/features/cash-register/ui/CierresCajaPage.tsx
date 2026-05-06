@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { formatCop } from '../../../shared/utils/currency'
 import { addDaysToIsoDate, getTodayIsoDateColombia } from '../../../shared/utils/dateTime'
@@ -57,10 +57,9 @@ export function CierresCajaPage() {
   const [openFeedback, setOpenFeedback] = useState<string | null>(null)
 
   // ─── Estado formulario cierre ────────────────────────────────────────────────
-  const [cashCountedInput, setCashCountedInput] = useState('')
-  const [notesCloseInput, setNotesCloseInput] = useState('')
   const [closeFeedback, setCloseFeedback] = useState<string | null>(null)
   const [showCloseModal, setShowCloseModal] = useState(false)
+  const [pendingPrintData, setPendingPrintData] = useState<CierreReceiptData | null>(null)
 
   // ─── Estado modal editar base ────────────────────────────────────────────────
   const [showEditBaseModal, setShowEditBaseModal] = useState(false)
@@ -110,9 +109,6 @@ export function CierresCajaPage() {
   const invoiceCash = summary?.invoiceCash ?? 0
   const expenses = summary?.expensesTotal ?? 0
   const expectedCash = cashBase + posCash + invoiceCash - expenses
-
-  const cashCountedLive = parseCopIntegerInput(cashCountedInput)
-  const differenceLive = cashCountedLive - expectedCash
 
   const closedCashCounted = session?.status === 'closed' ? (session.cash_counted ?? 0) : 0
   const closedDifference = closedCashCounted - expectedCash
@@ -221,8 +217,6 @@ export function CierresCajaPage() {
   }
 
   function openCloseModal() {
-    setCashCountedInput('')
-    setNotesCloseInput('')
     setCloseFeedback(null)
     setShowCloseModal(true)
   }
@@ -230,17 +224,32 @@ export function CierresCajaPage() {
   async function handleCloseSession() {
     setCloseFeedback(null)
     if (!session || !user?.id) return
-    const counted = parseCopIntegerInput(cashCountedInput)
-    if (counted < 0) {
-      setCloseFeedback('El efectivo contado no puede ser negativo.')
-      return
-    }
     try {
       await closeMutation.mutateAsync({
         sessionId: session.id,
         closedBy: user.id,
-        cashCounted: counted,
-        notesClose: notesCloseInput,
+        cashCounted: 0,
+        notesClose: '',
+      })
+      // Construir datos del tique con los valores actuales antes de que el query se invalide
+      setPendingPrintData({
+        sessionDate: new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(`${session.session_date}T12:00:00`)),
+        closedAt: new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' }).format(new Date()),
+        cashBase,
+        posByMethod,
+        posCash,
+        posCard: summary?.posCard ?? 0,
+        posTransfer: summary?.posTransfer ?? 0,
+        posTotal: summary?.posTotal ?? 0,
+        invoiceCash,
+        invoiceByMethod,
+        invoiceTotal: summary?.invoiceTotal ?? 0,
+        expenses,
+        expectedCash,
+        cashCounted: 0,
+        difference: 0,
+        notesClose: null,
+        cashierName: user.fullName ?? user.email ?? '—',
       })
       setShowCloseModal(false)
     } catch (e) {
@@ -310,6 +319,7 @@ export function CierresCajaPage() {
   }
 
   const invoiceByMethod = summary?.invoiceByMethod ?? {}
+  const posByMethod = summary?.posByMethod ?? {}
 
   const cierreReceiptData: CierreReceiptData | null =
     session?.status === 'closed'
@@ -319,6 +329,7 @@ export function CierresCajaPage() {
             ? new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' }).format(new Date(session.closed_at))
             : null,
           cashBase,
+          posByMethod,
           posCash,
           posCard: summary?.posCard ?? 0,
           posTransfer: summary?.posTransfer ?? 0,
@@ -340,6 +351,14 @@ export function CierresCajaPage() {
     documentTitle: `cierre-${session?.session_date ?? todayIso}`,
     pageStyle: '@page { size: 56mm auto; margin: 0mm; } html, body { margin: 0 !important; padding: 0 !important; height: auto !important; min-height: 0 !important; background: white !important; }',
   })
+
+  // Disparar impresion automatica al cerrar caja
+  useEffect(() => {
+    if (pendingPrintData) {
+      handlePrintCierre()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPrintData])
 
   if (activeSessionQuery.isLoading || recentSessionQuery.isLoading) {
     return (
@@ -458,6 +477,7 @@ export function CierresCajaPage() {
 
           <SummaryBreakdown
             cashBase={cashBase}
+            posByMethod={posByMethod}
             posCash={posCash}
             posCard={summary?.posCard ?? 0}
             posTransfer={summary?.posTransfer ?? 0}
@@ -525,50 +545,94 @@ export function CierresCajaPage() {
             </div>
           </article>
 
-          {/* Grid movimientos + detalle por metodo */}
-          <div className="grid gap-4 lg:grid-cols-2">
-            <SummaryBreakdown
-              cashBase={cashBase}
-              posCash={posCash}
-              posCard={summary?.posCard ?? 0}
-              posTransfer={summary?.posTransfer ?? 0}
-              posTotal={summary?.posTotal ?? 0}
-              invoiceCash={invoiceCash}
-              invoiceByMethod={invoiceByMethod}
-              invoiceTotal={summary?.invoiceTotal ?? 0}
-              expenses={expenses}
-              expectedCash={expectedCash}
-              isLoading={summaryQuery.isLoading}
-            />
+          {/* Panel unificado de movimientos */}
+          <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+            <h2 className="text-xl font-semibold text-zinc-100">{isMultiDay ? 'Movimientos del periodo' : 'Movimientos del dia'}</h2>
+            {summaryQuery.isLoading ? (
+              <p className="mt-3 text-xs text-zinc-500">Cargando movimientos...</p>
+            ) : (
+              <div className="mt-4 grid gap-5 sm:grid-cols-2">
+                {/* Columna izquierda: detalle por sección */}
+                <div className="ghost-scrollbar space-y-4 overflow-y-auto max-h-80 pr-1">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">Base apertura</p>
+                    <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
+                      <span className="text-zinc-400">Efectivo inicial</span>
+                      <span className="text-zinc-200">{formatCop(cashBase)}</span>
+                    </div>
+                  </div>
 
-            {/* Detalle por metodo de pago */}
-            <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
-              <h2 className="text-xl font-semibold text-zinc-100">Desglose por metodo</h2>
-              <div className="ghost-scrollbar mt-4 max-h-72 space-y-2 overflow-y-auto pr-1">
-                <PayMethodRow label="Efectivo POS" value={posCash} color="text-zinc-200" />
-                <PayMethodRow label="Tarjeta / Datafono" value={summary?.posCard ?? 0} color="text-zinc-200" />
-                <PayMethodRow label="Transferencia POS" value={summary?.posTransfer ?? 0} color="text-zinc-200" />
-                <div className="my-2 border-t border-zinc-800" />
-                <PayMethodRow label="Efectivo facturas manuales" value={invoiceCash} color="text-zinc-200" />
-                <PayMethodRow
-                  label="Otros metodos facturas"
-                  value={(summary?.invoiceTotal ?? 0) - invoiceCash}
-                  color="text-zinc-200"
-                />
-                <div className="my-2 border-t border-zinc-800" />
-                <PayMethodRow label="Gastos registrados" value={expenses} color="text-rose-300" />
-                <div className="my-2 border-t border-zinc-700" />
-                <div className="flex justify-between">
-                  <span className="text-sm font-semibold text-zinc-300">{isMultiDay ? 'Total neto del periodo' : 'Total neto del dia'}</span>
-                  <span className="font-bold text-zinc-100">
-                    {formatCop(
-                      (summary?.posTotal ?? 0) + (summary?.invoiceTotal ?? 0) - expenses,
-                    )}
-                  </span>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">Ventas POS</p>
+                    <div className="space-y-1.5">
+                      {Object.entries(posByMethod).map(([method, amount]) => (
+                        <div key={method} className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
+                          <span className="text-zinc-400">{INVOICE_METHOD_LABELS[method] ?? method}</span>
+                          <span className="text-zinc-200">{formatCop(amount)}</span>
+                        </div>
+                      ))}
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm font-medium">
+                        <span className="text-zinc-300">Total POS</span>
+                        <span className="text-emerald-300">{formatCop(summary?.posTotal ?? 0)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">Facturas manuales</p>
+                    <div className="space-y-1.5">
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
+                        <span className="text-zinc-400">Efectivo</span>
+                        <span className="text-zinc-200">{formatCop(invoiceCash)}</span>
+                      </div>
+                      {Object.entries(invoiceByMethod).map(([method, amount]) => (
+                        <div key={method} className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
+                          <span className="text-zinc-400">{INVOICE_METHOD_LABELS[method] ?? method}</span>
+                          <span className="text-zinc-200">{formatCop(amount)}</span>
+                        </div>
+                      ))}
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm font-medium">
+                        <span className="text-zinc-300">Total facturas</span>
+                        <span className="text-amber-300">{formatCop(summary?.invoiceTotal ?? 0)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">Gastos</p>
+                    <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm font-medium">
+                      <span className="text-zinc-300">Total gastos</span>
+                      <span className="text-rose-300">{formatCop(expenses)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Columna derecha: desglose compacto + totales */}
+                <div className="space-y-2 text-sm">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">Desglose por metodo</p>
+                  {Object.entries(posByMethod).map(([m, v]) => (
+                    <PayMethodRow key={`pos-${m}`} label={`${INVOICE_METHOD_LABELS[m] ?? m} POS`} value={v} color="text-zinc-200" />
+                  ))}
+                  <div className="border-t border-zinc-800" />
+                  <PayMethodRow label="Efectivo facturas" value={invoiceCash} color="text-zinc-200" />
+                  {Object.entries(invoiceByMethod).map(([m, v]) => (
+                    <PayMethodRow key={m} label={INVOICE_METHOD_LABELS[m] ?? m} value={v} color="text-zinc-200" />
+                  ))}
+                  <div className="border-t border-zinc-800" />
+                  <PayMethodRow label="Gastos registrados" value={expenses} color="text-rose-300" />
+                  <div className="border-t border-zinc-700" />
+                  <div className="rounded-xl border border-zinc-700 bg-zinc-800/40 px-4 py-2.5 flex justify-between items-center">
+                    <span className="text-xs font-semibold text-zinc-300">{isMultiDay ? 'Total neto del periodo' : 'Total neto del dia'}</span>
+                    <span className="font-bold text-zinc-100">{formatCop((summary?.posTotal ?? 0) + (summary?.invoiceTotal ?? 0) - expenses)}</span>
+                  </div>
+                  <div className="rounded-xl border border-zinc-700 bg-zinc-800/40 px-4 py-2.5 flex justify-between items-center">
+                    <span className="text-xs font-semibold text-zinc-300">Efectivo esperado en caja</span>
+                    <span className="font-bold text-zinc-100">{formatCop(expectedCash)}</span>
+                  </div>
                 </div>
               </div>
-            </article>
-          </div>
+            )}
+          </article>
         </div>
       )}
 
@@ -596,6 +660,7 @@ export function CierresCajaPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             <SummaryBreakdown
               cashBase={cashBase}
+              posByMethod={posByMethod}
               posCash={posCash}
               posCard={summary?.posCard ?? 0}
               posTransfer={summary?.posTransfer ?? 0}
@@ -880,93 +945,85 @@ export function CierresCajaPage() {
 
       {/* ── MODAL: cerrar caja ──────────────────────────────────────────────── */}
       {showCloseModal ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
-            <h3 className="text-lg font-semibold text-zinc-100">{isMultiDay ? 'Cerrar sesion del periodo' : 'Cerrar caja del dia'}</h3>
-            <p className="mt-1 text-xs text-zinc-500">
-              Ingresa el efectivo fisico que hay en caja al cerrar.
-            </p>
-
-            {/* Resumen rapido */}
-            <div className="mt-4 space-y-1.5 rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-sm">
-              <div className="flex justify-between text-zinc-400">
-                <span>Base apertura</span>
-                <span>{formatCop(cashBase)}</span>
-              </div>
-              <div className="flex justify-between text-zinc-400">
-                <span>+ Efectivo POS</span>
-                <span>{formatCop(posCash)}</span>
-              </div>
-              <div className="flex justify-between text-zinc-400">
-                <span>+ Efectivo facturas</span>
-                <span>{formatCop(invoiceCash)}</span>
-              </div>
-              <div className="flex justify-between text-zinc-400">
-                <span>- Gastos</span>
-                <span>{formatCop(expenses)}</span>
-              </div>
-              <div className="border-t border-zinc-800 pt-1.5 flex justify-between font-semibold">
-                <span className="text-zinc-300">Esperado en caja</span>
-                <span className="text-zinc-100">{formatCop(expectedCash)}</span>
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-3">
-              <label className="space-y-1">
-                <span className="text-xs text-zinc-400">Efectivo fisico contado</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={cashCountedInput}
-                  onChange={(e) => setCashCountedInput(formatCopInput(e.target.value))}
-                  placeholder="Total contado..."
-                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-                />
-              </label>
-
-              {/* Diferencia en tiempo real */}
-              {cashCountedInput.replace(/[^\d]/g, '') !== '' ? (
-                <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2">
-                  <span className="text-xs text-zinc-400">Diferencia</span>
-                  <span className={`text-sm font-semibold ${diffColor(differenceLive)}`}>
-                    {diffLabel(differenceLive)}
-                  </span>
-                </div>
-              ) : null}
-
-              <label className="space-y-1">
-                <span className="text-xs text-zinc-400">Observaciones de cierre</span>
-                <input
-                  type="text"
-                  value={notesCloseInput}
-                  onChange={(e) => setNotesCloseInput(e.target.value)}
-                  placeholder="Notas del cajero al cerrar..."
-                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-                />
-              </label>
-            </div>
-
-            {closeFeedback ? (
-              <p className="mt-2 text-xs text-amber-300">{closeFeedback}</p>
-            ) : null}
-
-            <div className="mt-4 grid grid-cols-2 gap-2">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 p-3">
+          <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-950 flex flex-col max-h-[85vh]">
+            {/* Cabecera */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
+              <h3 className="text-sm font-semibold text-zinc-100">
+                {isMultiDay ? 'Resumen del periodo' : 'Resumen del dia'}
+              </h3>
               <button
                 type="button"
                 onClick={() => setShowCloseModal(false)}
-                className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200"
+                className="h-6 w-6 rounded-full bg-zinc-800 text-zinc-400 hover:text-zinc-100 flex items-center justify-center text-sm leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Cuerpo con scroll */}
+            <div className="overflow-y-auto ghost-scrollbar flex-1 px-3 py-3 space-y-2 text-xs">
+              {/* POS */}
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 space-y-1.5">
+                <p className="text-zinc-500 uppercase tracking-wider font-semibold">Ventas POS</p>
+                {Object.entries(posByMethod).map(([m, v]) => (
+                  <Row key={m} label={INVOICE_METHOD_LABELS[m] ?? m} value={formatCop(v)} />
+                ))}
+                <div className="border-t border-zinc-800 pt-1.5">
+                  <Row label="Total POS" value={formatCop(summary?.posTotal ?? 0)} valueClass="text-emerald-300 font-semibold" />
+                </div>
+              </div>
+
+              {/* Facturas manuales */}
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 space-y-1.5">
+                <p className="text-zinc-500 uppercase tracking-wider font-semibold">Facturas manuales</p>
+                <Row label="Efectivo" value={formatCop(invoiceCash)} />
+                {Object.entries(invoiceByMethod).map(([m, v]) => (
+                  <Row key={m} label={INVOICE_METHOD_LABELS[m] ?? m} value={formatCop(v)} />
+                ))}
+                <div className="border-t border-zinc-800 pt-1.5">
+                  <Row label="Total facturas" value={formatCop(summary?.invoiceTotal ?? 0)} valueClass="text-amber-300 font-semibold" />
+                </div>
+              </div>
+
+              {/* Gastos + Efectivo esperado */}
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 space-y-1.5">
+                <p className="text-zinc-500 uppercase tracking-wider font-semibold">Cierre</p>
+                <Row label="Base apertura" value={formatCop(cashBase)} />
+                <Row label="Gastos registrados" value={formatCop(expenses)} valueClass="text-rose-300" />
+                <div className="border-t border-zinc-800 pt-1.5">
+                  <Row label="Efectivo esperado en caja" value={formatCop(expectedCash)} valueClass="text-zinc-100 font-semibold" />
+                </div>
+                <div className="border-t border-zinc-800 pt-1.5">
+                  <Row
+                    label={isMultiDay ? 'Total neto del periodo' : 'Total neto del dia'}
+                    value={formatCop((summary?.posTotal ?? 0) + (summary?.invoiceTotal ?? 0) - expenses)}
+                    valueClass="text-zinc-100 font-bold"
+                  />
+                </div>
+              </div>
+
+              {closeFeedback ? (
+                <p className="text-amber-300 px-1">{closeFeedback}</p>
+              ) : null}
+            </div>
+
+            {/* Footer con botones */}
+            <div className="grid grid-cols-2 gap-2 px-3 py-3 border-t border-zinc-800 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowCloseModal(false)}
+                className="rounded-xl border border-zinc-700 py-2.5 text-xs text-zinc-300 hover:text-zinc-100"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={() => { void handleCloseSession() }}
-                disabled={
-                  closeMutation.isPending || cashCountedInput.replace(/[^\d]/g, '') === ''
-                }
-                className="rounded-lg bg-rose-400 px-3 py-2 text-sm font-semibold text-zinc-900 disabled:opacity-70"
+                disabled={closeMutation.isPending}
+                className="rounded-xl bg-rose-400 py-2.5 text-xs font-semibold text-zinc-900 disabled:opacity-60"
               >
-                {closeMutation.isPending ? 'Cerrando...' : 'Confirmar cierre'}
+                {closeMutation.isPending ? 'Cerrando...' : 'Cerrar e imprimir'}
               </button>
             </div>
           </div>
@@ -1134,7 +1191,7 @@ export function CierresCajaPage() {
         </div>
       ) : null}
 
-      <CierreReceipt receiptRef={cierreReceiptRef} data={cierreReceiptData} />
+      <CierreReceipt receiptRef={cierreReceiptRef} data={pendingPrintData ?? cierreReceiptData} />
     </section>
   )
 }
@@ -1170,6 +1227,7 @@ function PayMethodRow({
 // ─── Subcomponente: desglose de movimientos ─────────────────────────────────
 interface SummaryBreakdownProps {
   cashBase: number
+  posByMethod: Record<string, number>
   posCash: number
   posCard: number
   posTransfer: number
@@ -1183,6 +1241,9 @@ interface SummaryBreakdownProps {
 }
 
 const INVOICE_METHOD_LABELS: Record<string, string> = {
+  cash: 'Efectivo',
+  card: 'Tarjeta',
+  transfer: 'Transferencia',
   addi: 'Addi',
   credilondon: 'CREDILONDON',
   dataphone: 'Datáfono',
@@ -1193,9 +1254,10 @@ const INVOICE_METHOD_LABELS: Record<string, string> = {
 
 function SummaryBreakdown({
   cashBase,
-  posCash,
-  posCard,
-  posTransfer,
+  posByMethod,
+  posCash: _posCash,
+  posCard: _posCard,
+  posTransfer: _posTransfer,
   posTotal,
   invoiceCash,
   invoiceByMethod,
@@ -1229,18 +1291,12 @@ function SummaryBreakdown({
               Ventas POS
             </p>
             <div className="space-y-1.5">
-              <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
-                <span className="text-zinc-400">Efectivo</span>
-                <span className="text-zinc-200">{formatCop(posCash)}</span>
-              </div>
-              <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
-                <span className="text-zinc-400">Tarjeta</span>
-                <span className="text-zinc-200">{formatCop(posCard)}</span>
-              </div>
-              <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
-                <span className="text-zinc-400">Transferencia</span>
-                <span className="text-zinc-200">{formatCop(posTransfer)}</span>
-              </div>
+              {Object.entries(posByMethod).map(([method, amount]) => (
+                <div key={method} className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
+                  <span className="text-zinc-400">{INVOICE_METHOD_LABELS[method] ?? method}</span>
+                  <span className="text-zinc-200">{formatCop(amount)}</span>
+                </div>
+              ))}
               <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm font-medium">
                 <span className="text-zinc-300">Total POS</span>
                 <span className="text-emerald-300">{formatCop(posTotal)}</span>

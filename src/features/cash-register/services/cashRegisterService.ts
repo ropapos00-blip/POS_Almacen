@@ -207,21 +207,22 @@ export async function getDaySalesSummary(
   if (invoicesResult.error) throw new Error(invoicesResult.error.message)
   if (expensesResult.error) throw new Error(expensesResult.error.message)
 
-  let posCash = 0
-  let posCard = 0
-  let posTransfer = 0
+  const posByMethod: Record<string, number> = {}
   let posTotal = 0
 
   for (const sale of salesResult.data ?? []) {
     posTotal += Number(sale.grand_total ?? 0)
     const payments = sale.sale_payments as Array<{ method: string; amount: number }> | null
     for (const p of payments ?? []) {
+      if (!p.method) continue
       const amount = Number(p.amount ?? 0)
-      if (p.method === 'cash') posCash += amount
-      else if (p.method === 'card') posCard += amount
-      else if (p.method === 'transfer') posTransfer += amount
+      posByMethod[p.method] = (posByMethod[p.method] ?? 0) + amount
     }
   }
+
+  const posCash = posByMethod['cash'] ?? 0
+  const posCard = posByMethod['card'] ?? 0
+  const posTransfer = posByMethod['transfer'] ?? 0
 
   let invoiceCash = 0
   let invoiceTotal = 0
@@ -260,6 +261,7 @@ export async function getDaySalesSummary(
     posCard,
     posTransfer,
     posTotal,
+    posByMethod,
     invoiceCash,
     invoiceTotal,
     invoiceByMethod,
