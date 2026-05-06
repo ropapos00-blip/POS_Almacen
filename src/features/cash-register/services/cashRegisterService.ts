@@ -125,12 +125,56 @@ export async function getLastSession(storeId: string): Promise<CashRegisterSessi
   return data as CashRegisterSession | null
 }
 
+/**
+ * Devuelve la sesion actualmente abierta (status='open') de la tienda,
+ * sin importar la fecha. Permite que una sesion permanezca abierta varios dias.
+ */
+export async function getActiveSession(storeId: string): Promise<CashRegisterSession | null> {
+  const { data, error } = await supabase
+    .from('cash_register_sessions')
+    .select('*')
+    .eq('store_id', storeId)
+    .eq('status', 'open')
+    .order('session_date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return data as CashRegisterSession | null
+}
+
+/**
+ * Devuelve la sesion mas reciente (abierta o cerrada) de la tienda.
+ * Util para mostrar la vista de cierre despues de cerrar una sesion multi-dia.
+ */
+export async function getMostRecentSession(storeId: string): Promise<CashRegisterSession | null> {
+  const { data, error } = await supabase
+    .from('cash_register_sessions')
+    .select('*')
+    .eq('store_id', storeId)
+    .order('session_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return data as CashRegisterSession | null
+}
+
 export async function getDaySalesSummary(
   storeId: string,
-  dateIso: string,
+  fromDateIso: string,
+  toDateIso?: string,
 ): Promise<DaySalesSummary> {
-  const startIso = toUtcIsoStartOfColombiaDay(dateIso)
-  const endIso = toUtcIsoEndOfColombiaDay(dateIso)
+  const endDate = toDateIso ?? fromDateIso
+  const startIso = toUtcIsoStartOfColombiaDay(fromDateIso)
+  const endIso = toUtcIsoEndOfColombiaDay(endDate)
 
   const [salesResult, invoicesResult, expensesResult] = await Promise.all([
     supabase
@@ -155,7 +199,8 @@ export async function getDaySalesSummary(
       .select('amount')
       .eq('store_id', storeId)
       .eq('is_active', true)
-      .eq('expense_date', dateIso),
+      .gte('expense_date', fromDateIso)
+      .lte('expense_date', endDate),
   ])
 
   if (salesResult.error) throw new Error(salesResult.error.message)
