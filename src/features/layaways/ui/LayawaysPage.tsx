@@ -286,9 +286,9 @@ export function LayawaysPage() {
     if (initialAmount <= 0) { setCreateFeedback('El abono inicial es obligatorio.'); return }
     if (initialAmount > createTotal) { setCreateFeedback(`El abono no puede superar el total (${formatCop(createTotal)}).`); return }
 
-    // Safety: if PIN zone discount without authorization, block
+    // Safety: if PIN zone discount without authorization, block (only for cashiers; admins are exempt)
     const pinRequired = discountPinQuery.data?.enabled === true && discountPinQuery.data?.hasPin === true
-    if (pinRequired && !discountAuthorizedBy) {
+    if (pinRequired && !discountAuthorizedBy && user?.role === 'cashier') {
       const hasPinZone = draftItems.some((item) => {
         const freeMax = Math.max(0, (item.unitPrice - item.minSalePrice) * item.quantity)
         return item.discount > freeMax

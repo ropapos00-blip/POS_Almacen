@@ -304,7 +304,7 @@ export function ManualInvoicesPage() {
       const freeMax = Math.max(0, (item.unitPrice - (item.minSalePrice ?? item.unitPrice)) * item.quantity)
       return item.discount > freeMax
     })
-    if (hasPinZoneDiscount && !discountAuthorizedBy) {
+    if (hasPinZoneDiscount && !discountAuthorizedBy && !isAdminUser) {
       setFeedback('El descuento requiere autorización (PIN).')
       return null
     }
