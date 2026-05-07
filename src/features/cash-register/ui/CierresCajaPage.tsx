@@ -107,11 +107,13 @@ export function CierresCajaPage() {
   const cashBase = session?.cash_base ?? 0
   const posCash = summary?.posCash ?? 0
   const invoiceCash = summary?.invoiceCash ?? 0
+  const layawayCash = summary?.layawayCash ?? 0
   const expenses = summary?.expensesTotal ?? 0
-  const expectedCash = cashBase + posCash + invoiceCash - expenses
+  const expectedCash = cashBase + posCash + invoiceCash + layawayCash - expenses
 
-  const closedCashCounted = session?.status === 'closed' ? (session.cash_counted ?? 0) : 0
-  const closedDifference = closedCashCounted - expectedCash
+  const totalDigital = (summary?.posCard ?? 0) + (summary?.posTransfer ?? 0)
+    + Object.values(summary?.invoiceByMethod ?? {}).reduce((a, b) => a + b, 0)
+    + Object.values(summary?.layawayByMethod ?? {}).reduce((a, b) => a + b, 0)
 
   const todayLabel = new Intl.DateTimeFormat('es-CO', {
     timeZone: 'America/Bogota',
@@ -228,7 +230,7 @@ export function CierresCajaPage() {
       await closeMutation.mutateAsync({
         sessionId: session.id,
         closedBy: user.id,
-        cashCounted: 0,
+        cashCounted: expectedCash,
         notesClose: '',
       })
       // Construir datos del tique con los valores actuales antes de que el query se invalide
@@ -244,9 +246,12 @@ export function CierresCajaPage() {
         invoiceCash,
         invoiceByMethod,
         invoiceTotal: summary?.invoiceTotal ?? 0,
+        layawayCash,
+        layawayByMethod,
+        layawayTotal: summary?.layawayTotal ?? 0,
         expenses,
         expectedCash,
-        cashCounted: 0,
+        cashCounted: expectedCash,
         difference: 0,
         notesClose: null,
         cashierName: user.fullName ?? user.email ?? '—',
@@ -306,20 +311,10 @@ export function CierresCajaPage() {
     handlePrintCierre()
   }
 
-  function diffColor(diff: number) {
-    if (diff > 0) return 'text-emerald-300'
-    if (diff < 0) return 'text-rose-300'
-    return 'text-zinc-300'
-  }
-
-  function diffLabel(diff: number) {
-    if (diff > 0) return `Sobrante ${formatCop(diff)}`
-    if (diff < 0) return `Faltante ${formatCop(Math.abs(diff))}`
-    return 'Cuadra exacto'
-  }
 
   const invoiceByMethod = summary?.invoiceByMethod ?? {}
   const posByMethod = summary?.posByMethod ?? {}
+  const layawayByMethod = summary?.layawayByMethod ?? {}
 
   const cierreReceiptData: CierreReceiptData | null =
     session?.status === 'closed'
@@ -337,6 +332,9 @@ export function CierresCajaPage() {
           invoiceCash,
           invoiceByMethod,
           invoiceTotal: summary?.invoiceTotal ?? 0,
+          layawayCash,
+          layawayByMethod,
+          layawayTotal: summary?.layawayTotal ?? 0,
           expenses,
           expectedCash,
           cashCounted: session.cash_counted ?? 0,
@@ -391,7 +389,7 @@ export function CierresCajaPage() {
       </header>
 
       {/* ── KPIs del dia ──────────────────────────────────────────────────────── */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <article className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
           <p className="text-xs text-zinc-500">Efectivo en caja</p>
           <p className="mt-1 text-lg font-semibold text-zinc-100">{formatCop(expectedCash)}</p>
@@ -410,6 +408,13 @@ export function CierresCajaPage() {
             {formatCop(summary?.invoiceTotal ?? 0)}
           </p>
           <p className="text-xs text-zinc-500">Efectivo: {formatCop(invoiceCash)}</p>
+        </article>
+        <article className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
+          <p className="text-xs text-zinc-500">{isMultiDay ? 'Separados del periodo' : 'Separados hoy'}</p>
+          <p className="mt-1 text-lg font-semibold text-sky-300">
+            {formatCop(summary?.layawayTotal ?? 0)}
+          </p>
+          <p className="text-xs text-zinc-500">Efectivo: {formatCop(layawayCash)}</p>
         </article>
         <article className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
           <p className="text-xs text-zinc-500">{isMultiDay ? 'Gastos del periodo' : 'Gastos hoy'}</p>
@@ -485,6 +490,9 @@ export function CierresCajaPage() {
             invoiceCash={invoiceCash}
             invoiceByMethod={invoiceByMethod}
             invoiceTotal={summary?.invoiceTotal ?? 0}
+            layawayCash={layawayCash}
+            layawayByMethod={layawayByMethod}
+            layawayTotal={summary?.layawayTotal ?? 0}
             expenses={expenses}
             expectedCash={expectedCash}
             isLoading={summaryQuery.isLoading}
@@ -598,6 +606,30 @@ export function CierresCajaPage() {
                     </div>
                   </div>
 
+                  {(summary?.layawayTotal ?? 0) > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">Separados</p>
+                      <div className="space-y-1.5">
+                        {layawayCash > 0 && (
+                          <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
+                            <span className="text-zinc-400">Efectivo</span>
+                            <span className="text-zinc-200">{formatCop(layawayCash)}</span>
+                          </div>
+                        )}
+                        {Object.entries(layawayByMethod).map(([method, amount]) => (
+                          <div key={method} className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
+                            <span className="text-zinc-400">{INVOICE_METHOD_LABELS[method] ?? method}</span>
+                            <span className="text-zinc-200">{formatCop(amount)}</span>
+                          </div>
+                        ))}
+                        <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm font-medium">
+                          <span className="text-zinc-300">Total separados</span>
+                          <span className="text-sky-300">{formatCop(summary?.layawayTotal ?? 0)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">Gastos</p>
                     <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm font-medium">
@@ -619,11 +651,20 @@ export function CierresCajaPage() {
                     <PayMethodRow key={m} label={INVOICE_METHOD_LABELS[m] ?? m} value={v} color="text-zinc-200" />
                   ))}
                   <div className="border-t border-zinc-800" />
+                  {(summary?.layawayTotal ?? 0) > 0 && (
+                    <>
+                      <PayMethodRow label="Efectivo separados" value={layawayCash} color="text-zinc-200" />
+                      {Object.entries(layawayByMethod).map(([m, v]) => (
+                        <PayMethodRow key={`lay-${m}`} label={`${INVOICE_METHOD_LABELS[m] ?? m} separados`} value={v} color="text-zinc-200" />
+                      ))}
+                      <div className="border-t border-zinc-800" />
+                    </>
+                  )}
                   <PayMethodRow label="Gastos registrados" value={expenses} color="text-rose-300" />
                   <div className="border-t border-zinc-700" />
                   <div className="rounded-xl border border-zinc-700 bg-zinc-800/40 px-4 py-2.5 flex justify-between items-center">
                     <span className="text-xs font-semibold text-zinc-300">{isMultiDay ? 'Total neto del periodo' : 'Total neto del dia'}</span>
-                    <span className="font-bold text-zinc-100">{formatCop((summary?.posTotal ?? 0) + (summary?.invoiceTotal ?? 0) - expenses)}</span>
+                    <span className="font-bold text-zinc-100">{formatCop((summary?.posTotal ?? 0) + (summary?.invoiceTotal ?? 0) + (summary?.layawayTotal ?? 0) - expenses)}</span>
                   </div>
                   <div className="rounded-xl border border-zinc-700 bg-zinc-800/40 px-4 py-2.5 flex justify-between items-center">
                     <span className="text-xs font-semibold text-zinc-300">Efectivo esperado en caja</span>
@@ -668,6 +709,9 @@ export function CierresCajaPage() {
               invoiceCash={invoiceCash}
               invoiceByMethod={invoiceByMethod}
               invoiceTotal={summary?.invoiceTotal ?? 0}
+              layawayCash={layawayCash}
+              layawayByMethod={layawayByMethod}
+              layawayTotal={summary?.layawayTotal ?? 0}
               expenses={expenses}
               expectedCash={expectedCash}
               isLoading={summaryQuery.isLoading}
@@ -688,23 +732,17 @@ export function CierresCajaPage() {
 
               <div className="mt-4 space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-zinc-400">Base apertura</span>
-                  <span className="text-zinc-200">{formatCop(session.cash_base)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-400">Efectivo esperado</span>
-                  <span className="text-zinc-200">{formatCop(expectedCash)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-400">Efectivo contado</span>
-                  <span className="text-zinc-200">{formatCop(session.cash_counted ?? 0)}</span>
+                  <span className="text-zinc-400">Gastos</span>
+                  <span className="text-rose-300">{formatCop(expenses)}</span>
                 </div>
                 <div className="my-2 border-t border-zinc-800" />
                 <div className="flex justify-between">
-                  <span className="font-semibold text-zinc-300">Diferencia</span>
-                  <span className={`font-bold text-base ${diffColor(closedDifference)}`}>
-                    {diffLabel(closedDifference)}
-                  </span>
+                  <span className="text-zinc-300 font-semibold">Total efectivo en caja</span>
+                  <span className="text-zinc-100 font-bold">{formatCop(expectedCash)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-300 font-semibold">Total plataformas digitales</span>
+                  <span className="text-amber-300 font-bold">{formatCop(totalDigital)}</span>
                 </div>
               </div>
 
@@ -946,7 +984,7 @@ export function CierresCajaPage() {
       {/* ── MODAL: cerrar caja ──────────────────────────────────────────────── */}
       {showCloseModal ? (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 p-3">
-          <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-950 flex flex-col max-h-[85vh]">
+          <div className="w-full max-w-lg rounded-2xl border border-zinc-800 bg-zinc-950 flex flex-col max-h-[85vh]">
             {/* Cabecera */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
               <h3 className="text-sm font-semibold text-zinc-100">
@@ -986,6 +1024,20 @@ export function CierresCajaPage() {
                 </div>
               </div>
 
+              {/* Separados */}
+              {(summary?.layawayTotal ?? 0) > 0 && (
+                <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 space-y-1.5">
+                  <p className="text-zinc-500 uppercase tracking-wider font-semibold">Separados</p>
+                  {layawayCash > 0 && <Row label="Efectivo" value={formatCop(layawayCash)} />}
+                  {Object.entries(layawayByMethod).map(([m, v]) => (
+                    <Row key={m} label={INVOICE_METHOD_LABELS[m] ?? m} value={formatCop(v)} />
+                  ))}
+                  <div className="border-t border-zinc-800 pt-1.5">
+                    <Row label="Total separados" value={formatCop(summary?.layawayTotal ?? 0)} valueClass="text-sky-300 font-semibold" />
+                  </div>
+                </div>
+              )}
+
               {/* Gastos + Efectivo esperado */}
               <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 space-y-1.5">
                 <p className="text-zinc-500 uppercase tracking-wider font-semibold">Cierre</p>
@@ -997,7 +1049,7 @@ export function CierresCajaPage() {
                 <div className="border-t border-zinc-800 pt-1.5">
                   <Row
                     label={isMultiDay ? 'Total neto del periodo' : 'Total neto del dia'}
-                    value={formatCop((summary?.posTotal ?? 0) + (summary?.invoiceTotal ?? 0) - expenses)}
+                    value={formatCop((summary?.posTotal ?? 0) + (summary?.invoiceTotal ?? 0) + (summary?.layawayTotal ?? 0) - expenses)}
                     valueClass="text-zinc-100 font-bold"
                   />
                 </div>
@@ -1033,7 +1085,7 @@ export function CierresCajaPage() {
       {/* ── MODAL: historial del mes (admin) ───────────────────────────── */}
       {showHistoryModal ? (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 p-3">
-          <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-950 flex flex-col max-h-[85vh]">
+          <div className="w-full max-w-lg rounded-2xl border border-zinc-800 bg-zinc-950 flex flex-col max-h-[85vh]">
             {/* Cabecera fija */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
               <h3 className="text-sm font-semibold text-zinc-100">
@@ -1106,26 +1158,42 @@ export function CierresCajaPage() {
                         </div>
                       </div>
 
+                      {/* Separados */}
+                      {(histSummary?.layawayTotal ?? 0) > 0 && (
+                        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 space-y-1.5">
+                          <p className="text-zinc-500 uppercase tracking-wider font-semibold">Separados</p>
+                          {(histSummary?.layawayCash ?? 0) > 0 && (
+                            <Row label="Efectivo" value={formatCop(histSummary?.layawayCash ?? 0)} />
+                          )}
+                          {Object.entries(histSummary?.layawayByMethod ?? {}).map(([m, v]) => (
+                            <Row key={m} label={{addi:'Addi',credilondon:'CREDILONDON',dataphone:'Datáfono',bancolombia:'Bancolombia',daviplata:'Daviplata',nequi:'Nequi'}[m] ?? m} value={formatCop(v)} />
+                          ))}
+                          <div className="border-t border-zinc-800 pt-1.5">
+                            <Row label="Total separados" value={formatCop(histSummary?.layawayTotal ?? 0)} valueClass="text-sky-300 font-medium" />
+                          </div>
+                        </div>
+                      )}
+
                       {/* Cierre */}
                       <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 space-y-1.5">
                         <p className="text-zinc-500 uppercase tracking-wider font-semibold">Cierre</p>
                         <Row label="Gastos" value={formatCop(histSummary?.expensesTotal ?? 0)} valueClass="text-rose-300" />
-                        <Row label="Esperado en caja" value={formatCop(selectedHistSession.cash_base + (histSummary?.posCash ?? 0) + (histSummary?.invoiceCash ?? 0) - (histSummary?.expensesTotal ?? 0))} />
-                        {selectedHistSession.status === 'closed' && (() => {
-                          const diff = (selectedHistSession.cash_counted ?? 0) - (selectedHistSession.cash_base + (histSummary?.posCash ?? 0) + (histSummary?.invoiceCash ?? 0) - (histSummary?.expensesTotal ?? 0))
-                          return (
-                            <>
-                              <Row label="Contado" value={formatCop(selectedHistSession.cash_counted ?? 0)} />
-                              <div className="border-t border-zinc-800 pt-1.5">
-                                <Row
-                                  label="Diferencia"
-                                  value={diff > 0 ? `Sobrante ${formatCop(diff)}` : diff < 0 ? `Faltante ${formatCop(Math.abs(diff))}` : 'Cuadra exacto'}
-                                  valueClass={diff > 0 ? 'text-emerald-300 font-semibold' : diff < 0 ? 'text-rose-300 font-semibold' : 'text-zinc-300 font-semibold'}
-                                />
-                              </div>
-                            </>
-                          )
-                        })()}
+                        <div className="border-t border-zinc-800 pt-1.5">
+                          <Row
+                            label="Total efectivo en caja"
+                            value={formatCop(selectedHistSession.cash_base + (histSummary?.posCash ?? 0) + (histSummary?.invoiceCash ?? 0) + (histSummary?.layawayCash ?? 0) - (histSummary?.expensesTotal ?? 0))}
+                            valueClass="text-zinc-100 font-bold"
+                          />
+                        </div>
+                        <Row
+                          label="Total plataformas digitales"
+                          value={formatCop(
+                            (histSummary?.posCard ?? 0) + (histSummary?.posTransfer ?? 0)
+                            + Object.values(histSummary?.invoiceByMethod ?? {}).reduce((a, b) => a + b, 0)
+                            + Object.values(histSummary?.layawayByMethod ?? {}).reduce((a, b) => a + b, 0)
+                          )}
+                          valueClass="text-amber-300 font-semibold"
+                        />
                       </div>
 
                       {selectedHistSession.notes_close ? (
@@ -1235,6 +1303,9 @@ interface SummaryBreakdownProps {
   invoiceCash: number
   invoiceByMethod: Record<string, number>
   invoiceTotal: number
+  layawayCash: number
+  layawayByMethod: Record<string, number>
+  layawayTotal: number
   expenses: number
   expectedCash: number
   isLoading: boolean
@@ -1262,6 +1333,9 @@ function SummaryBreakdown({
   invoiceCash,
   invoiceByMethod,
   invoiceTotal,
+  layawayCash,
+  layawayByMethod,
+  layawayTotal,
   expenses,
   expectedCash,
   isLoading,
@@ -1326,6 +1400,33 @@ function SummaryBreakdown({
               </div>
             </div>
           </div>
+
+          {/* Separados */}
+          {layawayTotal > 0 && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+                Separados
+              </p>
+              <div className="space-y-1.5">
+                {layawayCash > 0 && (
+                  <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
+                    <span className="text-zinc-400">Efectivo</span>
+                    <span className="text-zinc-200">{formatCop(layawayCash)}</span>
+                  </div>
+                )}
+                {Object.entries(layawayByMethod).map(([method, amount]) => (
+                  <div key={method} className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
+                    <span className="text-zinc-400">{INVOICE_METHOD_LABELS[method] ?? method}</span>
+                    <span className="text-zinc-200">{formatCop(amount)}</span>
+                  </div>
+                ))}
+                <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm font-medium">
+                  <span className="text-zinc-300">Total separados</span>
+                  <span className="text-sky-300">{formatCop(layawayTotal)}</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Gastos */}
           <div>

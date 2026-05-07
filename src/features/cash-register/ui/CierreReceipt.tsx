@@ -26,6 +26,9 @@ export interface CierreReceiptData {
   invoiceCash: number
   invoiceByMethod: Record<string, number>
   invoiceTotal: number
+  layawayCash: number
+  layawayByMethod: Record<string, number>
+  layawayTotal: number
   expenses: number
   expectedCash: number
   cashCounted: number
@@ -117,6 +120,32 @@ export function CierreReceipt({
           <span>Total facturas</span>
           <span>{formatCop(data.invoiceTotal)}</span>
         </div>
+
+        {/* Separados */}
+        {data.layawayTotal > 0 && (
+          <>
+            <p className="my-1 border-t border-dashed border-black" />
+            <p className="text-xs font-semibold">SEPARADOS</p>
+            {data.layawayCash > 0 && (
+              <div className="flex justify-between text-xs">
+                <span>Efectivo</span>
+                <span>{formatCop(data.layawayCash)}</span>
+              </div>
+            )}
+            {Object.entries(data.layawayByMethod).map(([method, amount]) =>
+              amount > 0 ? (
+                <div key={method} className="flex justify-between text-xs">
+                  <span>{METHOD_LABELS[method] ?? method}</span>
+                  <span>{formatCop(amount)}</span>
+                </div>
+              ) : null,
+            )}
+            <div className="flex justify-between text-xs font-bold">
+              <span>Total separados</span>
+              <span>{formatCop(data.layawayTotal)}</span>
+            </div>
+          </>
+        )}
 
         {/* Gastos */}
         {data.expenses > 0 && (

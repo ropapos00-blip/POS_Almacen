@@ -32,6 +32,12 @@ export interface DaySalesSummary {
   invoiceByMethod: Record<string, number>
   /** Total gastos del dia */
   expensesTotal: number
+  /** Abonos a separados pagados en efectivo */
+  layawayCash: number
+  /** Total abonos a separados del dia */
+  layawayTotal: number
+  /** Desglose de abonos a separados por metodo de pago (excluye efectivo) */
+  layawayByMethod: Record<string, number>
 }
 
 export interface OpenSessionInput {

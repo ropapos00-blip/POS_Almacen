@@ -176,7 +176,7 @@ export async function getDaySalesSummary(
   const startIso = toUtcIsoStartOfColombiaDay(fromDateIso)
   const endIso = toUtcIsoEndOfColombiaDay(endDate)
 
-  const [salesResult, invoicesResult, expensesResult] = await Promise.all([
+  const [salesResult, invoicesResult, expensesResult, layawayPaymentsResult] = await Promise.all([
     supabase
       .from('sales')
       .select('grand_total, sale_payments(method, amount)')
@@ -201,11 +201,19 @@ export async function getDaySalesSummary(
       .eq('is_active', true)
       .gte('expense_date', fromDateIso)
       .lte('expense_date', endDate),
+
+    supabase
+      .from('layaway_payments')
+      .select('amount, payment_method, layaways!inner(store_id)')
+      .eq('layaways.store_id', storeId)
+      .gte('created_at', startIso)
+      .lte('created_at', endIso),
   ])
 
   if (salesResult.error) throw new Error(salesResult.error.message)
   if (invoicesResult.error) throw new Error(invoicesResult.error.message)
   if (expensesResult.error) throw new Error(expensesResult.error.message)
+  if (layawayPaymentsResult.error) throw new Error(layawayPaymentsResult.error.message)
 
   const posByMethod: Record<string, number> = {}
   let posTotal = 0
@@ -256,6 +264,20 @@ export async function getDaySalesSummary(
     0,
   )
 
+  let layawayCash = 0
+  let layawayTotal = 0
+  const layawayByMethod: Record<string, number> = {}
+
+  for (const p of layawayPaymentsResult.data ?? []) {
+    const amount = Number(p.amount ?? 0)
+    layawayTotal += amount
+    if (p.payment_method === 'cash') {
+      layawayCash += amount
+    } else if (p.payment_method) {
+      layawayByMethod[p.payment_method] = (layawayByMethod[p.payment_method] ?? 0) + amount
+    }
+  }
+
   return {
     posCash,
     posCard,
@@ -266,5 +288,8 @@ export async function getDaySalesSummary(
     invoiceTotal,
     invoiceByMethod,
     expensesTotal,
+    layawayCash,
+    layawayTotal,
+    layawayByMethod,
   }
 }
