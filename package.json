@@ -5,9 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "postbuild": "node scripts/generate-static-routes.mjs",
-    "render-build": "npm run build",
+    "build": "tsc -b && vite build && node scripts/generate-static-routes.mjs",
+    "render-build": "pnpm run build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
