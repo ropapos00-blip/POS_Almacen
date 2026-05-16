@@ -8,6 +8,7 @@ const storeNavItems = [
   { to: '/pos', label: 'POS', icon: ShoppingCart, roles: ['super_admin', 'admin'] },
   { to: '/sales', label: 'Ventas', icon: ReceiptText, roles: ['super_admin', 'admin'] },
   { to: '/manual-invoices', label: 'Factura manual', icon: FileText, roles: ['super_admin', 'admin', 'cashier'] },
+  { to: '/devoluciones', label: 'Devoluciones', icon: ReceiptText, roles: ['super_admin', 'admin', 'cashier'] },
   { to: '/gastos', label: 'Gastos', icon: Wallet, roles: ['super_admin', 'admin', 'cashier'] },
   { to: '/inventory', label: 'Inventario', icon: ReceiptText, roles: ['super_admin', 'admin'] },
   { to: '/stock', label: 'Entrada Stock', icon: Package, roles: ['super_admin', 'admin'] },

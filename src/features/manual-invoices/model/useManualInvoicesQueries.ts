@@ -10,9 +10,12 @@ export function useManualInvoicePaymentKpisQuery(storeId?: string, enabled = tru
 }
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  createManualInvoiceExchange,
+  createManualInvoiceReturn,
   createManualExpense,
   createManualInvoice,
   deleteManualExpense,
+  getManualCustomerCreditBalance,
   listManualExpenseKpis,
   listManualExpenses,
   listManualInvoiceKpis,
@@ -23,7 +26,9 @@ import {
 } from '../services/manualInvoicesService'
 import type {
   CreateManualExpenseInput,
+  CreateManualInvoiceExchangeInput,
   CreateManualInvoiceInput,
+  CreateManualInvoiceReturnInput,
   DeleteManualExpenseInput,
   UpdateManualExpenseInput,
   UpdateManualInvoiceHeaderInput,
@@ -43,6 +48,16 @@ export function useManualInvoiceKpisQuery(storeId?: string, enabled = true) {
     queryKey: ['manual-invoices', 'kpis', storeId],
     queryFn: () => listManualInvoiceKpis(storeId as string),
     enabled: Boolean(storeId) && enabled,
+  })
+}
+
+export function useManualCustomerCreditBalanceQuery(storeId?: string, customerPhone?: string) {
+  const normalizedPhone = customerPhone?.trim() ?? ''
+
+  return useQuery({
+    queryKey: ['manual-invoices', 'customer-credit-balance', storeId, normalizedPhone],
+    queryFn: () => getManualCustomerCreditBalance(storeId as string, normalizedPhone),
+    enabled: Boolean(storeId) && normalizedPhone.length > 0,
   })
 }
 
@@ -72,6 +87,7 @@ export function useCreateManualInvoiceMutation(storeId?: string) {
         queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'list', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'kpis', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'customer-credit-balance'] }),
       ])
     },
   })
@@ -102,6 +118,38 @@ export function useVoidManualInvoiceMutation(storeId?: string) {
         queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'list', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'kpis', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),
+      ])
+    },
+  })
+}
+
+export function useCreateManualInvoiceReturnMutation(storeId?: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: CreateManualInvoiceReturnInput) => createManualInvoiceReturn(input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'list', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'kpis', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'customer-credit-balance'] }),
+      ])
+    },
+  })
+}
+
+export function useCreateManualInvoiceExchangeMutation(storeId?: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: CreateManualInvoiceExchangeInput) => createManualInvoiceExchange(input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'list', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'kpis', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'customer-credit-balance'] }),
+        queryClient.invalidateQueries({ queryKey: ['pos', 'variants', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['inventory', 'stock', storeId] }),
       ])
     },
   })

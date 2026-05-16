@@ -52,6 +52,12 @@ export const GastosPage = lazy(() =>
   })),
 )
 
+export const DevolucionesPage = lazy(() =>
+  import('../../features/manual-invoices/ui/DevolucionesPage').then((m) => ({
+    default: m.DevolucionesPage,
+  })),
+)
+
 export const WholesalePage = lazy(() =>
   import('../../features/wholesale/ui/WholesalePage').then((m) => ({
     default: m.WholesalePage,

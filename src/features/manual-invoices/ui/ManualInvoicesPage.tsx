@@ -7,6 +7,7 @@ import { formatCopInput, parseCopIntegerInput, parseIntegerInput } from '../../.
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import {
   useCreateManualInvoiceMutation,
+  useManualCustomerCreditBalanceQuery,
   useManualInvoiceKpisQuery,
   useManualInvoicesQuery,
   useUpdateManualInvoiceMutation,
@@ -94,6 +95,7 @@ export function ManualInvoicesPage() {
   const [isPinValidating, setIsPinValidating] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState<ManualPaymentMethod>('cash')
   const [paymentReference, setPaymentReference] = useState('')
+  const [applyCreditAmount, setApplyCreditAmount] = useState(0)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [draftItems, setDraftItems] = useState<DraftItem[]>([createDraftItem()])
   const [selectedInvoice, setSelectedInvoice] = useState<ManualInvoiceRow | null>(null)
@@ -123,6 +125,7 @@ export function ManualInvoicesPage() {
   const createMutation = useCreateManualInvoiceMutation(user?.storeId)
   const updateMutation = useUpdateManualInvoiceMutation(user?.storeId)
   const voidMutation = useVoidManualInvoiceMutation(user?.storeId)
+  const customerCreditBalanceQuery = useManualCustomerCreditBalanceQuery(user?.storeId, customerPhone)
   const discountPinQuery = useDiscountPinConfigQuery(user?.storeId)
   const pinRequired =
     discountPinQuery.data?.enabled === true && discountPinQuery.data?.hasPin === true
@@ -154,6 +157,10 @@ export function ManualInvoicesPage() {
     return Math.max(0, subtotal - discountTotal)
   }, [discountTotal, subtotal])
 
+  const customerCreditBalance = Math.max(0, Number(customerCreditBalanceQuery.data ?? 0))
+  const maxCreditApplicable = Math.min(total, customerCreditBalance)
+  const totalDue = Math.max(0, total - applyCreditAmount)
+
   const allowsPaymentReference =
     paymentMethod !== 'cash' && paymentMethod !== 'mixed'
   const editAllowsPaymentReference =
@@ -170,6 +177,18 @@ export function ManualInvoicesPage() {
       setEditPaymentReference('')
     }
   }, [editAllowsPaymentReference, editPaymentReference])
+
+  useEffect(() => {
+    if (!customerPhone.trim() && applyCreditAmount > 0) {
+      setApplyCreditAmount(0)
+    }
+  }, [customerPhone, applyCreditAmount])
+
+  useEffect(() => {
+    if (applyCreditAmount > maxCreditApplicable) {
+      setApplyCreditAmount(maxCreditApplicable)
+    }
+  }, [applyCreditAmount, maxCreditApplicable])
 
   useEffect(() => {
     if (!barcodeFeedback) return
@@ -273,7 +292,9 @@ export function ManualInvoicesPage() {
     Boolean(user?.storeId && user.id) &&
     cleanedItemsForValidation.length > 0 &&
     discountTotal >= 0 &&
-    discountTotal <= maxAllowedDiscount
+    discountTotal <= maxAllowedDiscount &&
+    applyCreditAmount >= 0 &&
+    applyCreditAmount <= maxCreditApplicable
 
   async function saveManualInvoice(): Promise<ManualInvoiceRow | null> {
     setFeedback(null)
@@ -309,10 +330,20 @@ export function ManualInvoicesPage() {
       return null
     }
 
+    if (applyCreditAmount > 0 && !customerPhone.trim()) {
+      setFeedback('Para aplicar saldo a favor debes seleccionar un cliente con teléfono.')
+      return null
+    }
+
+    if (applyCreditAmount > maxCreditApplicable) {
+      setFeedback(`El saldo a aplicar supera el disponible (${formatCop(maxCreditApplicable)}).`)
+      return null
+    }
+
     if (paymentMethod === 'mixed') {
       const mixedSum = mixedFirstAmount + mixedSecondAmount
-      if (Math.abs(mixedSum - total) > 1) {
-        setFeedback(`Los montos del pago mixto suman ${formatCop(mixedSum)} pero el total es ${formatCop(total)}. Ajusta los montos.`)
+      if (Math.abs(mixedSum - totalDue) > 1) {
+        setFeedback(`Los montos del pago mixto suman ${formatCop(mixedSum)} pero el total a pagar es ${formatCop(totalDue)}. Ajusta los montos.`)
         return null
       }
     }
@@ -324,6 +355,7 @@ export function ManualInvoicesPage() {
         customerName,
         customerPhone,
         discountTotal,
+        applyCreditAmount,
         paymentMethod,
         paymentReference: paymentMethod === 'mixed'
           ? `${mixedFirstMethod}:${mixedFirstAmount}:${mixedSecondMethod}:${mixedSecondAmount}`
@@ -339,6 +371,7 @@ export function ManualInvoicesPage() {
         customer_phone: customerPhone.trim() || null,
         subtotal,
         discount_total: discountTotal,
+        credit_applied_total: applyCreditAmount,
         grand_total: total,
         payment_method: paymentMethod,
         payment_reference: paymentMethod === 'mixed'
@@ -361,6 +394,7 @@ export function ManualInvoicesPage() {
       setDiscountAuthorizedBy(null)
       setPaymentMethod('cash')
       setPaymentReference('')
+      setApplyCreditAmount(0)
       setMixedFirstMethod('cash')
       setMixedFirstAmount(0)
       setMixedSecondMethod('addi')
@@ -596,7 +630,7 @@ export function ManualInvoicesPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {['cash','addi','credilondon','dataphone','bancolombia','daviplata','nequi'].map((method) => (
+                      {(['cash','addi','credilondon','dataphone','bancolombia','daviplata','nequi'] as const).map((method) => (
                         <tr key={method}>
                           <td className="px-2 py-1">{paymentLabel(method as ManualPaymentMethod)}</td>
                           <td className="px-2 py-1 text-right font-medium text-amber-200">{formatCop(paymentKpisQuery.data?.[method]?.day ?? 0)}</td>
@@ -604,6 +638,18 @@ export function ManualInvoicesPage() {
                           <td className="px-2 py-1 text-right">{formatCop(paymentKpisQuery.data?.[method]?.year ?? 0)}</td>
                         </tr>
                       ))}
+                      <tr className="border-t border-zinc-800/80">
+                        <td className="px-2 py-1 font-medium text-amber-300">Excedente cobrado (cambios)</td>
+                        <td className="px-2 py-1 text-right font-medium text-amber-200">
+                          {formatCop(paymentKpisQuery.data?.exchangeOverageCollected?.day ?? 0)}
+                        </td>
+                        <td className="px-2 py-1 text-right text-amber-200/90">
+                          {formatCop(paymentKpisQuery.data?.exchangeOverageCollected?.month ?? 0)}
+                        </td>
+                        <td className="px-2 py-1 text-right text-amber-200/90">
+                          {formatCop(paymentKpisQuery.data?.exchangeOverageCollected?.year ?? 0)}
+                        </td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
@@ -878,6 +924,42 @@ export function ManualInvoicesPage() {
             <span>Total</span>
             <span>{formatCop(total)}</span>
           </div>
+          {customerPhone.trim() ? (
+            <>
+              <div className="mt-2 border-t border-zinc-800 pt-2">
+                <div className="flex items-center justify-between text-xs text-zinc-400">
+                  <span>Saldo a favor disponible</span>
+                  <span>
+                    {customerCreditBalanceQuery.isFetching
+                      ? 'Consultando...'
+                      : formatCop(customerCreditBalance)}
+                  </span>
+                </div>
+                <label className="mt-2 flex items-center justify-between gap-2">
+                  <span className="text-xs text-zinc-400">Aplicar a esta factura</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={applyCreditAmount === 0 ? '' : formatCopInput(applyCreditAmount)}
+                    placeholder="0"
+                    onChange={(event) =>
+                      setApplyCreditAmount(
+                        Math.min(
+                          maxCreditApplicable,
+                          Math.max(0, parseCopIntegerInput(event.target.value, 0)),
+                        ),
+                      )
+                    }
+                    className="w-36 rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1 text-right text-xs"
+                  />
+                </label>
+              </div>
+              <div className="mt-2 flex justify-between border-t border-zinc-800 pt-2 text-base font-semibold text-amber-200">
+                <span>Total a pagar</span>
+                <span>{formatCop(totalDue)}</span>
+              </div>
+            </>
+          ) : null}
         </div>
 
         {feedback ? <p className="mt-3 text-sm text-amber-300">{feedback}</p> : null}
