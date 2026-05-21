@@ -208,7 +208,7 @@ export function PosPage() {
     }
 
     if (!hasValidDiscountAuthorization) {
-      setFeedback('El descuento requiere autorizacion de admin/super admin.')
+      setFeedback('El descuento requiere autorizacion de admin.')
       setAuthorizationModalOpen(true)
       return
     }

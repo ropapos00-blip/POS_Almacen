@@ -28,6 +28,7 @@ interface StoreRow {
   receipt_city: string | null
   receipt_phone: string | null
   hidden_nav_routes: string[] | null
+  allow_cashier_close: boolean | null
 }
 
 function isAppRole(value: string): value is AppRole {
@@ -93,7 +94,7 @@ async function getStoreName(storeId: string) {
   const { data, error } = await supabase
     .from('stores')
     .select(
-      'name, login_slogan, login_support_text, receipt_legal_name, receipt_tax_id, receipt_tax_regime, receipt_address, receipt_city, receipt_phone, hidden_nav_routes',
+      'name, login_slogan, login_support_text, receipt_legal_name, receipt_tax_id, receipt_tax_regime, receipt_address, receipt_city, receipt_phone, hidden_nav_routes, allow_cashier_close',
     )
     .eq('id', storeId)
     .maybeSingle<StoreRow>()
@@ -113,6 +114,7 @@ async function getStoreName(storeId: string) {
         phone: '',
       },
       storeHiddenNavRoutes: [],
+      storeAllowCashierClose: true,
     }
   }
 
@@ -133,6 +135,7 @@ async function getStoreName(storeId: string) {
     storeHiddenNavRoutes: Array.isArray(data?.hidden_nav_routes)
       ? data.hidden_nav_routes.filter((value): value is string => typeof value === 'string')
       : [],
+    storeAllowCashierClose: data?.allow_cashier_close ?? true,
   }
 }
 
@@ -154,6 +157,7 @@ export async function buildSessionUser(user: User): Promise<SessionUser> {
     storeLoginSupportText: storeData.storeLoginSupportText,
     storeReceipt: storeData.storeReceipt,
     storeHiddenNavRoutes: storeData.storeHiddenNavRoutes,
+    storeAllowCashierClose: storeData.storeAllowCashierClose,
   }
 
   cacheStoreName(sessionUser.storeName)

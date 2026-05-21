@@ -46,3 +46,7 @@ export interface ReactivateUserInput {
 export interface StoreNavVisibilityInput {
   hiddenRoutes: string[]
 }
+
+export interface StoreCashClosePermissionInput {
+  allowCashierClose: boolean
+}

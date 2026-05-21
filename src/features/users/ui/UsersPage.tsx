@@ -9,6 +9,7 @@ import {
   useDeactivateUserMutation,
   useReactivateUserMutation,
   useUpdateStoreHiddenNavRoutesMutation,
+  useUpdateStoreCashClosePermissionMutation,
   useUpdateStoreReceiptProfileMutation,
   useUpdateStoreNameMutation,
   useUpdateUserRoleMutation,
@@ -64,6 +65,7 @@ export function UsersPage() {
   const setStoreLoginSupportText = useAuthStore((state) => state.setStoreLoginSupportText)
   const setStoreReceipt = useAuthStore((state) => state.setStoreReceipt)
   const setStoreHiddenNavRoutes = useAuthStore((state) => state.setStoreHiddenNavRoutes)
+  const setStoreAllowCashierClose = useAuthStore((state) => state.setStoreAllowCashierClose)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [storeNameInput, setStoreNameInput] = useState('')
   const [modalMessage, setModalMessage] = useState<string | null>(null)
@@ -86,6 +88,7 @@ export function UsersPage() {
   const updateStoreNameMutation = useUpdateStoreNameMutation(user?.storeId)
   const updateStoreReceiptProfileMutation = useUpdateStoreReceiptProfileMutation(user?.storeId)
   const updateStoreHiddenNavRoutesMutation = useUpdateStoreHiddenNavRoutesMutation(user?.storeId)
+  const updateStoreCashClosePermissionMutation = useUpdateStoreCashClosePermissionMutation(user?.storeId)
   const discountPinQuery = useDiscountPinConfigQuery(user?.storeId)
   const discountPinMutation = useSetDiscountPinMutation(user?.storeId)
   const [pinInput, setPinInput] = useState('')
@@ -316,6 +319,30 @@ export function UsersPage() {
     }
   }
 
+  const toggleCashierClosePermission = async () => {
+    if (!user?.storeId || (user.role !== 'admin' && user.role !== 'super_admin')) {
+      return
+    }
+
+    setFeedback(null)
+    try {
+      const updatedAllow = await updateStoreCashClosePermissionMutation.mutateAsync({
+        allowCashierClose: !(user.storeAllowCashierClose ?? true),
+      })
+      setStoreAllowCashierClose(updatedAllow)
+      setFeedback(
+        updatedAllow
+          ? 'Cierre de caja para cajeros activado.'
+          : 'Cierre de caja para cajeros desactivado.',
+      )
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'No se pudo actualizar el permiso de cierre de caja.'
+      setFeedback(message)
+      setModalMessage(message)
+    }
+  }
+
   const saveDiscountPin = async (newPin: string | null, enabled: boolean) => {
     if (!user?.storeId) return
     setPinFeedback(null)
@@ -337,7 +364,7 @@ export function UsersPage() {
       <header>
         <h1 className="text-2xl font-semibold text-zinc-100">Gestion de usuarios</h1>
         <p className="mt-2 text-zinc-400">
-          Super Admin crea admins/cajeros. Admin crea cajeros.
+          Admin crea y gestiona cajeros.
         </p>
         {feedback ? <p className="mt-2 text-sm text-amber-300">{feedback}</p> : null}
       </header>
@@ -453,7 +480,7 @@ export function UsersPage() {
           <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/40 p-3">
             <h3 className="text-sm font-semibold text-zinc-200">Visibilidad del menu por almacen</h3>
             <p className="mt-1 text-xs text-zinc-400">
-              Activa para ocultar una vista. Solo super admin puede cambiar esto.
+              Activa para ocultar una vista. Solo admin autorizado puede cambiar esto.
             </p>
 
             <div className="mt-3 grid gap-3 lg:grid-cols-2">
@@ -525,6 +552,45 @@ export function UsersPage() {
               {updateStoreHiddenNavRoutesMutation.isPending
                 ? 'Guardando vistas...'
                 : 'Guardar visibilidad de vistas'}
+            </button>
+          </div>
+        </article>
+      ) : null}
+
+      {user?.role === 'admin' || user?.role === 'super_admin' ? (
+        <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
+          <h2 className="text-lg font-semibold text-zinc-100">Permiso de cierre de caja para cajeros</h2>
+          <p className="mt-1 text-sm text-zinc-400">
+            Si está desactivado, solo admin puede cerrar caja.
+          </p>
+
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <span
+              className={`rounded-full border px-2 py-1 text-xs ${
+                user.storeAllowCashierClose
+                  ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-300'
+                  : 'border-zinc-600 bg-zinc-800 text-zinc-400'
+              }`}
+            >
+              {user.storeAllowCashierClose ? 'Cajero puede cerrar' : 'Solo admin puede cerrar'}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                void toggleCashierClosePermission()
+              }}
+              disabled={updateStoreCashClosePermissionMutation.isPending}
+              className={`rounded-lg border px-3 py-1 text-sm disabled:opacity-70 ${
+                user.storeAllowCashierClose
+                  ? 'border-rose-500/40 text-rose-300'
+                  : 'border-emerald-500/40 text-emerald-300'
+              }`}
+            >
+              {updateStoreCashClosePermissionMutation.isPending
+                ? '...'
+                : user.storeAllowCashierClose
+                  ? 'Desactivar cierre por cajero'
+                  : 'Activar cierre por cajero'}
             </button>
           </div>
         </article>

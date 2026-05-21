@@ -17,6 +17,7 @@ interface AuthState {
   setStoreLoginSupportText: (storeLoginSupportText: string) => void
   setStoreReceipt: (storeReceipt: StoreReceiptProfile) => void
   setStoreHiddenNavRoutes: (storeHiddenNavRoutes: string[]) => void
+  setStoreAllowCashierClose: (storeAllowCashierClose: boolean) => void
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -151,6 +152,21 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: {
           ...state.user,
           storeHiddenNavRoutes,
+        },
+      }
+    })
+  },
+  setStoreAllowCashierClose: (storeAllowCashierClose) => {
+    set((state) => {
+      if (!state.user) {
+        return state
+      }
+
+      return {
+        ...state,
+        user: {
+          ...state.user,
+          storeAllowCashierClose,
         },
       }
     })

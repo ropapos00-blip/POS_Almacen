@@ -5,6 +5,7 @@ import type {
   DeactivateUserInput,
   ReactivateUserInput,
   StoreNavVisibilityInput,
+  StoreCashClosePermissionInput,
   StoreReceiptProfileInput,
   UpdateUserRoleInput,
 } from './users.types'
@@ -16,6 +17,7 @@ import {
   updateStoreHiddenNavRoutes,
   updateStoreReceiptProfile,
   updateStoreName,
+  updateStoreCashClosePermission,
   updatePosUserRole,
 } from '../services/usersService'
 
@@ -107,6 +109,21 @@ export function useUpdateStoreHiddenNavRoutesMutation(storeId?: string) {
 
   return useMutation({
     mutationFn: (input: StoreNavVisibilityInput) => updateStoreHiddenNavRoutes(storeId as string, input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['users', 'store', storeId] }),
+      ])
+    },
+  })
+}
+
+export function useUpdateStoreCashClosePermissionMutation(storeId?: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: StoreCashClosePermissionInput) =>
+      updateStoreCashClosePermission(storeId as string, input),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),

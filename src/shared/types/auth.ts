@@ -20,4 +20,5 @@ export interface SessionUser {
   storeLoginSupportText: string
   storeReceipt: StoreReceiptProfile
   storeHiddenNavRoutes: string[]
+  storeAllowCashierClose: boolean
 }

@@ -96,7 +96,7 @@ export function DashboardPage() {
 
       {isSuperAdmin ? (
         <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
-          <p className="text-sm text-zinc-400">Vista Super Admin</p>
+          <p className="text-sm text-zinc-400">Vista Administrativa</p>
           <p className="mt-2 text-zinc-300">
             Aqui luego agregaremos control global multi-sucursal, auditoria avanzada y gestion de usuarios.
           </p>

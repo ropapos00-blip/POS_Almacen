@@ -5,6 +5,7 @@ import type {
   DeactivateUserInput,
   ReactivateUserInput,
   StoreNavVisibilityInput,
+  StoreCashClosePermissionInput,
   StoreReceiptProfileInput,
   UpdateUserRoleInput,
   UserListRow,
@@ -235,4 +236,26 @@ export async function updateStoreHiddenNavRoutes(storeId: string, input: StoreNa
   return Array.isArray(hiddenRoutes)
     ? hiddenRoutes.filter((value): value is string => typeof value === 'string')
     : []
+}
+
+export async function updateStoreCashClosePermission(
+  storeId: string,
+  input: StoreCashClosePermissionInput,
+) {
+  const { data, error } = await supabase.rpc('update_store_cash_close_permission', {
+    p_store_id: storeId,
+    p_allow_cashier_close: input.allowCashierClose,
+  })
+
+  if (error) {
+    if (error.code === 'PGRST202' || error.message.toLowerCase().includes('update_store_cash_close_permission')) {
+      throw new Error(
+        'No existe la funcion RPC update_store_cash_close_permission en Supabase. Ejecuta el script 47_cash_close_permission.sql y reintenta.',
+      )
+    }
+
+    throw new Error(error.message)
+  }
+
+  return Boolean(data?.[0]?.out_allow_cashier_close ?? true)
 }

@@ -21,6 +21,7 @@ export function CierresCajaPage() {
   const user = useAuthStore((state) => state.user)
   const storeId = user?.storeId
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin'
+  const canCashierClose = user?.role !== 'cashier' || user?.storeAllowCashierClose === true
   const todayIso = getTodayIsoDateColombia()
   const tomorrowIso = addDaysToIsoDate(todayIso, 1)
 
@@ -219,11 +220,16 @@ export function CierresCajaPage() {
   }
 
   function openCloseModal() {
+    if (!canCashierClose) return
     setCloseFeedback(null)
     setShowCloseModal(true)
   }
 
   async function handleCloseSession() {
+    if (!canCashierClose) {
+      setCloseFeedback('Solo admin puede cerrar caja en esta tienda.')
+      return
+    }
     setCloseFeedback(null)
     if (!session || !user?.id) return
     try {
@@ -545,10 +551,14 @@ export function CierresCajaPage() {
                 <button
                   type="button"
                   onClick={openCloseModal}
-                  className="rounded-lg bg-rose-400 px-3 py-2 text-sm font-semibold text-zinc-900"
+                  disabled={!canCashierClose}
+                  className="rounded-lg bg-rose-400 px-3 py-2 text-sm font-semibold text-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Cerrar caja
                 </button>
+                {!canCashierClose ? (
+                  <p className="text-xs text-amber-300">Solo admin puede cerrar caja.</p>
+                ) : null}
               </div>
             </div>
           </article>
