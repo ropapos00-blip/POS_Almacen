@@ -124,6 +124,16 @@ function parseCostDraft(
   return values
 }
 
+function parseUnitCostDraft(
+  draft: Record<keyof WholesaleCostBreakdown, string>,
+): WholesaleCostBreakdown {
+  const values = createEmptyCostBreakdown()
+  COST_FIELDS.forEach((field) => {
+    values[field.key] = Math.max(0, parseCopIntegerInput(draft[field.key] ?? '', 0))
+  })
+  return values
+}
+
 function toCostDraft(
   costs: WholesaleCostBreakdown,
   quantity: number,
@@ -489,7 +499,7 @@ export function WholesaleInventoryPage() {
 
     setEditReference(editTarget.reference)
     setEditUnitPrice(formatCopInput(editTarget.unitPrice))
-    setEditCostDraft(toCostDraft(editTarget.costBreakdown, editTarget.quantityOnHand))
+    setEditCostDraft(toCostDraft(editTarget.costBreakdownUnit, 1))
     const mappedColorRows = toColorSizeRows(editTarget.colorQuantities)
     setEditColorSizeRows(
       mappedColorRows.length > 0
@@ -831,6 +841,7 @@ export function WholesaleInventoryPage() {
         unitPrice: parsedUnitPrice,
         investmentAmount: totalInvestment,
         costBreakdown: parsedCosts,
+        costBreakdownUnit: parseUnitCostDraft(costDraft),
         sizeQuantities: effectiveSizeQuantities,
         colorQuantities: parsedColorQuantities,
         designEnabled: false,
@@ -888,6 +899,7 @@ export function WholesaleInventoryPage() {
         quantityOnHand: editTotalQuantity,
         unitPrice: parsedUnitPrice,
         costBreakdown: parsedEditCosts,
+        costBreakdownUnit: parseUnitCostDraft(editCostDraft),
         sizeQuantities: effectiveEditSizeQuantities,
         colorQuantities: parsedEditColorQuantities,
         designEnabled: false,

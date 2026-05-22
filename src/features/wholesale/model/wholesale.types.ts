@@ -84,6 +84,7 @@ export interface WholesaleInventoryRow {
   quantityOnHand: number
   totalInvestment: number
   costBreakdown: WholesaleCostBreakdown
+  costBreakdownUnit: WholesaleCostBreakdown
   sizeQuantities: Record<string, number>
   colorQuantities: Record<string, Record<string, number>>
   designEnabled: boolean
@@ -103,6 +104,7 @@ export interface CreateWholesaleReferenceInput {
   quantityOnHand: number
   investmentAmount: number
   costBreakdown: WholesaleCostBreakdown
+  costBreakdownUnit: WholesaleCostBreakdown
   sizeQuantities: Record<string, number>
   colorQuantities: Record<string, Record<string, number>>
   designEnabled: boolean
@@ -115,6 +117,7 @@ export interface UpdateWholesaleReferenceInput {
   unitPrice: number
   quantityOnHand: number
   costBreakdown: WholesaleCostBreakdown
+  costBreakdownUnit: WholesaleCostBreakdown
   sizeQuantities: Record<string, number>
   colorQuantities: Record<string, Record<string, number>>
   designEnabled: boolean

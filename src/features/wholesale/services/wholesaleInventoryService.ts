@@ -217,7 +217,7 @@ function normalizeCosteoHeader(raw: unknown): WholesaleCosteoHeader {
 export async function listWholesaleInventoryStock(storeId: string) {
   const { data, error } = await supabase
     .from('wholesale_references')
-    .select('id, reference, unit_price, quantity_on_hand, total_investment, cost_breakdown, size_quantities, color_quantities, design_enabled, costeo_header, is_active')
+    .select('id, reference, unit_price, quantity_on_hand, total_investment, cost_breakdown, cost_breakdown_unit, size_quantities, color_quantities, design_enabled, costeo_header, is_active')
     .eq('store_id', storeId)
     .eq('is_active', true)
     .order('reference', { ascending: true })
@@ -237,6 +237,7 @@ export async function listWholesaleInventoryStock(storeId: string) {
       quantityOnHand: Number(row.quantity_on_hand ?? 0),
       totalInvestment: Number(row.total_investment ?? 0),
       costBreakdown: normalizeCostBreakdown(row.cost_breakdown),
+      costBreakdownUnit: normalizeCostBreakdown((row as { cost_breakdown_unit?: unknown }).cost_breakdown_unit),
       sizeQuantities:
         Object.keys(normalizedColorQuantities).length > 0
           ? aggregateSizeQuantitiesFromColor(normalizedColorQuantities)
@@ -265,6 +266,7 @@ export async function createWholesaleReference(
       : sumSizeQuantities(normalizedSizeQuantities)
   const targetQuantity = computedQuantityFromSizes > 0 ? computedQuantityFromSizes : input.quantityOnHand
   const normalizedCosts = normalizeCostBreakdown(input.costBreakdown)
+  const normalizedUnitCosts = normalizeCostBreakdown(input.costBreakdownUnit)
   const totalInvestment = COST_KEYS.reduce((acc, key) => acc + normalizedCosts[key], 0)
   const normalizedCosteoHeader = normalizeCosteoHeader(input.costeoHeader)
 
@@ -286,7 +288,7 @@ export async function createWholesaleReference(
 
   const { data: existing, error: existingError } = await supabase
     .from('wholesale_references')
-    .select('id, quantity_on_hand, size_quantities, color_quantities, is_active')
+    .select('id, quantity_on_hand, total_investment, cost_breakdown, size_quantities, color_quantities, is_active')
     .eq('store_id', storeId)
     .ilike('reference', normalizedReference)
     .limit(1)
@@ -317,14 +319,26 @@ export async function createWholesaleReference(
 
     const quantityDelta = targetQuantity
     const nextQuantity = Number(existing.quantity_on_hand ?? 0) + quantityDelta
+    const existingCosts = normalizeCostBreakdown(existing.cost_breakdown)
+    const mergedCosts = COST_KEYS.reduce<WholesaleCostBreakdown>((acc, key) => {
+      acc[key] = Math.max(0, Number(existingCosts[key] ?? 0) + Number(normalizedCosts[key] ?? 0))
+      return acc
+    }, getDefaultCostBreakdown())
+    const mergedTotalInvestment = Math.max(0, Number(existing.total_investment ?? 0) + totalInvestment)
 
     const { error: updateExistingError } = await supabase
       .from('wholesale_references')
       .update({
         quantity_on_hand: nextQuantity,
         unit_price: input.unitPrice,
-        total_investment: totalInvestment,
-        cost_breakdown: normalizedCosts,
+        total_investment: mergedTotalInvestment,
+        cost_breakdown: mergedCosts,
+        cost_breakdown_unit: nextQuantity > 0
+          ? COST_KEYS.reduce<Record<string, number>>((acc, key) => {
+              acc[key] = Math.round((mergedCosts[key] / nextQuantity) * 100) / 100
+              return acc
+            }, {})
+          : normalizedUnitCosts,
         size_quantities: mergedSizeQuantities,
         color_quantities: mergedColorQuantities,
         design_enabled: input.designEnabled,
@@ -371,6 +385,7 @@ export async function createWholesaleReference(
       unit_price: input.unitPrice,
       total_investment: totalInvestment,
       cost_breakdown: normalizedCosts,
+      cost_breakdown_unit: normalizedUnitCosts,
       size_quantities: normalizedSizeQuantities,
       color_quantities: normalizedColorQuantities,
       design_enabled: input.designEnabled,
@@ -427,6 +442,7 @@ export async function updateWholesaleReference(
       : sumSizeQuantities(normalizedSizeQuantities)
   const targetQuantity = computedQuantityFromSizes > 0 ? computedQuantityFromSizes : input.quantityOnHand
   const normalizedCosts = normalizeCostBreakdown(input.costBreakdown)
+  const normalizedUnitCosts = normalizeCostBreakdown(input.costBreakdownUnit)
   const totalInvestment = COST_KEYS.reduce((acc, key) => acc + normalizedCosts[key], 0)
   const normalizedCosteoHeader = normalizeCosteoHeader(input.costeoHeader)
 
@@ -461,6 +477,7 @@ export async function updateWholesaleReference(
       quantity_on_hand: targetQuantity,
       total_investment: totalInvestment,
       cost_breakdown: normalizedCosts,
+      cost_breakdown_unit: normalizedUnitCosts,
       size_quantities: normalizedSizeQuantities,
       color_quantities: normalizedColorQuantities,
       design_enabled: input.designEnabled,
