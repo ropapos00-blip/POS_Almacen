@@ -11,7 +11,7 @@ function paymentLabel(method: ManualPaymentMethod) {
     case 'addi':
       return 'Addi'
     case 'credilondon':
-      return 'CREDILONDON'
+      return 'Credilondon'
     case 'dataphone':
       return 'Datáfono'
     case 'bancolombia':
