@@ -20,6 +20,8 @@ function paymentLabel(method: ManualPaymentMethod) {
       return 'Daviplata'
     case 'nequi':
       return 'Nequi'
+    case 'rapirecarga':
+      return 'Rapirecarga'
     default:
       return method
   }

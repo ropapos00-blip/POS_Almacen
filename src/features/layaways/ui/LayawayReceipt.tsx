@@ -23,6 +23,7 @@ function paymentLabel(method: string) {
     case 'bancolombia': return 'Bancolombia'
     case 'daviplata': return 'Daviplata'
     case 'nequi': return 'Nequi'
+    case 'rapirecarga': return 'Rapirecarga'
     default: return method
   }
 }

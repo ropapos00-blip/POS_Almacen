@@ -8,6 +8,7 @@ type PaymentMethodKpiKey =
   | 'bancolombia'
   | 'daviplata'
   | 'nequi'
+  | 'rapirecarga'
 
 type ManualInvoicePaymentKpis = {
   cash: PaymentKpiTotals
@@ -17,6 +18,7 @@ type ManualInvoicePaymentKpis = {
   bancolombia: PaymentKpiTotals
   daviplata: PaymentKpiTotals
   nequi: PaymentKpiTotals
+  rapirecarga: PaymentKpiTotals
   exchangeOverageCollected: PaymentKpiTotals
 }
 
@@ -50,6 +52,7 @@ export async function listManualInvoicePaymentKpis(
     'bancolombia',
     'daviplata',
     'nequi',
+    'rapirecarga',
   ];
 
   // Estructura: { [method]: { day: number, month: number, year: number } }

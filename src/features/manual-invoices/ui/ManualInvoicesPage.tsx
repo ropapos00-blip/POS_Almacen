@@ -49,6 +49,8 @@ function paymentLabel(method: ManualPaymentMethod) {
       return 'Daviplata'
     case 'nequi':
       return 'Nequi'
+    case 'rapirecarga':
+      return 'Rapirecarga'
     case 'mixed':
       return 'Mixto'
     default:
@@ -630,7 +632,7 @@ export function ManualInvoicesPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(['cash','addi','credilondon','dataphone','bancolombia','daviplata','nequi'] as const).map((method) => (
+                      {(['cash','addi','credilondon','dataphone','bancolombia','daviplata','nequi','rapirecarga'] as const).map((method) => (
                         <tr key={method}>
                           <td className="px-2 py-1">{paymentLabel(method as ManualPaymentMethod)}</td>
                           <td className="px-2 py-1 text-right font-medium text-amber-200">{formatCop(paymentKpisQuery.data?.[method]?.day ?? 0)}</td>
@@ -830,6 +832,7 @@ export function ManualInvoicesPage() {
               <option value="bancolombia">Bancolombia</option>
               <option value="daviplata">Daviplata</option>
               <option value="nequi">Nequi</option>
+              <option value="rapirecarga">Rapirecarga</option>
               <option value="mixed">Mixto</option>
             </select>
           </label>
@@ -852,6 +855,7 @@ export function ManualInvoicesPage() {
                     <option value="bancolombia">Bancolombia</option>
                     <option value="daviplata">Daviplata</option>
                     <option value="nequi">Nequi</option>
+                    <option value="rapirecarga">Rapirecarga</option>
                   </select>
                 </label>
                 <label className="space-y-1">
@@ -881,6 +885,7 @@ export function ManualInvoicesPage() {
                     <option value="bancolombia">Bancolombia</option>
                     <option value="daviplata">Daviplata</option>
                     <option value="nequi">Nequi</option>
+                    <option value="rapirecarga">Rapirecarga</option>
                   </select>
                 </label>
                 <label className="space-y-1">
