@@ -57,10 +57,13 @@ function getDueDateInfo(dueDate: string, status: LayawayStatus) {
 function paymentMethodLabel(m: string) {
   switch (m) {
     case 'cash':        return 'Efectivo'
+    case 'addi':        return 'Addi'
+    case 'credilondon': return 'Crédito London'
     case 'dataphone':   return 'Datáfono'
     case 'bancolombia': return 'Bancolombia'
     case 'daviplata':   return 'Daviplata'
     case 'nequi':       return 'Nequi'
+    case 'rapirecarga': return 'Rapirecarga'
     default:            return m
   }
 }
@@ -314,9 +317,8 @@ export function LayawaysPage() {
           variantId: item.variantId,
           description: item.description.trim(),
           quantity: item.quantity,
-          unitPrice: item.discount > 0
-            ? Math.max(0, (item.unitPrice * item.quantity - item.discount) / item.quantity)
-            : item.unitPrice,
+          unitPrice: item.unitPrice,
+          discountAmount: Number(item.discount ?? 0),
         })),
       })
 
@@ -336,9 +338,8 @@ export function LayawaysPage() {
         items: draftItems.map((item) => ({
           description: item.description.trim(),
           quantity: item.quantity,
-          unitPrice: item.discount > 0
-            ? Math.max(0, (item.unitPrice * item.quantity - item.discount) / item.quantity)
-            : item.unitPrice,
+          unitPrice: item.unitPrice,
+          discountAmount: Number(item.discount ?? 0),
         })),
         totalAmount: createTotal,
         paymentAmount: initialAmount,
@@ -789,10 +790,13 @@ export function LayawaysPage() {
                     className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
                   >
                     <option value="cash">Efectivo</option>
+                    <option value="addi">Addi</option>
+                    <option value="credilondon">Crédito London</option>
                     <option value="dataphone">Datáfono</option>
                     <option value="bancolombia">Bancolombia</option>
                     <option value="daviplata">Daviplata</option>
                     <option value="nequi">Nequi</option>
+                    <option value="rapirecarga">Rapirecarga</option>
                   </select>
                 </div>
               </div>
@@ -853,6 +857,7 @@ export function LayawaysPage() {
                               description: i.description,
                               quantity: i.quantity,
                               unitPrice: i.unit_price,
+                              discountAmount: Number(i.discount_amount ?? 0),
                             })),
                             totalAmount: selectedLayaway.total_amount,
                             paymentAmount: firstPayment.amount,
@@ -996,17 +1001,21 @@ export function LayawaysPage() {
                   {selectedLayaway.layaway_items.map((item) => (
                     <div
                       key={item.id}
-                      className="flex items-center justify-between border-b border-zinc-800/50 px-4 py-3 last:border-0"
+                      className="border-b border-zinc-800/50 px-4 py-3 last:border-0"
                     >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm text-zinc-200">{item.description}</p>
-                        <p className="text-xs text-zinc-500">
-                          {item.quantity} × {formatCop(item.unit_price)}
-                        </p>
+                      <div className="min-w-0 text-sm text-zinc-200">{item.description}</div>
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <p className="text-xs text-zinc-500">{item.quantity} × {formatCop(item.unit_price)}</p>
+                        <span className="ml-4 shrink-0 text-sm font-medium text-zinc-100">
+                          {formatCop(item.quantity * item.unit_price)}
+                        </span>
                       </div>
-                      <span className="ml-4 shrink-0 text-sm font-medium text-zinc-100">
-                        {formatCop(item.quantity * item.unit_price)}
-                      </span>
+                      {Number(item.discount_amount ?? 0) > 0 ? (
+                        <div className="mt-1 flex items-center justify-between gap-2 text-xs">
+                          <span className="text-zinc-500">Descuento</span>
+                          <span className="text-zinc-300">{`-${formatCop(Number(item.discount_amount ?? 0))}`}</span>
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -1053,6 +1062,7 @@ export function LayawaysPage() {
                                 description: i.description,
                                 quantity: i.quantity,
                                 unitPrice: i.unit_price,
+                                discountAmount: Number(i.discount_amount ?? 0),
                               })),
                               totalAmount: selectedLayaway.total_amount,
                               paymentAmount: p.amount,
@@ -1100,10 +1110,13 @@ export function LayawaysPage() {
                         className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-amber-400 focus:outline-none"
                       >
                         <option value="cash">Efectivo</option>
+                        <option value="addi">Addi</option>
+                        <option value="credilondon">Crédito London</option>
                         <option value="dataphone">Datáfono</option>
                         <option value="bancolombia">Bancolombia</option>
                         <option value="daviplata">Daviplata</option>
                         <option value="nequi">Nequi</option>
+                        <option value="rapirecarga">Rapirecarga</option>
                       </select>
                     </div>
                   </div>

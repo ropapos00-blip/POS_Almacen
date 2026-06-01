@@ -1,22 +1,9 @@
--- 31_manual_invoice_inventory_deduction.sql
--- Adds optional variant_id to manual_invoice_items so that items scanned from
--- inventory get tracked and stock gets decremented when the invoice is saved.
--- Also incorporates all payment-method fixes from 30_fix_rpc_payment_methods.sql.
-
--- ============================================================
--- 1. Add variant_id column to manual_invoice_items
--- ============================================================
-alter table public.manual_invoice_items
-  add column if not exists variant_id uuid references public.product_variants(id);
-
--- ============================================================
--- 2. Recreate create_manual_invoice_transaction
---    - All payment methods including 'mixed'
---    - Optional variant_id per item → stock check + inventory deduction
--- ============================================================
-drop function if exists public.create_manual_invoice_transaction(uuid, uuid, text, numeric, text, text, jsonb);
-drop function if exists public.create_manual_invoice_transaction(uuid, uuid, text, numeric, text, text, jsonb, text);
-drop function if exists public.create_manual_invoice_transaction(uuid, uuid, text, text, numeric, text, text, jsonb, text);
+-- 49_hotfix_restore_manual_invoice_rpc_prod.sql
+-- HOTFIX PRODUCCION:
+-- Restaura create_manual_invoice_transaction sin DROP previo
+-- e incluye:
+-- - rapirecarga en metodos permitidos
+-- - discount_amount por item
 
 create or replace function public.create_manual_invoice_transaction(
   p_store_id uuid,
@@ -27,7 +14,8 @@ create or replace function public.create_manual_invoice_transaction(
   p_payment_method text,
   p_payment_reference text,
   p_items jsonb,
-  p_notes text default null
+  p_notes text default null,
+  p_apply_credit numeric default 0
 )
 returns table (invoice_id uuid, invoice_number text)
 language plpgsql
@@ -40,15 +28,22 @@ declare
   v_subtotal numeric := 0;
   v_discount_total numeric := coalesce(p_discount_total, 0);
   v_grand_total numeric := 0;
+  v_amount_due numeric := 0;
+  v_credit_to_apply numeric := greatest(0, coalesce(p_apply_credit, 0));
+  v_credit_balance numeric := 0;
+  v_credit_balance_after numeric := 0;
   v_item jsonb;
   v_description text;
   v_qty integer;
   v_price numeric;
   v_line_total numeric;
+  v_item_discount numeric := 0;
   v_mixed_parts text[];
   v_mixed_sum numeric;
   v_variant_id uuid;
   v_stock integer;
+  v_phone text;
+  v_name text;
 begin
   if not (p_store_id in (select public.current_user_store_ids())) then
     raise exception 'Usuario sin acceso a la tienda.';
@@ -73,12 +68,12 @@ begin
     raise exception 'La factura manual requiere al menos un item.';
   end if;
 
-  -- First pass: validate items, check stock, compute subtotal
   for v_item in select * from jsonb_array_elements(p_items)
   loop
     v_description := trim(coalesce(v_item->>'description', ''));
     v_qty := coalesce((v_item->>'quantity')::integer, 0);
     v_price := coalesce((v_item->>'unit_price')::numeric, 0);
+    v_item_discount := greatest(0, coalesce((v_item->>'discount_amount')::numeric, 0));
 
     if v_description = '' then
       raise exception 'Descripcion de item requerida.';
@@ -92,7 +87,12 @@ begin
       raise exception 'Precio invalido en items.';
     end if;
 
-    -- Check stock for inventory-linked items
+    v_line_total := v_qty * v_price;
+    if v_item_discount > v_line_total then
+      raise exception 'Descuento por item excede su total.';
+    end if;
+    v_subtotal := v_subtotal + v_line_total;
+
     v_variant_id := nullif(trim(coalesce(v_item->>'variant_id', '')), '')::uuid;
     if v_variant_id is not null then
       select quantity_on_hand into v_stock
@@ -107,9 +107,6 @@ begin
         raise exception 'Stock insuficiente: disponible %, solicitado %.', v_stock, v_qty;
       end if;
     end if;
-
-    v_line_total := v_qty * v_price;
-    v_subtotal := v_subtotal + v_line_total;
   end loop;
 
   if v_discount_total < 0 then
@@ -121,22 +118,48 @@ begin
   end if;
 
   v_grand_total := v_subtotal - v_discount_total;
+  v_phone := trim(coalesce(p_customer_phone, ''));
+  v_name := nullif(trim(coalesce(p_customer_name, '')), '');
 
-  -- Validate mixed payment: sum of both amounts must equal grand total
+  if v_credit_to_apply > 0 then
+    if v_phone = '' then
+      raise exception 'No puedes aplicar saldo a favor sin telefono del cliente.';
+    end if;
+
+    select coalesce(micc.balance, 0)
+    into v_credit_balance
+    from public.manual_invoice_customer_credits micc
+    where micc.store_id = p_store_id
+      and micc.customer_phone = v_phone
+    for update;
+
+    if not found then
+      v_credit_balance := 0;
+    end if;
+
+    if v_credit_to_apply > v_credit_balance then
+      raise exception 'El saldo a favor disponible (% ) es menor al saldo a aplicar (%).', v_credit_balance, v_credit_to_apply;
+    end if;
+
+    if v_credit_to_apply > v_grand_total then
+      raise exception 'El saldo a aplicar no puede superar el total de la factura.';
+    end if;
+  end if;
+
+  v_amount_due := v_grand_total - v_credit_to_apply;
+
   if p_payment_method = 'mixed' then
     v_mixed_parts := string_to_array(coalesce(p_payment_reference, ''), ':');
     if array_length(v_mixed_parts, 1) = 4 then
       v_mixed_sum := coalesce(v_mixed_parts[2]::numeric, 0) + coalesce(v_mixed_parts[4]::numeric, 0);
-      if abs(v_mixed_sum - v_grand_total) > 1 then
-        raise exception 'Los montos del pago mixto (%) no coinciden con el total de la factura (%).', v_mixed_sum, v_grand_total;
+      if abs(v_mixed_sum - v_amount_due) > 1 then
+        raise exception 'Los montos del pago mixto (%) no coinciden con el total a pagar (%).', v_mixed_sum, v_amount_due;
       end if;
     end if;
   end if;
 
-  -- Bloqueo exclusivo por tienda para evitar colisiones concurrentes
   perform pg_advisory_xact_lock(hashtext('manual_invoice:' || p_store_id::text));
 
-  -- Generar numero de factura
   select mi.invoice_number into v_invoice_number
   from public.manual_invoices mi
   where mi.store_id = p_store_id
@@ -160,27 +183,19 @@ begin
   end;
 
   insert into public.manual_invoices (
-    store_id,
-    invoice_number,
-    customer_name,
-    customer_phone,
-    notes,
-    subtotal,
-    discount_total,
-    grand_total,
-    payment_method,
-    payment_reference,
-    created_by,
-    source
+    store_id, invoice_number, customer_name, customer_phone, notes,
+    subtotal, discount_total, credit_applied_total, grand_total,
+    payment_method, payment_reference, created_by, source
   )
   values (
     p_store_id,
     v_invoice_number,
-    nullif(trim(coalesce(p_customer_name, '')), ''),
-    nullif(trim(coalesce(p_customer_phone, '')), ''),
+    v_name,
+    nullif(v_phone, ''),
     nullif(trim(coalesce(p_notes, '')), ''),
     v_subtotal,
     v_discount_total,
+    v_credit_to_apply,
     v_grand_total,
     p_payment_method,
     nullif(trim(coalesce(p_payment_reference, '')), ''),
@@ -189,12 +204,12 @@ begin
   )
   returning id into v_invoice_id;
 
-  -- Second pass: insert items and deduct inventory when variant_id is present
   for v_item in select * from jsonb_array_elements(p_items)
   loop
     v_description := trim(coalesce(v_item->>'description', ''));
     v_qty := coalesce((v_item->>'quantity')::integer, 0);
     v_price := coalesce((v_item->>'unit_price')::numeric, 0);
+    v_item_discount := greatest(0, coalesce((v_item->>'discount_amount')::numeric, 0));
     v_line_total := v_qty * v_price;
     v_variant_id := nullif(trim(coalesce(v_item->>'variant_id', '')), '')::uuid;
 
@@ -204,6 +219,7 @@ begin
       quantity,
       unit_price,
       line_total,
+      discount_amount,
       variant_id
     )
     values (
@@ -212,10 +228,10 @@ begin
       v_qty,
       v_price,
       v_line_total,
+      v_item_discount,
       v_variant_id
     );
 
-    -- Deduct inventory for linked variants
     if v_variant_id is not null then
       update public.inventory_stock
       set quantity_on_hand = quantity_on_hand - v_qty
@@ -223,13 +239,36 @@ begin
     end if;
   end loop;
 
+  if v_credit_to_apply > 0 then
+    update public.manual_invoice_customer_credits micc
+    set
+      balance = micc.balance - v_credit_to_apply,
+      customer_name = coalesce(v_name, micc.customer_name),
+      updated_at = now()
+    where micc.store_id = p_store_id
+      and micc.customer_phone = v_phone
+    returning balance into v_credit_balance_after;
+
+    insert into public.manual_invoice_credit_movements (
+      store_id, customer_phone, customer_name, movement_type, amount,
+      balance_after, reference_type, reference_id, notes, created_by
+    )
+    values (
+      p_store_id,
+      v_phone,
+      v_name,
+      'apply',
+      -v_credit_to_apply,
+      v_credit_balance_after,
+      'manual_invoice',
+      v_invoice_id,
+      'Aplicacion de saldo a favor',
+      p_created_by
+    );
+  end if;
+
   insert into public.audit_logs (
-    store_id,
-    actor_user_id,
-    action,
-    entity_type,
-    entity_id,
-    payload_after
+    store_id, actor_user_id, action, entity_type, entity_id, payload_after
   )
   values (
     p_store_id,
@@ -237,11 +276,25 @@ begin
     'manual_invoice_created',
     'manual_invoices',
     v_invoice_id,
-    jsonb_build_object('invoice_number', v_invoice_number, 'grand_total', v_grand_total)
+    jsonb_build_object(
+      'invoice_number', v_invoice_number,
+      'grand_total', v_grand_total,
+      'credit_applied_total', v_credit_to_apply,
+      'amount_due', v_amount_due
+    )
   );
 
   return query select v_invoice_id, v_invoice_number;
 end;
 $$;
 
-grant execute on function public.create_manual_invoice_transaction(uuid, uuid, text, text, numeric, text, text, jsonb, text) to authenticated;
+grant execute on function public.create_manual_invoice_transaction(uuid, uuid, text, text, numeric, text, text, jsonb, text, numeric) to authenticated;
+
+-- Verificación
+select p.oid::regprocedure as signature
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname = 'create_manual_invoice_transaction'
+order by 1;
+

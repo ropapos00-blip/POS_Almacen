@@ -28,7 +28,7 @@ export async function listSales(storeId: string, filters: SalesFilters) {
   let query = supabase
     .from('sales')
     .select(
-      'id, sale_number, customer_name, subtotal, discount_total, tax_total, grand_total, status, sold_at, sale_items(id, sku_snapshot, name_snapshot, size_snapshot, color_snapshot, unit_price, quantity, line_total), sale_payments(id, method, amount, reference, paid_at)',
+      'id, sale_number, customer_name, subtotal, discount_total, tax_total, grand_total, status, sold_at, sale_items(id, sku_snapshot, name_snapshot, size_snapshot, color_snapshot, unit_price, quantity, discount_amount, line_total), sale_payments(id, method, amount, reference, paid_at)',
     )
     .eq('store_id', storeId)
     .order('sold_at', { ascending: false })

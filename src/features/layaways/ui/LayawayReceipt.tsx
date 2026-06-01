@@ -7,7 +7,7 @@ export interface LayawayReceiptData {
   customerPhone: string | null
   startDate: string
   dueDate: string
-  items: Array<{ description: string; quantity: number; unitPrice: number }>
+  items: Array<{ description: string; quantity: number; unitPrice: number; discountAmount?: number }>
   totalAmount: number
   paymentAmount: number
   previouslyPaid: number
@@ -20,6 +20,8 @@ function paymentLabel(method: string) {
   switch (method) {
     case 'cash': return 'Efectivo'
     case 'dataphone': return 'Datáfono'
+    case 'addi': return 'Addi'
+    case 'credilondon': return 'Crédito London'
     case 'bancolombia': return 'Bancolombia'
     case 'daviplata': return 'Daviplata'
     case 'nequi': return 'Nequi'
@@ -97,6 +99,12 @@ export function LayawayReceipt({
                 <span>{item.quantity} x {formatCop(item.unitPrice)}</span>
                 <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{formatCop(item.quantity * item.unitPrice)}</span>
               </div>
+              {Number(item.discountAmount ?? 0) > 0 ? (
+                <div className="flex justify-between gap-1">
+                  <span>Descuento</span>
+                  <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{`-${formatCop(Number(item.discountAmount ?? 0))}`}</span>
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

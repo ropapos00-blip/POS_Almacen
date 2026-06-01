@@ -26,6 +26,8 @@ declare
   v_stock record;
   v_qty integer;
   v_line_total numeric;
+  v_item_discount numeric;
+  v_item_discount_total numeric := 0;
   v_pay_total numeric := 0;
   v_payment jsonb;
   v_next_number integer := 1;
@@ -53,9 +55,14 @@ begin
   for v_item in select * from jsonb_array_elements(p_items)
   loop
     v_qty := (v_item->>'quantity')::integer;
+    v_item_discount := coalesce((v_item->>'discount_amount')::numeric, 0);
 
     if v_qty <= 0 then
       raise exception 'Cantidad invalida en items.';
+    end if;
+
+    if v_item_discount < 0 then
+      raise exception 'Descuento invalido en item.';
     end if;
 
     select pv.id, pv.sku, pv.size, pv.color, pv.sale_price, pv.cost_price, p.name
@@ -84,8 +91,14 @@ begin
       raise exception 'Stock insuficiente para SKU %', v_variant.sku;
     end if;
 
+    v_line_total := v_variant.sale_price * v_qty;
+    if v_item_discount > v_line_total then
+      raise exception 'Descuento de item excede su total para SKU %', v_variant.sku;
+    end if;
+
     v_subtotal := v_subtotal + (v_variant.sale_price * v_qty);
     v_cost_total := v_cost_total + (coalesce(v_variant.cost_price, 0) * v_qty);
+    v_item_discount_total := v_item_discount_total + v_item_discount;
   end loop;
 
   if v_discount_total < 0 then
@@ -94,6 +107,10 @@ begin
 
   if v_discount_total > v_subtotal then
     raise exception 'Descuento no puede superar subtotal.';
+  end if;
+
+  if abs(v_item_discount_total - v_discount_total) > 0.01 then
+    raise exception 'Suma de descuentos por item (%) no coincide con descuento total (%)', v_item_discount_total, v_discount_total;
   end if;
 
   if v_discount_total > (v_subtotal - v_cost_total) then
@@ -165,6 +182,7 @@ begin
   for v_item in select * from jsonb_array_elements(p_items)
   loop
     v_qty := (v_item->>'quantity')::integer;
+    v_item_discount := coalesce((v_item->>'discount_amount')::numeric, 0);
 
     select pv.id, pv.sku, pv.size, pv.color, pv.sale_price, pv.cost_price, p.name
     into v_variant
@@ -196,7 +214,7 @@ begin
       v_variant.color,
       v_variant.sale_price,
       v_qty,
-      0,
+      v_item_discount,
       v_line_total
     );
 

@@ -51,7 +51,7 @@ export interface PosSalePayload {
   mixedSecondMethod?: PosPaymentMethod
   /** For mixed payment: amount for second method */
   mixedSecondAmount?: number
-  items: Array<{ variant_id: string; quantity: number }>
+  items: Array<{ variant_id: string; quantity: number; discount_amount?: number }>
 }
 
 export interface DiscountAuthorizationResult {

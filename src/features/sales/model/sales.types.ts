@@ -8,12 +8,13 @@ export interface SaleItemRow {
   color_snapshot: string
   unit_price: number
   quantity: number
+  discount_amount?: number | null
   line_total: number
 }
 
 export interface SalePaymentRow {
   id: string
-  method: 'cash' | 'card' | 'transfer' | 'mixed'
+  method: 'cash' | 'card' | 'transfer' | 'mixed' | 'addi' | 'credilondon' | 'dataphone' | 'bancolombia' | 'daviplata' | 'nequi'
   amount: number
   reference: string | null
   paid_at: string

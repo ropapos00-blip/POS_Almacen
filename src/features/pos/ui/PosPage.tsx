@@ -236,6 +236,7 @@ export function PosPage() {
         items: cart.map((item) => ({
           variant_id: item.variantId,
           quantity: item.quantity,
+          discount_amount: Number(item.discount ?? 0),
         })),
       })
 

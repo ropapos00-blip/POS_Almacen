@@ -24,7 +24,7 @@ function paymentLabel(method: PaymentMethod | PosPaymentMethod) {
   switch (method) {
     case 'cash': return 'Efectivo'
     case 'addi': return 'Addi'
-    case 'credilondon': return 'CREDILONDON'
+    case 'credilondon': return 'Crédito London'
     case 'dataphone': return 'Datáfono'
     case 'bancolombia': return 'Bancolombia'
     case 'daviplata': return 'Daviplata'
@@ -87,6 +87,12 @@ export function SaleReceipt({
                 <span className="text-zinc-500">{item.quantity} x {formatCop(item.unitPrice)}</span>
                 <span className="font-medium" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{formatCop(item.quantity * item.unitPrice)}</span>
               </div>
+              {(Number(item.discount ?? 0) > 0) ? (
+                <div className="flex justify-between gap-1">
+                  <span>Descuento</span>
+                  <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{`-${formatCop(Number(item.discount ?? 0))}`}</span>
+                </div>
+              ) : null}
               <p className="text-zinc-400">{item.sku}</p>
             </div>
           ))}
@@ -97,10 +103,12 @@ export function SaleReceipt({
             <span>Subtotal</span>
             <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{formatCop(data.subtotal)}</span>
           </div>
-          <div className="flex justify-between gap-2">
-            <span>Descuento</span>
-            <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{formatCop(data.discount)}</span>
-          </div>
+          {Number(data.discount ?? 0) > 0 ? (
+            <div className="flex justify-between gap-2">
+              <span>Descuento</span>
+              <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{formatCop(data.discount)}</span>
+            </div>
+          ) : null}
           <div className="mt-1 flex justify-between gap-2 font-bold">
             <span>Total</span>
             <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{formatCop(data.total)}</span>
@@ -111,8 +119,15 @@ export function SaleReceipt({
           {data.paymentMethod === 'mixed' && data.mixedFirstMethod && data.mixedFirstAmount != null && data.mixedSecondMethod && data.mixedSecondAmount != null ? (
             <>
               <p>Pago: Mixto</p>
-              <p>{paymentLabel(data.mixedFirstMethod)}: {formatCop(data.mixedFirstAmount)}</p>
-              <p>{paymentLabel(data.mixedSecondMethod)}: {formatCop(data.mixedSecondAmount)}</p>
+              <p>Detalle de pago:</p>
+              <div className="flex justify-between gap-2">
+                <span>{paymentLabel(data.mixedFirstMethod)}</span>
+                <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{formatCop(data.mixedFirstAmount)}</span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span>{paymentLabel(data.mixedSecondMethod)}</span>
+                <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{formatCop(data.mixedSecondAmount)}</span>
+              </div>
             </>
           ) : (
             <>

@@ -48,7 +48,7 @@ begin
     raise exception 'Usuario sin permisos para facturacion manual.';
   end if;
 
-  if p_payment_method not in ('cash', 'addi', 'credilondon', 'dataphone', 'bancolombia', 'daviplata', 'nequi') then
+  if p_payment_method not in ('cash', 'addi', 'credilondon', 'dataphone', 'bancolombia', 'daviplata', 'nequi', 'rapirecarga') then
     raise exception 'Metodo de pago invalido.';
   end if;
 

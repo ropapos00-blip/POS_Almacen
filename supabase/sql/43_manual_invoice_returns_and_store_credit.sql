@@ -608,7 +608,7 @@ begin
 
   if p_payment_method not in (
     'cash', 'addi', 'credilondon', 'dataphone',
-    'bancolombia', 'daviplata', 'nequi', 'mixed'
+    'bancolombia', 'daviplata', 'nequi', 'rapirecarga', 'mixed'
   ) then
     raise exception 'Metodo de pago invalido.';
   end if;

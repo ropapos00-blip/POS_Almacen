@@ -286,6 +286,7 @@ export function ManualInvoicesPage() {
       description: item.description.trim(),
       quantity: Math.max(0, Number(item.quantity || 0)),
       unitPrice: Math.max(0, Number(item.unitPrice || 0)),
+      discount: Math.max(0, Number(item.discount || 0)),
       variantId: item.variantId,
     }))
     .filter((item) => item.description && item.quantity > 0)
@@ -386,6 +387,7 @@ export function ManualInvoicesPage() {
           quantity: item.quantity,
           unit_price: item.unitPrice,
           line_total: item.quantity * item.unitPrice,
+          discount_amount: item.discount,
         })),
       }
 

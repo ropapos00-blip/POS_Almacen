@@ -15,6 +15,7 @@ export interface ManualInvoiceItem {
   quantity: number
   unit_price: number
   line_total: number
+  discount_amount?: number | null
 }
 
 export interface ManualInvoiceRow {
@@ -49,6 +50,7 @@ export interface CreateManualInvoiceInput {
     description: string
     quantity: number
     unitPrice: number
+    discount?: number
     variantId?: string
   }>
 }

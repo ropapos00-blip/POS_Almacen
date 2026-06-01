@@ -51,6 +51,7 @@ export async function createLayaway(input: CreateLayawayInput): Promise<string> 
       description: item.description,
       quantity: item.quantity,
       unit_price: item.unitPrice,
+      discount_amount: Math.max(0, Number(item.discountAmount ?? 0)),
     })),
   })
 

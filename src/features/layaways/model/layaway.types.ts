@@ -7,6 +7,7 @@ export interface LayawayItem {
   description: string
   quantity: number
   unit_price: number
+  discount_amount?: number | null
   created_at: string
 }
 
@@ -45,6 +46,7 @@ export interface CreateLayawayInput {
     description: string
     quantity: number
     unitPrice: number
+    discountAmount?: number
   }>
 }
 

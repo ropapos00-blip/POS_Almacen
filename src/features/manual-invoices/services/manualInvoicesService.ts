@@ -152,7 +152,7 @@ export async function listManualInvoices(storeId: string) {
   const { data, error } = await supabase
     .from('manual_invoices')
     .select(
-      'id, invoice_number, customer_name, customer_phone, subtotal, discount_total, credit_applied_total, grand_total, payment_method, payment_reference, created_at, manual_invoice_items(id, description, quantity, unit_price, line_total)',
+      'id, invoice_number, customer_name, customer_phone, subtotal, discount_total, credit_applied_total, grand_total, payment_method, payment_reference, created_at, manual_invoice_items(id, description, quantity, unit_price, line_total, discount_amount)',
     )
     .eq('store_id', storeId)
     .eq('source', 'provisional')
@@ -311,7 +311,7 @@ export async function getManualInvoiceById(storeId: string, invoiceId: string) {
   const { data, error } = await supabase
     .from('manual_invoices')
     .select(
-      'id, invoice_number, customer_name, customer_phone, subtotal, discount_total, credit_applied_total, grand_total, payment_method, payment_reference, created_at, manual_invoice_items(id, description, quantity, unit_price, line_total)',
+      'id, invoice_number, customer_name, customer_phone, subtotal, discount_total, credit_applied_total, grand_total, payment_method, payment_reference, created_at, manual_invoice_items(id, description, quantity, unit_price, line_total, discount_amount)',
     )
     .eq('store_id', storeId)
     .eq('id', invoiceId)
@@ -549,6 +549,7 @@ export async function createManualInvoice(input: CreateManualInvoiceInput) {
       description: item.description.trim(),
       quantity: item.quantity,
       unit_price: item.unitPrice,
+      discount_amount: Math.max(0, Number(item.discount ?? 0)),
       ...(item.variantId ? { variant_id: item.variantId } : {}),
     })),
   })

@@ -20,5 +20,5 @@ alter table public.manual_invoices
 alter table public.manual_invoices
   add constraint manual_invoices_payment_method_check
   check (payment_method in (
-    'cash', 'addi', 'credilondon', 'dataphone', 'bancolombia', 'daviplata', 'nequi', 'mixed'
+    'cash', 'addi', 'credilondon', 'dataphone', 'bancolombia', 'daviplata', 'nequi', 'rapirecarga', 'mixed'
   ));

@@ -13,7 +13,7 @@ end$$;
 
 alter table public.manual_invoices
   add constraint manual_invoices_payment_method_check
-    check (payment_method in ('cash', 'addi', 'credilondon', 'dataphone', 'bancolombia', 'daviplata', 'nequi'));
+    check (payment_method in ('cash', 'addi', 'credilondon', 'dataphone', 'bancolombia', 'daviplata', 'nequi', 'rapirecarga'));
 -- 10_store_receipt_and_manual_invoice.sql
 -- Extiende configuracion de tienda para encabezado de factura/comanda,
 -- agrega telefono en perfiles y crea facturacion manual provisional.
@@ -291,7 +291,7 @@ create table if not exists public.manual_invoices (
   subtotal numeric(12,2) not null,
   discount_total numeric(12,2) not null default 0,
   grand_total numeric(12,2) not null,
-  payment_method text not null check (payment_method in ('cash', 'addi', 'credilondon', 'dataphone', 'bancolombia', 'daviplata', 'nequi')),
+  payment_method text not null check (payment_method in ('cash', 'addi', 'credilondon', 'dataphone', 'bancolombia', 'daviplata', 'nequi', 'rapirecarga')),
   payment_reference text,
   created_by uuid not null references public.profiles(id) on delete restrict,
   created_at timestamptz not null default now(),
@@ -429,7 +429,7 @@ begin
     raise exception 'Usuario sin permisos para facturacion manual.';
   end if;
 
-  if p_payment_method not in ('cash', 'addi', 'credilondon', 'dataphone', 'bancolombia', 'daviplata', 'nequi') then
+  if p_payment_method not in ('cash', 'addi', 'credilondon', 'dataphone', 'bancolombia', 'daviplata', 'nequi', 'rapirecarga') then
     raise exception 'Metodo de pago invalido.';
   end if;
 
