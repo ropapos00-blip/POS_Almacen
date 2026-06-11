@@ -168,6 +168,7 @@ export interface CreateWholesaleInvoiceInput {
     color: string
     size: string
     quantity: number
+    unitPrice: number
   }>
   manualItems?: Array<{
     description: string
@@ -194,6 +195,7 @@ export interface UpdateWholesaleInvoiceInput {
     color: string
     size: string
     quantity: number
+    unitPrice: number
   }>
   manualItems?: Array<{
     description: string

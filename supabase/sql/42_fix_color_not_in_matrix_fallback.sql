@@ -8,6 +8,9 @@
 -- Fix: si v_has_color_matrix=true pero el color solicitado no es clave en color_quantities,
 -- caer en QOH fallback (igual que cuando no hay size_quantities).
 -- La deducción en ese fallback sólo descuenta quantity_on_hand, sin tocar la matriz de colores.
+--
+-- Además, los items de inventario aceptan unit_price en p_items para permitir cobrar un
+-- precio unitario personalizado sin modificar el precio base de wholesale_references.
 
 -- ============================================================
 -- 1. Patch create_wholesale_invoice_transaction
@@ -146,7 +149,11 @@ begin
           v_ref.reference, v_color, v_size, v_available_qty, v_qty;
       end if;
 
-      v_line_total := v_qty * coalesce(v_ref.unit_price, 0);
+      v_unit_price := greatest(
+        0,
+        coalesce((v_item ->> 'unit_price')::numeric, v_ref.unit_price, 0)
+      );
+      v_line_total := v_qty * v_unit_price;
     end if;
 
     v_subtotal := v_subtotal + v_line_total;
@@ -210,7 +217,11 @@ begin
       where id = (v_item ->> 'reference_id')::uuid
       for update;
 
-      v_line_total := v_qty * coalesce(v_ref.unit_price, 0);
+      v_unit_price := greatest(
+        0,
+        coalesce((v_item ->> 'unit_price')::numeric, v_ref.unit_price, 0)
+      );
+      v_line_total := v_qty * v_unit_price;
 
       insert into public.wholesale_invoice_items (
         wholesale_invoice_id, wholesale_reference_id, variant_id,
@@ -218,7 +229,7 @@ begin
       ) values (
         v_invoice_id, v_ref.id, null,
         v_ref.reference, v_color, v_size, v_ref.reference, v_qty,
-        coalesce(v_ref.unit_price, 0), v_line_total
+        v_unit_price, v_line_total
       );
 
       v_has_color_matrix := jsonb_typeof(coalesce(v_ref.color_quantities, '{}'::jsonb)) = 'object'
@@ -496,7 +507,11 @@ begin
           v_ref.reference, v_color, v_size, v_available_qty, v_qty;
       end if;
 
-      v_line_total := v_qty * coalesce(v_ref.unit_price, 0);
+      v_unit_price := greatest(
+        0,
+        coalesce((v_item ->> 'unit_price')::numeric, v_ref.unit_price, 0)
+      );
+      v_line_total := v_qty * v_unit_price;
     end if;
 
     v_subtotal := v_subtotal + v_line_total;
@@ -531,7 +546,11 @@ begin
       where id = (v_item ->> 'reference_id')::uuid
       for update;
 
-      v_line_total := v_qty * coalesce(v_ref.unit_price, 0);
+      v_unit_price := greatest(
+        0,
+        coalesce((v_item ->> 'unit_price')::numeric, v_ref.unit_price, 0)
+      );
+      v_line_total := v_qty * v_unit_price;
 
       insert into public.wholesale_invoice_items (
         wholesale_invoice_id, wholesale_reference_id, variant_id,
@@ -539,7 +558,7 @@ begin
       ) values (
         p_invoice_id, v_ref.id, null,
         v_ref.reference, v_color, v_size, v_ref.reference, v_qty,
-        coalesce(v_ref.unit_price, 0), v_line_total
+        v_unit_price, v_line_total
       );
 
       v_has_color_matrix := jsonb_typeof(coalesce(v_ref.color_quantities, '{}'::jsonb)) = 'object'

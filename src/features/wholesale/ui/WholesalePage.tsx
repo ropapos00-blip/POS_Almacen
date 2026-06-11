@@ -856,6 +856,7 @@ export function WholesalePage() {
           color: item.color,
           size: item.size,
           quantity: item.quantity,
+          unitPrice: item.unitPrice,
         })),
         manualItems: cleanedManualItemsForValidation,
       })
@@ -991,7 +992,7 @@ export function WholesalePage() {
         colorQuantities: refOption?.colorQuantities ?? {},
         availableColors: refOption?.availableColors ?? [],
         quantity: item.quantity,
-        unitPrice: refOption?.unitPrice ?? item.unit_price,
+        unitPrice: Number(item.unit_price ?? refOption?.unitPrice ?? 0),
         discount: itemIndex === 0 ? invoice.discount_total : 0,
         originalQuantity: item.quantity,
         initialVariantId: variantId,
@@ -1182,6 +1183,7 @@ export function WholesalePage() {
           color: item.color,
           size: item.size,
           quantity: item.quantity,
+          unitPrice: item.unitPrice,
         })),
         manualItems: cleanedEditManualItemsForValidation,
       })
@@ -1455,9 +1457,20 @@ export function WholesalePage() {
               />
               <input
                 type="text"
-                value={formatCop(item.unitPrice)}
-                readOnly
-                className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
+                inputMode="numeric"
+                value={item.unitPrice === 0 ? '' : formatCopInput(item.unitPrice)}
+                placeholder="Precio unitario"
+                disabled={!item.variantId}
+                onChange={(event) =>
+                  setDraftItems((prev) =>
+                    prev.map((di) =>
+                      di.id === item.id
+                        ? { ...di, unitPrice: Math.max(0, parseCopIntegerInput(event.target.value, 0)) }
+                        : di,
+                    ),
+                  )
+                }
+                className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-zinc-900 disabled:text-zinc-500"
               />
               <button
                 type="button"
@@ -2199,9 +2212,20 @@ export function WholesalePage() {
                   />
                   <input
                     type="text"
-                    value={formatCop(item.unitPrice)}
-                    readOnly
-                    className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
+                    inputMode="numeric"
+                    value={item.unitPrice === 0 ? '' : formatCopInput(item.unitPrice)}
+                    placeholder="Precio unitario"
+                    disabled={!item.variantId}
+                    onChange={(event) =>
+                      setEditItems((prev) =>
+                        prev.map((ei) =>
+                          ei.id === item.id
+                            ? { ...ei, unitPrice: Math.max(0, parseCopIntegerInput(event.target.value, 0)) }
+                            : ei,
+                        ),
+                      )
+                    }
+                    className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-zinc-900 disabled:text-zinc-500"
                   />
                   <button
                     type="button"

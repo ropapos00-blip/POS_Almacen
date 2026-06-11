@@ -138,6 +138,7 @@ export async function createWholesaleInvoice(input: CreateWholesaleInvoiceInput)
         color: item.color,
         size: item.size,
         quantity: item.quantity,
+        unit_price: item.unitPrice,
       })),
       ...(input.manualItems ?? []).map((item) => ({
         description: item.description,
@@ -215,6 +216,7 @@ export async function updateWholesaleInvoice(input: UpdateWholesaleInvoiceInput)
         color: item.color,
         size: item.size,
         quantity: item.quantity,
+        unit_price: item.unitPrice,
       })),
       ...(input.manualItems ?? []).map((item) => ({
         description: item.description,
