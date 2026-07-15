@@ -30,18 +30,31 @@ export async function listManualInvoicePaymentKpis(
   const todayIso = getTodayIsoDateColombia();
   const selectedIso = filterDate ?? todayIso;
   const yearStartIso = `${selectedIso.slice(0, 4)}-01-01`;
-  const { data, error } = await supabase
-    .from('manual_invoices')
-    .select('grand_total, credit_applied_total, created_at, payment_method, payment_reference')
-    .eq('store_id', storeId)
-    .eq('source', 'provisional')
-    .eq('is_active', true)
-    .gte('created_at', toUtcIsoStartOfColombiaDay(yearStartIso))
-    .limit(10000);
+  const [invoicesRes, layawayPaymentsRes] = await Promise.all([
+    supabase
+      .from('manual_invoices')
+      .select('grand_total, credit_applied_total, created_at, payment_method, payment_reference')
+      .eq('store_id', storeId)
+      .eq('source', 'provisional')
+      .eq('is_active', true)
+      .gte('created_at', toUtcIsoStartOfColombiaDay(yearStartIso))
+      .limit(10000),
+    supabase
+      .from('layaway_payments')
+      .select('amount, payment_method, created_at, layaways!inner(store_id)')
+      .eq('layaways.store_id', storeId)
+      .gte('created_at', toUtcIsoStartOfColombiaDay(yearStartIso))
+      .limit(10000),
+  ]);
 
-  if (error) {
-    throw new Error(error.message);
+  if (invoicesRes.error) {
+    throw new Error(invoicesRes.error.message);
   }
+  if (layawayPaymentsRes.error) {
+    throw new Error(layawayPaymentsRes.error.message);
+  }
+
+  const data = invoicesRes.data;
 
   const selectedMonth = selectedIso.slice(0, 7);
   const paymentMethods: PaymentMethodKpiKey[] = [
@@ -107,6 +120,23 @@ export async function listManualInvoicePaymentKpis(
     }
 
     const amount = Math.max(0, Number(row.grand_total ?? 0) - Number(row.credit_applied_total ?? 0));
+    if (paymentMethods.includes(method as PaymentMethodKpiKey)) {
+      addToResult(method as PaymentMethodKpiKey, amount, createdIsoDate);
+    }
+  });
+
+  // Abonos de separados (layaways) tambien cuentan como dinero recibido en caja
+  // por metodo de pago, igual que las facturas manuales.
+  (layawayPaymentsRes.data ?? []).forEach((row) => {
+    const createdIsoDate = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Bogota',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date(String(row.created_at)));
+
+    const method = row.payment_method as string;
+    const amount = Math.max(0, Number(row.amount ?? 0));
     if (paymentMethods.includes(method as PaymentMethodKpiKey)) {
       addToResult(method as PaymentMethodKpiKey, amount, createdIsoDate);
     }

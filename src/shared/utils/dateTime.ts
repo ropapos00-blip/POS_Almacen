@@ -56,6 +56,36 @@ export function toUtcIsoEndOfColombiaDay(isoDate: string) {
   return new Date(utcMillis).toISOString()
 }
 
+export function startOfMonthIsoDate(isoDate: string) {
+  const { year, month } = parseIsoDateParts(isoDate)
+  const utcDate = new Date(Date.UTC(year, month - 1, 1))
+  return toIsoDateFromUtcParts(utcDate)
+}
+
+export function endOfMonthIsoDate(isoDate: string) {
+  const { year, month } = parseIsoDateParts(isoDate)
+  const utcDate = new Date(Date.UTC(year, month, 0))
+  return toIsoDateFromUtcParts(utcDate)
+}
+
+/** Suma/resta meses a una fecha ISO. Pensado para usarse sobre el dia 1 del mes (evita desbordes de dia). */
+export function addMonthsToIsoDate(isoDate: string, months: number) {
+  const { year, month, day } = parseIsoDateParts(isoDate)
+  const utcDate = new Date(Date.UTC(year, month - 1 + months, day))
+  return toIsoDateFromUtcParts(utcDate)
+}
+
+export function formatMonthLabelColombia(isoDate: string) {
+  const { year, month } = parseIsoDateParts(isoDate)
+  const utcDate = new Date(Date.UTC(year, month - 1, 1, 12))
+  const label = new Intl.DateTimeFormat('es-CO', {
+    timeZone: COLOMBIA_TIME_ZONE,
+    month: 'long',
+    year: 'numeric',
+  }).format(utcDate)
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
 export function formatDateTimeColombia(value: string | Date) {
   return new Date(value).toLocaleString('es-CO', { timeZone: COLOMBIA_TIME_ZONE })
 }

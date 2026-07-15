@@ -30,13 +30,15 @@ export function ClientesPage() {
 		city: '',
 	})
 
-	if (!user?.storeId) {
-		return <p className="text-sm text-rose-300">No hay tienda activa para gestionar clientes.</p>
-	}
-
-	const storeId = user.storeId
+	// storeId puede ser null en el primer render (antes de hidratar sesion).
+	// Los hooks de abajo deben ejecutarse siempre en el mismo orden, por eso
+	// el guard de "no hay tienda activa" se movio despues de todos los hooks.
+	const storeId = user?.storeId ?? null
 
 	async function loadStats() {
+		if (!storeId) {
+			return
+		}
 		setLoadingStats(true)
 		setStatsError(null)
 		try {
@@ -51,6 +53,9 @@ export function ClientesPage() {
 	}
 
 	async function refreshSelectedCustomer(customerId: string) {
+		if (!storeId) {
+			return
+		}
 		const customers = await listConfeccionCustomers(storeId, { includeInactive: true, limit: 500 })
 		const fresh = customers.find((item) => item.id === customerId) ?? null
 		setSelectedCustomer(fresh)
@@ -100,7 +105,7 @@ export function ClientesPage() {
 	}
 
 	async function saveCustomerEdit() {
-		if (!selectedCustomer) {
+		if (!selectedCustomer || !storeId) {
 			return
 		}
 
@@ -120,7 +125,7 @@ export function ClientesPage() {
 	}
 
 	async function handleDeactivateCustomer() {
-		if (!customerForDelete) {
+		if (!customerForDelete || !storeId) {
 			return
 		}
 
@@ -137,6 +142,10 @@ export function ClientesPage() {
 		} finally {
 			setDeleting(false)
 		}
+	}
+
+	if (!storeId) {
+		return <p className="text-sm text-rose-300">No hay tienda activa para gestionar clientes.</p>
 	}
 
 	return (
@@ -291,7 +300,7 @@ export function ClientesPage() {
 
 			{customerForDelete ? (
 				<div
-					className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
+					className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8"
 					onClick={() => {
 						if (!deleting) {
 							setCustomerForDelete(null)

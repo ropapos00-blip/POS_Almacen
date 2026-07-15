@@ -124,7 +124,7 @@ function ItemModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8">
       <div className="w-full max-w-2xl rounded-2xl border border-zinc-700 bg-zinc-900 p-5 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <div>
@@ -274,7 +274,7 @@ function RenameCategoryModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8">
       <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900 p-5 shadow-2xl">
         <h2 className="mb-4 text-lg font-semibold text-zinc-100">Editar categoría</h2>
         {feedback && (
@@ -325,7 +325,7 @@ function CategoryModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8">
       <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900 p-5 shadow-2xl">
         <h2 className="mb-4 text-lg font-semibold text-zinc-100">Nueva categoría</h2>
         {feedback && (
@@ -371,6 +371,7 @@ export function InventoryPage() {
 
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
   const [categorySearch, setCategorySearch] = useState('')
+  const [itemSearch, setItemSearch] = useState('')
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [renameCategoryTarget, setRenameCategoryTarget] = useState<{ id: string; name: string } | null>(null)
   const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<{ id: string; name: string } | null>(null)
@@ -467,13 +468,22 @@ export function InventoryPage() {
         </div>
       )}
 
-      <input
-        type="text"
-        placeholder="Buscar categoría…"
-        value={categorySearch}
-        onChange={(e) => setCategorySearch(e.target.value)}
-        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-amber-400 focus:outline-none"
-      />
+      <div className="grid gap-2 sm:grid-cols-2">
+        <input
+          type="text"
+          placeholder="Buscar categoría…"
+          value={categorySearch}
+          onChange={(e) => setCategorySearch(e.target.value)}
+          className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-amber-400 focus:outline-none"
+        />
+        <input
+          type="text"
+          placeholder="Subfiltro: buscar artículo por descripción o referencia…"
+          value={itemSearch}
+          onChange={(e) => setItemSearch(e.target.value)}
+          className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-amber-400 focus:outline-none"
+        />
+      </div>
 
       <div className="ghost-scrollbar max-h-[70vh] space-y-3 overflow-y-auto pr-1">
         {categories
@@ -482,8 +492,20 @@ export function InventoryPage() {
             cat.name.toLowerCase().includes(categorySearch.trim().toLowerCase())
           )
           .map((cat) => {
-          const catItems = items.filter((it) => it.categoryId === cat.id)
-          const isExpanded = expandedCategories.has(cat.id)
+          const trimmedItemSearch = itemSearch.trim().toLowerCase()
+          const allCatItems = items.filter((it) => it.categoryId === cat.id)
+          const catItems = trimmedItemSearch === ''
+            ? allCatItems
+            : allCatItems.filter((it) =>
+                it.description.toLowerCase().includes(trimmedItemSearch) ||
+                it.reference.toLowerCase().includes(trimmedItemSearch)
+              )
+
+          if (trimmedItemSearch !== '' && catItems.length === 0) {
+            return null
+          }
+
+          const isExpanded = trimmedItemSearch !== '' ? true : expandedCategories.has(cat.id)
 
           return (
             <article key={cat.id} className="rounded-2xl border border-zinc-800 bg-zinc-900/70">
@@ -622,7 +644,7 @@ export function InventoryPage() {
       )}
 
       {deleteCategoryTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8">
           <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
             <h2 className="text-base font-semibold text-zinc-100">¿Eliminar categoría?</h2>
             <p className="mt-2 text-sm text-zinc-400">
@@ -651,7 +673,7 @@ export function InventoryPage() {
       )}
 
       {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8">
           <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
             <h2 className="text-base font-semibold text-zinc-100">¿Eliminar ítem?</h2>
             <p className="mt-2 text-sm text-zinc-400">

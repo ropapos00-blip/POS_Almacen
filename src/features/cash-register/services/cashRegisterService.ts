@@ -171,10 +171,19 @@ export async function getDaySalesSummary(
   storeId: string,
   fromDateIso: string,
   toDateIso?: string,
+  /**
+   * Rango exacto (timestamps ISO) para acotar ventas/facturas/separados a la
+   * ventana real de la sesion (desde que se abrio hasta que se cerro o ahora).
+   * Los gastos siguen acotados por dia calendario (expense_date no tiene hora).
+   * Si no se provee, se usa el dia completo de fromDateIso..toDateIso (comportamiento previo).
+   */
+  preciseRange?: { fromIso: string; toIso: string },
 ): Promise<DaySalesSummary> {
   const endDate = toDateIso ?? fromDateIso
-  const startIso = toUtcIsoStartOfColombiaDay(fromDateIso)
-  const endIso = toUtcIsoEndOfColombiaDay(endDate)
+  // Ventas/facturas/separados usan el rango exacto de la sesion cuando se provee;
+  // los gastos siempre usan el dia calendario porque expense_date no tiene hora.
+  const startIso = preciseRange?.fromIso ?? toUtcIsoStartOfColombiaDay(fromDateIso)
+  const endIso = preciseRange?.toIso ?? toUtcIsoEndOfColombiaDay(endDate)
 
   const [salesResult, invoicesResult, expensesResult, layawayPaymentsResult] = await Promise.all([
     supabase

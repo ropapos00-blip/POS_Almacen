@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { formatCop } from '../../../shared/utils/currency'
-import { addDaysToIsoDate, getTodayIsoDateColombia } from '../../../shared/utils/dateTime'
+import { addMonthsToIsoDate, endOfMonthIsoDate, formatMonthLabelColombia, getTodayIsoDateColombia, startOfMonthIsoDate, toUtcIsoEndOfColombiaDay } from '../../../shared/utils/dateTime'
 import { formatCopInput, parseCopIntegerInput } from '../../../shared/utils/numberInput'
 import { useAuthStore } from '../../auth/model/useAuthStore'
 import {
@@ -23,7 +23,6 @@ export function CierresCajaPage() {
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin'
   const canCashierClose = user?.role !== 'cashier' || user?.storeAllowCashierClose === true
   const todayIso = getTodayIsoDateColombia()
-  const tomorrowIso = addDaysToIsoDate(todayIso, 1)
 
   const cierreReceiptRef = useRef<HTMLDivElement>(null)
 
@@ -44,7 +43,18 @@ export function CierresCajaPage() {
   const summaryToDate = todayIso
   const isMultiDay = summaryFromDate !== summaryToDate
 
-  const summaryQuery = useDaySalesSummaryQuery(storeId, summaryFromDate, summaryToDate)
+  // Rango exacto (con hora) para no mezclar movimientos con otra sesion
+  // que haya estado abierta y cerrada el mismo dia calendario.
+  const summaryPreciseRange = session
+    ? {
+        fromIso: session.created_at,
+        toIso: session.status === 'closed' && session.closed_at
+          ? session.closed_at
+          : toUtcIsoEndOfColombiaDay(todayIso),
+      }
+    : undefined
+
+  const summaryQuery = useDaySalesSummaryQuery(storeId, summaryFromDate, summaryToDate, summaryPreciseRange)
   const summary = summaryQuery.data
 
   // ─── Mutations ──────────────────────────────────────────────────────────────
@@ -68,39 +78,38 @@ export function CierresCajaPage() {
   const [editNotesOpen, setEditNotesOpen] = useState('')
   const [editBaseFeedback, setEditBaseFeedback] = useState<string | null>(null)
 
-  // ─── Estado apertura siguiente dia ───────────────────────────────────────────
-  const [nextDayBaseInput, setNextDayBaseInput] = useState('')
-  const [nextDayNotesInput, setNextDayNotesInput] = useState('')
-  const [nextDayFeedback, setNextDayFeedback] = useState<string | null>(null)
-
   // ─── Estado modal historial (admin) ─────────────────────────────────────────
   const [showHistoryModal, setShowHistoryModal] = useState(false)
   const [selectedHistSession, setSelectedHistSession] = useState<CashRegisterSession | null>(null)
+  // 0 = mes actual, -1 = mes anterior, etc. Se resetea a 0 cada vez que se abre el modal.
+  const [historyMonthOffset, setHistoryMonthOffset] = useState(0)
 
-
-  // rango: mes actual para el historial
-  const monthStart = todayIso.slice(0, 8) + '01'
+  // rango: mes seleccionado en el historial (permite navegar a meses anteriores)
+  const historyMonthStart = addMonthsToIsoDate(startOfMonthIsoDate(todayIso), historyMonthOffset)
+  const historyMonthEnd = historyMonthOffset === 0 ? todayIso : endOfMonthIsoDate(historyMonthStart)
+  const historyMonthLabel = formatMonthLabelColombia(historyMonthStart)
   const historyQuery = useSessionsByRangeQuery(
     isAdmin && showHistoryModal ? storeId : undefined,
-    monthStart,
-    todayIso,
+    historyMonthStart,
+    historyMonthEnd,
   )
   const historySessions = historyQuery.data ?? []
 
-  // sesion de mañana (para saber si ya fue preparada)
-  const tomorrowSessionQuery = useSessionsByRangeQuery(
-    session?.status === 'closed' && isAdmin ? storeId : undefined,
-    tomorrowIso,
-    tomorrowIso,
-  )
-  const tomorrowSession = tomorrowSessionQuery.data?.[0] ?? null
-
   // resumen de sesión histórica seleccionada
   // Para sesiones abiertas el rango llega hasta hoy para incluir todos los dias
+  const histSummaryPreciseRange = selectedHistSession
+    ? {
+        fromIso: selectedHistSession.created_at,
+        toIso: selectedHistSession.status === 'closed' && selectedHistSession.closed_at
+          ? selectedHistSession.closed_at
+          : toUtcIsoEndOfColombiaDay(todayIso),
+      }
+    : undefined
   const histSummaryQuery = useDaySalesSummaryQuery(
     isAdmin && selectedHistSession ? storeId : undefined,
     selectedHistSession?.session_date ?? '',
     selectedHistSession?.status === 'open' ? todayIso : (selectedHistSession?.session_date ?? ''),
+    histSummaryPreciseRange,
   )
   const histSummary = histSummaryQuery.data
 
@@ -144,51 +153,6 @@ export function CierresCajaPage() {
       setNotesOpenInput('')
     } catch (e) {
       setOpenFeedback(e instanceof Error ? e.message : 'Error al abrir la sesion.')
-    }
-  }
-
-  async function handlePrepareTomorrow() {
-    setNextDayFeedback(null)
-    if (!storeId || !user?.id) return
-    const base = parseCopIntegerInput(nextDayBaseInput)
-    if (base < 0) {
-      setNextDayFeedback('La base no puede ser negativa.')
-      return
-    }
-    try {
-      await openMutation.mutateAsync({
-        storeId,
-        openedBy: user.id,
-        cashBase: base,
-        notesOpen: nextDayNotesInput,
-        sessionDate: tomorrowIso,
-      })
-      setNextDayBaseInput('')
-      setNextDayNotesInput('')
-    } catch (e) {
-      setNextDayFeedback(e instanceof Error ? e.message : 'Error al preparar la sesion.')
-    }
-  }
-
-  async function handleUpdateTomorrow() {
-    setNextDayFeedback(null)
-    if (!tomorrowSession) return
-    const base = parseCopIntegerInput(nextDayBaseInput || String(Math.trunc(tomorrowSession.cash_base)))
-    if (base < 0) {
-      setNextDayFeedback('La base no puede ser negativa.')
-      return
-    }
-    try {
-      await updateBaseMutation.mutateAsync({
-        sessionId: tomorrowSession.id,
-        cashBase: base,
-        notesOpen: nextDayNotesInput !== '' ? nextDayNotesInput : (tomorrowSession.notes_open ?? ''),
-      })
-      setNextDayBaseInput('')
-      setNextDayNotesInput('')
-      setNextDayFeedback('✓ Base actualizada.')
-    } catch (e) {
-      setNextDayFeedback(e instanceof Error ? e.message : 'Error al actualizar la base.')
     }
   }
 
@@ -386,7 +350,7 @@ export function CierresCajaPage() {
         {isAdmin && (
           <button
             type="button"
-            onClick={() => setShowHistoryModal(true)}
+            onClick={() => { setHistoryMonthOffset(0); setShowHistoryModal(true) }}
             className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:text-zinc-100"
           >
             Historial del mes
@@ -764,117 +728,6 @@ export function CierresCajaPage() {
             </article>
           </div>
 
-          {/* ── Preparar apertura del dia siguiente (solo admin) ─────────────── */}
-          {isAdmin ? (
-            <article className="rounded-2xl border border-zinc-700 bg-zinc-900/80 p-5">
-              <div className="flex items-center gap-2">
-                <h2 className="text-xl font-semibold text-zinc-100">Apertura del dia siguiente</h2>
-                {tomorrowSession ? (
-                  <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-300">
-                    Preparada
-                  </span>
-                ) : null}
-              </div>
-
-              {tomorrowSession ? (
-                <div className="mt-4 space-y-3">
-                  <p className="text-xs text-zinc-500">
-                    La sesion del{' '}
-                    {new Intl.DateTimeFormat('es-CO', {
-                      timeZone: 'America/Bogota',
-                      weekday: 'long',
-                      day: 'numeric',
-                      month: 'long',
-                    }).format(new Date(`${tomorrowIso}T12:00:00`))}{' '}
-                    ya fue preparada. Puedes ajustar la base antes de que inicie el dia.
-                  </p>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="space-y-1">
-                      <span className="text-xs text-zinc-400">Base en efectivo</span>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={nextDayBaseInput || formatCopInput(Math.trunc(tomorrowSession.cash_base))}
-                        onChange={(e) => {
-                          setNextDayBaseInput(formatCopInput(e.target.value))
-                          setNextDayFeedback(null)
-                        }}
-                        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs text-zinc-400">Observaciones (opcional)</span>
-                      <input
-                        type="text"
-                        value={nextDayNotesInput !== '' ? nextDayNotesInput : (tomorrowSession.notes_open ?? '')}
-                        onChange={(e) => setNextDayNotesInput(e.target.value)}
-                        placeholder="Notas de apertura..."
-                        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-                      />
-                    </label>
-                  </div>
-                  {nextDayFeedback ? (
-                    <p className={`text-xs ${nextDayFeedback.startsWith('✓') ? 'text-emerald-300' : 'text-amber-300'}`}>
-                      {nextDayFeedback}
-                    </p>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => { void handleUpdateTomorrow() }}
-                    disabled={updateBaseMutation.isPending}
-                    className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-900 disabled:opacity-50"
-                  >
-                    {updateBaseMutation.isPending ? 'Guardando...' : 'Guardar cambios'}
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <p className="mt-1 text-xs text-zinc-500">
-                    Configura la base en efectivo para que el cajero pueda empezar a trabajar
-                    mañana sin esperas.
-                  </p>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <label className="space-y-1">
-                      <span className="text-xs text-zinc-400">Base en efectivo</span>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={nextDayBaseInput}
-                        onChange={(e) => {
-                          setNextDayBaseInput(formatCopInput(e.target.value))
-                          setNextDayFeedback(null)
-                        }}
-                        placeholder="Ej: 200.000"
-                        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs text-zinc-400">Observaciones (opcional)</span>
-                      <input
-                        type="text"
-                        value={nextDayNotesInput}
-                        onChange={(e) => setNextDayNotesInput(e.target.value)}
-                        placeholder="Notas de apertura..."
-                        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm"
-                      />
-                    </label>
-                  </div>
-                  {nextDayFeedback ? (
-                    <p className="mt-2 text-xs text-amber-300">{nextDayFeedback}</p>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => { void handlePrepareTomorrow() }}
-                    disabled={openMutation.isPending || !nextDayBaseInput}
-                    className="mt-4 rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-900 disabled:opacity-50"
-                  >
-                    {openMutation.isPending ? 'Preparando...' : 'Preparar apertura de mañana'}
-                  </button>
-                </>
-              )}
-            </article>
-          ) : null}
-
           {/* ── Abrir nueva sesion (disponible para todos al haber caja cerrada) ─── */}
           <article className="rounded-2xl border border-zinc-700 bg-zinc-900/80 p-5">
             <h2 className="text-xl font-semibold text-zinc-100">Abrir nueva sesion</h2>
@@ -935,7 +788,7 @@ export function CierresCajaPage() {
 
       {/* ── MODAL: editar base ──────────────────────────────────────────────── */}
       {showEditBaseModal ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8">
           <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
             <h3 className="text-lg font-semibold text-zinc-100">Editar base en efectivo</h3>
             <p className="mt-1 text-xs text-zinc-500">
@@ -1119,6 +972,27 @@ export function CierresCajaPage() {
               </button>
             </div>
 
+            {!selectedHistSession ? (
+              <div className="flex items-center justify-between gap-2 border-b border-zinc-800 px-4 py-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setHistoryMonthOffset((v) => v - 1)}
+                  className="rounded-lg border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:text-zinc-100"
+                >
+                  ‹ Anterior
+                </button>
+                <span className="text-xs font-medium text-zinc-300 capitalize">{historyMonthLabel}</span>
+                <button
+                  type="button"
+                  onClick={() => setHistoryMonthOffset((v) => Math.min(0, v + 1))}
+                  disabled={historyMonthOffset === 0}
+                  className="rounded-lg border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Siguiente ›
+                </button>
+              </div>
+            ) : null}
+
             {/* Cuerpo con scroll */}
             <div className="overflow-y-auto ghost-scrollbar flex-1 px-3 py-3 space-y-2">
               {selectedHistSession ? (
@@ -1156,33 +1030,40 @@ export function CierresCajaPage() {
                         </div>
                       </div>
 
-                      {/* Facturas */}
+                      {/* Facturas manuales y separados */}
                       <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 space-y-1.5">
-                        <p className="text-zinc-500 uppercase tracking-wider font-semibold">Facturas manuales</p>
+                        <p className="text-zinc-500 uppercase tracking-wider font-semibold">Facturas manuales y separados</p>
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-600">Facturas manuales</p>
                         <Row label="Efectivo" value={formatCop(histSummary?.invoiceCash ?? 0)} />
                         {Object.entries(histSummary?.invoiceByMethod ?? {}).map(([m, v]) => (
-                          <Row key={m} label={{addi:'Addi',credilondon:'CREDILONDON',dataphone:'Datáfono',bancolombia:'Bancolombia',daviplata:'Daviplata',nequi:'Nequi'}[m] ?? m} value={formatCop(v)} />
+                          <Row key={m} label={{addi:'Addi',credilondon:'CREDILONDON',dataphone:'Datáfono',bancolombia:'Bancolombia',daviplata:'Daviplata',nequi:'Nequi',rapirecarga:'Rapirecarga'}[m] ?? m} value={formatCop(v)} />
                         ))}
                         <div className="border-t border-zinc-800 pt-1.5">
                           <Row label="Total facturas" value={formatCop(histSummary?.invoiceTotal ?? 0)} valueClass="text-amber-300 font-medium" />
                         </div>
-                      </div>
 
-                      {/* Separados */}
-                      {(histSummary?.layawayTotal ?? 0) > 0 && (
-                        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 space-y-1.5">
-                          <p className="text-zinc-500 uppercase tracking-wider font-semibold">Separados</p>
-                          {(histSummary?.layawayCash ?? 0) > 0 && (
-                            <Row label="Efectivo" value={formatCop(histSummary?.layawayCash ?? 0)} />
-                          )}
-                          {Object.entries(histSummary?.layawayByMethod ?? {}).map(([m, v]) => (
-                            <Row key={m} label={{addi:'Addi',credilondon:'CREDILONDON',dataphone:'Datáfono',bancolombia:'Bancolombia',daviplata:'Daviplata',nequi:'Nequi'}[m] ?? m} value={formatCop(v)} />
-                          ))}
-                          <div className="border-t border-zinc-800 pt-1.5">
-                            <Row label="Total separados" value={formatCop(histSummary?.layawayTotal ?? 0)} valueClass="text-sky-300 font-medium" />
-                          </div>
-                        </div>
-                      )}
+                        {(histSummary?.layawayTotal ?? 0) > 0 && (
+                          <>
+                            <p className="pt-1 text-[10px] font-medium uppercase tracking-wide text-zinc-600">Separados (abonos)</p>
+                            {(histSummary?.layawayCash ?? 0) > 0 && (
+                              <Row label="Efectivo" value={formatCop(histSummary?.layawayCash ?? 0)} />
+                            )}
+                            {Object.entries(histSummary?.layawayByMethod ?? {}).map(([m, v]) => (
+                              <Row key={m} label={{addi:'Addi',credilondon:'CREDILONDON',dataphone:'Datáfono',bancolombia:'Bancolombia',daviplata:'Daviplata',nequi:'Nequi',rapirecarga:'Rapirecarga'}[m] ?? m} value={formatCop(v)} />
+                            ))}
+                            <div className="border-t border-zinc-800 pt-1.5">
+                              <Row label="Total separados" value={formatCop(histSummary?.layawayTotal ?? 0)} valueClass="text-sky-300 font-medium" />
+                            </div>
+                            <div className="border-t border-zinc-800 pt-1.5">
+                              <Row
+                                label="Total facturas + separados"
+                                value={formatCop((histSummary?.invoiceTotal ?? 0) + (histSummary?.layawayTotal ?? 0))}
+                                valueClass="text-amber-200 font-semibold"
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
 
                       {/* Cierre */}
                       <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 space-y-1.5">
@@ -1232,7 +1113,7 @@ export function CierresCajaPage() {
                   {historyQuery.isLoading ? (
                     <p className="text-xs text-zinc-500 py-2">Cargando historial...</p>
                   ) : historySessions.length === 0 ? (
-                    <p className="text-xs text-zinc-500 py-2">No hay sesiones este mes.</p>
+                    <p className="text-xs text-zinc-500 py-2">No hay sesiones en {historyMonthLabel}.</p>
                   ) : (
                     historySessions.map((s) => (
                       <button
@@ -1331,6 +1212,7 @@ const INVOICE_METHOD_LABELS: Record<string, string> = {
   bancolombia: 'Bancolombia',
   daviplata: 'Daviplata',
   nequi: 'Nequi',
+  rapirecarga: 'Rapirecarga',
 }
 
 function SummaryBreakdown({
@@ -1388,12 +1270,13 @@ function SummaryBreakdown({
             </div>
           </div>
 
-          {/* Facturas manuales */}
+          {/* Facturas manuales y separados */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
-              Facturas Manuales
+              Facturas Manuales y Separados
             </p>
             <div className="space-y-1.5">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-600">Facturas manuales</p>
               <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
                 <span className="text-zinc-400">Efectivo</span>
                 <span className="text-zinc-200">{formatCop(invoiceCash)}</span>
@@ -1408,35 +1291,34 @@ function SummaryBreakdown({
                 <span className="text-zinc-300">Total facturas</span>
                 <span className="text-amber-300">{formatCop(invoiceTotal)}</span>
               </div>
+
+              {layawayTotal > 0 && (
+                <>
+                  <p className="pt-1 text-[11px] font-medium uppercase tracking-wide text-zinc-600">Separados (abonos)</p>
+                  {layawayCash > 0 && (
+                    <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
+                      <span className="text-zinc-400">Efectivo</span>
+                      <span className="text-zinc-200">{formatCop(layawayCash)}</span>
+                    </div>
+                  )}
+                  {Object.entries(layawayByMethod).map(([method, amount]) => (
+                    <div key={method} className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
+                      <span className="text-zinc-400">{INVOICE_METHOD_LABELS[method] ?? method}</span>
+                      <span className="text-zinc-200">{formatCop(amount)}</span>
+                    </div>
+                  ))}
+                  <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm font-medium">
+                    <span className="text-zinc-300">Total separados</span>
+                    <span className="text-sky-300">{formatCop(layawayTotal)}</span>
+                  </div>
+                  <div className="rounded-md border border-zinc-700 bg-zinc-800/60 px-3 py-2 flex justify-between text-sm font-semibold">
+                    <span className="text-zinc-200">Total facturas + separados</span>
+                    <span className="text-amber-200">{formatCop(invoiceTotal + layawayTotal)}</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
-
-          {/* Separados */}
-          {layawayTotal > 0 && (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
-                Separados
-              </p>
-              <div className="space-y-1.5">
-                {layawayCash > 0 && (
-                  <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
-                    <span className="text-zinc-400">Efectivo</span>
-                    <span className="text-zinc-200">{formatCop(layawayCash)}</span>
-                  </div>
-                )}
-                {Object.entries(layawayByMethod).map(([method, amount]) => (
-                  <div key={method} className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
-                    <span className="text-zinc-400">{INVOICE_METHOD_LABELS[method] ?? method}</span>
-                    <span className="text-zinc-200">{formatCop(amount)}</span>
-                  </div>
-                ))}
-                <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm font-medium">
-                  <span className="text-zinc-300">Total separados</span>
-                  <span className="text-sky-300">{formatCop(layawayTotal)}</span>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Gastos */}
           <div>

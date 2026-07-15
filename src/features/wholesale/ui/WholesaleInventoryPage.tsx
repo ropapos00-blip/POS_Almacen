@@ -1508,7 +1508,7 @@ export function WholesaleInventoryPage() {
 
       {detailTarget ? (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8"
           onClick={() => setDetailTarget(null)}
         >
           <div
@@ -1568,7 +1568,7 @@ export function WholesaleInventoryPage() {
 
       {deleteTarget ? (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8"
           onClick={() => setDeleteTarget(null)}
         >
           <div
@@ -1607,7 +1607,7 @@ export function WholesaleInventoryPage() {
 
       {editTarget ? (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8"
           onClick={closeEditModal}
         >
           <div
@@ -2174,7 +2174,7 @@ export function WholesaleInventoryPage() {
 
       {showResetInventoryModal ? (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8"
           onClick={() => setShowResetInventoryModal(false)}
         >
           <div

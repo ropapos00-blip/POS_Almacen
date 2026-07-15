@@ -535,7 +535,7 @@ export function ManualInvoicesPage() {
           <>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-                <p className="text-xs text-zinc-500">Ventas del dia</p>
+                <p className="text-xs text-zinc-500">Facturas manuales del dia</p>
                 <p className="mt-1 text-lg font-semibold text-emerald-300">
                   {formatCop(manualKpisQuery.data?.dayTotal ?? 0)}
                 </p>
@@ -544,7 +544,7 @@ export function ManualInvoicesPage() {
                 </p>
               </article>
               <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-                <p className="text-xs text-zinc-500">Ventas del mes</p>
+                <p className="text-xs text-zinc-500">Facturas manuales del mes</p>
                 <p className="mt-1 text-lg font-semibold text-amber-300">
                   {formatCop(manualKpisQuery.data?.monthTotal ?? 0)}
                 </p>
@@ -553,7 +553,7 @@ export function ManualInvoicesPage() {
                 </p>
               </article>
               <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-                <p className="text-xs text-zinc-500">Ventas del año</p>
+                <p className="text-xs text-zinc-500">Facturas manuales del año</p>
                 <p className="mt-1 text-lg font-semibold text-sky-300">
                   {formatCop(manualKpisQuery.data?.yearTotal ?? 0)}
                 </p>
@@ -595,7 +595,10 @@ export function ManualInvoicesPage() {
             {/* KPIs de cierre de caja por método de pago */}
             <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-zinc-400 font-semibold">Cierre de caja por método de pago</p>
+                <div>
+                  <p className="text-xs text-zinc-400 font-semibold">Cierre de caja por método de pago</p>
+                  <p className="text-[11px] text-zinc-600">Incluye facturas manuales y abonos de separados.</p>
+                </div>
                 <label className="flex items-center gap-2">
                   <span className="text-xs text-zinc-500">Día:</span>
                   <input
@@ -1064,7 +1067,7 @@ export function ManualInvoicesPage() {
       <ManualInvoiceReceipt invoice={selectedInvoice} receiptRef={receiptRef} />
 
       {pinModalOpen ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8">
           <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
             <h3 className="text-lg font-semibold text-zinc-100">Autorizar descuento</h3>
             <p className="mt-2 text-sm text-zinc-400">
@@ -1125,7 +1128,7 @@ export function ManualInvoicesPage() {
       ) : null}
 
       {invoiceForEdit ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8">
           <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
             <h3 className="text-lg font-semibold text-zinc-100">Editar factura manual</h3>
             <p className="mt-2 text-sm text-zinc-400">Factura {invoiceForEdit.invoice_number}</p>
@@ -1164,6 +1167,7 @@ export function ManualInvoicesPage() {
                   <option value="bancolombia">Bancolombia</option>
                   <option value="daviplata">Daviplata</option>
                   <option value="nequi">Nequi</option>
+                  <option value="rapirecarga">Rapirecarga</option>
                   <option value="mixed">Mixto</option>
                 </select>
               </label>
@@ -1186,6 +1190,7 @@ export function ManualInvoicesPage() {
                         <option value="bancolombia">Bancolombia</option>
                         <option value="daviplata">Daviplata</option>
                         <option value="nequi">Nequi</option>
+                        <option value="rapirecarga">Rapirecarga</option>
                       </select>
                     </label>
                     <label className="space-y-1">
@@ -1215,6 +1220,7 @@ export function ManualInvoicesPage() {
                         <option value="bancolombia">Bancolombia</option>
                         <option value="daviplata">Daviplata</option>
                         <option value="nequi">Nequi</option>
+                        <option value="rapirecarga">Rapirecarga</option>
                       </select>
                     </label>
                     <label className="space-y-1">
@@ -1268,7 +1274,7 @@ export function ManualInvoicesPage() {
       ) : null}
 
       {invoiceForDelete ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8">
           <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
             <h3 className="text-lg font-semibold text-zinc-100">Eliminar factura manual</h3>
             <p className="mt-2 text-sm text-zinc-400">

@@ -550,9 +550,9 @@ export function DevolucionesPage() {
   return (
     <section className="space-y-4">
       <header>
-        <h1 className="text-2xl font-semibold text-zinc-100">Devoluciones</h1>
+        <h1 className="text-2xl font-semibold text-zinc-100">Cambios</h1>
         <p className="mt-1 text-sm text-zinc-400">
-          Módulo separado para devoluciones. Cada devolución regresa inventario y crea saldo a favor.
+          Módulo separado para devoluciones y cambios. Cada devolución regresa inventario y crea saldo a favor.
         </p>
       </header>
 
@@ -609,29 +609,24 @@ export function DevolucionesPage() {
               </div>
 
               <div className="mt-3">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {invoice.customer_phone ? (
                   <button
                     type="button"
                     onClick={() => openReturnInvoiceModal(invoice)}
-                    disabled={!invoice.customer_phone || invoice.exchange_role === 'changed_original'}
+                    disabled={invoice.exchange_role === 'changed_original'}
                     className="inline-flex h-8 w-full items-center justify-center rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-zinc-900 disabled:text-zinc-500"
                   >
-                    {!invoice.customer_phone
-                      ? 'Requiere teléfono del cliente'
-                      : invoice.exchange_role === 'changed_original'
-                        ? 'Ya fue cambiada'
-                        : 'Crear devolución'}
+                    {invoice.exchange_role === 'changed_original' ? 'Ya fue cambiada' : 'Crear devolución'}
                   </button>
-                  {!invoice.customer_phone ? (
-                    <button
-                      type="button"
-                      onClick={() => openEditClientModal(invoice)}
-                      className="inline-flex h-8 w-full items-center justify-center rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-500/20"
-                    >
-                      Editar cliente
-                    </button>
-                  ) : null}
-                </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => openEditClientModal(invoice)}
+                    className="inline-flex h-8 w-full items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-xs font-medium text-zinc-300 transition-colors hover:border-amber-500/40 hover:text-amber-200"
+                  >
+                    Agregar teléfono para habilitar devolución/cambio
+                  </button>
+                )}
               </div>
             </li>
           ))}
@@ -639,7 +634,7 @@ export function DevolucionesPage() {
       </div>
 
       {invoiceForClientEdit ? (
-        <div className="fixed inset-0 z-60 grid place-items-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-60 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8">
           <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
             <h3 className="text-lg font-semibold text-zinc-100">Editar cliente de factura</h3>
             <p className="mt-1 text-xs text-zinc-500">{invoiceForClientEdit.invoice_number}</p>

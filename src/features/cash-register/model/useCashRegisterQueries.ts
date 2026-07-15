@@ -47,11 +47,19 @@ export function useSessionsByRangeQuery(storeId?: string, fromDate?: string, toD
 /**
  * Resumen de ventas/gastos para un periodo.
  * Si toDateIso es distinto de fromDateIso, acumula datos de multiples dias.
+ * `preciseRange` acota ventas/facturas/separados a la ventana exacta de la
+ * sesion (desde que se abrio hasta que se cerro o hasta ahora), evitando que
+ * dos sesiones abiertas el mismo dia calendario mezclen sus movimientos.
  */
-export function useDaySalesSummaryQuery(storeId?: string, fromDateIso?: string, toDateIso?: string) {
+export function useDaySalesSummaryQuery(
+  storeId?: string,
+  fromDateIso?: string,
+  toDateIso?: string,
+  preciseRange?: { fromIso: string; toIso: string },
+) {
   return useQuery({
-    queryKey: ['cash-register', 'summary', storeId, fromDateIso, toDateIso],
-    queryFn: () => getDaySalesSummary(storeId as string, fromDateIso as string, toDateIso),
+    queryKey: ['cash-register', 'summary', storeId, fromDateIso, toDateIso, preciseRange?.fromIso, preciseRange?.toIso],
+    queryFn: () => getDaySalesSummary(storeId as string, fromDateIso as string, toDateIso, preciseRange),
     enabled: Boolean(storeId) && Boolean(fromDateIso),
     refetchInterval: 30_000,
   })

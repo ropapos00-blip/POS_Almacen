@@ -1198,7 +1198,7 @@ export function LayawaysPage() {
 
       {/* PIN authorization modal */}
       {authModalOpen ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8">
           <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
             <h3 className="text-lg font-semibold text-zinc-100">Autorizar descuento</h3>
             <p className="mt-2 text-sm text-zinc-400">

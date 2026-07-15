@@ -2134,7 +2134,7 @@ export function WholesalePage() {
       <WholesaleInvoiceLetter invoice={selectedInvoice} printRef={printRef} />
 
       {invoiceForEdit ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8">
           <div className="w-full max-w-5xl rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
             <h3 className="text-lg font-semibold text-zinc-100">Editar factura</h3>
             <p className="mt-2 text-sm text-zinc-400">Factura {invoiceForEdit.invoice_number}</p>
@@ -2405,7 +2405,7 @@ export function WholesalePage() {
       ) : null}
 
       {invoiceForDelete ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8">
           <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
             <h3 className="text-lg font-semibold text-zinc-100">Eliminar factura</h3>
             <p className="mt-2 text-sm text-zinc-400">
@@ -2437,7 +2437,7 @@ export function WholesalePage() {
 
       {financeMovementForDelete ? (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8"
           onClick={() => {
             if (!deleteFinanceMovementMutation.isPending) {
               setFinanceMovementForDelete(null)
@@ -2491,7 +2491,7 @@ export function WholesalePage() {
       ) : null}
 
       {invoiceForPayment ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8">
           <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
             <h3 className="text-lg font-semibold text-zinc-100">Registrar abono</h3>
             <p className="mt-2 text-sm text-zinc-400">
@@ -2553,7 +2553,7 @@ export function WholesalePage() {
       ) : null}
 
       {showMissingProductModal ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 py-8">
           <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
             <h3 className="text-lg font-semibold text-zinc-100">No se puede guardar</h3>
             <p className="mt-2 text-sm text-zinc-400">
