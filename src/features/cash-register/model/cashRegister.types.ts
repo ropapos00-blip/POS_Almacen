@@ -24,20 +24,34 @@ export interface DaySalesSummary {
   posTotal: number
   /** Desglose de ventas POS por metodo de pago */
   posByMethod: Record<string, number>
-  /** Facturas manuales pagadas en efectivo */
+  /** Facturas manuales ACTIVAS pagadas en efectivo */
   invoiceCash: number
-  /** Total facturas manuales activas */
+  /** Total facturas manuales ACTIVAS */
   invoiceTotal: number
-  /** Desglose de facturas manuales por método (excluye efectivo) */
+  /** Desglose de facturas manuales ACTIVAS por método (excluye efectivo) */
   invoiceByMethod: Record<string, number>
-  /** Total gastos del dia */
+  /** Facturas manuales ANULADAS pagadas en efectivo */
+  invoiceVoidedCash: number
+  /** Total facturas manuales ANULADAS (deducción) */
+  invoiceVoidedTotal: number
+  /** Desglose de facturas manuales ANULADAS por método */
+  invoiceVoidedByMethod: Record<string, number>
+  /** Total gastos ACTIVOS del dia */
   expensesTotal: number
-  /** Abonos a separados pagados en efectivo */
+  /** Total gastos ANULADOS/BORRADOS del dia (deducción) */
+  expensesVoidedTotal: number
+  /** Abonos a separados ACTIVOS pagados en efectivo */
   layawayCash: number
-  /** Total abonos a separados del dia */
+  /** Total abonos a separados ACTIVOS del dia */
   layawayTotal: number
-  /** Desglose de abonos a separados por metodo de pago (excluye efectivo) */
+  /** Desglose de abonos a separados ACTIVOS por metodo de pago (excluye efectivo) */
   layawayByMethod: Record<string, number>
+  /** Abonos a separados ANULADOS pagados en efectivo */
+  layawayVoidedCash: number
+  /** Total abonos a separados ANULADOS */
+  layawayVoidedTotal: number
+  /** Desglose de abonos a separados ANULADOS por método */
+  layawayVoidedByMethod: Record<string, number>
 }
 
 export interface OpenSessionInput {

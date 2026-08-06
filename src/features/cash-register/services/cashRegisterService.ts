@@ -75,6 +75,7 @@ export async function openSession(input: OpenSessionInput): Promise<CashRegister
  * Valida que los cálculos de un resumen diario sean consistentes.
  * Detecta inconsistencias en sumas de métodos vs totales reportados.
  * NO lanza error, solo retorna validación para que UI pueda alertar.
+ * Ahora también valida facturas/gastos anulados.
  */
 export function validateDaySalesSummary(summary: DaySalesSummary): {
   isValid: boolean
@@ -100,21 +101,46 @@ export function validateDaySalesSummary(summary: DaySalesSummary): {
     )
   }
 
-  // Validar facturas
+  // Validar facturas ACTIVAS
   const invoiceByMethodSum = Object.values(summary.invoiceByMethod).reduce((a, b) => a + b, 0)
   const invoiceTotalRecalc = summary.invoiceCash + invoiceByMethodSum
   if (Math.abs(invoiceTotalRecalc - summary.invoiceTotal) > 0.01) {
     errors.push(
-      `Facturas: cash (${summary.invoiceCash}) + otros (${invoiceByMethodSum}) ≠ total (${summary.invoiceTotal})`,
+      `Facturas activas: cash (${summary.invoiceCash}) + otros (${invoiceByMethodSum}) ≠ total (${summary.invoiceTotal})`,
     )
   }
 
-  // Validar separados
+  // Validar facturas ANULADAS
+  const invoiceVoidedByMethodSum = Object.values(summary.invoiceVoidedByMethod).reduce((a, b) => a + b, 0)
+  const invoiceVoidedTotalRecalc = summary.invoiceVoidedCash + invoiceVoidedByMethodSum
+  if (Math.abs(invoiceVoidedTotalRecalc - summary.invoiceVoidedTotal) > 0.01) {
+    warnings.push(
+      `Facturas anuladas: cash (${summary.invoiceVoidedCash}) + otros (${invoiceVoidedByMethodSum}) ≠ total (${summary.invoiceVoidedTotal})`,
+    )
+  }
+
+  // Validar separados ACTIVOS
   const layawayByMethodSum = Object.values(summary.layawayByMethod).reduce((a, b) => a + b, 0)
   const layawayTotalRecalc = summary.layawayCash + layawayByMethodSum
   if (Math.abs(layawayTotalRecalc - summary.layawayTotal) > 0.01) {
     errors.push(
-      `Separados: cash (${summary.layawayCash}) + otros (${layawayByMethodSum}) ≠ total (${summary.layawayTotal})`,
+      `Separados activos: cash (${summary.layawayCash}) + otros (${layawayByMethodSum}) ≠ total (${summary.layawayTotal})`,
+    )
+  }
+
+  // Validar separados ANULADOS
+  const layawayVoidedByMethodSum = Object.values(summary.layawayVoidedByMethod).reduce((a, b) => a + b, 0)
+  const layawayVoidedTotalRecalc = summary.layawayVoidedCash + layawayVoidedByMethodSum
+  if (Math.abs(layawayVoidedTotalRecalc - summary.layawayVoidedTotal) > 0.01) {
+    warnings.push(
+      `Separados anulados: cash (${summary.layawayVoidedCash}) + otros (${layawayVoidedByMethodSum}) ≠ total (${summary.layawayVoidedTotal})`,
+    )
+  }
+
+  // Alertar si hay items anulados el mismo día de cierre
+  if (summary.invoiceVoidedTotal > 0 || summary.expensesVoidedTotal > 0 || summary.layawayVoidedTotal > 0) {
+    warnings.push(
+      `⚠️  Hay transacciones anuladas hoy (no se incluyen en el efectivo esperado, solo auditoría)`,
     )
   }
 
@@ -281,7 +307,8 @@ export async function getDaySalesSummary(
   const startIso = preciseRange?.fromIso ?? toUtcIsoStartOfColombiaDay(fromDateIso)
   const endIso = preciseRange?.toIso ?? toUtcIsoEndOfColombiaDay(endDate)
 
-  const [salesResult, invoicesResult, expensesResult, layawayPaymentsResult] = await Promise.all([
+  // Queries para items ACTIVOS
+  const [salesResult, invoicesActiveResult, expensesActiveResult, layawayPaymentsResult] = await Promise.all([
     supabase
       .from('sales')
       .select('grand_total, sale_payments(method, amount)')
@@ -315,10 +342,32 @@ export async function getDaySalesSummary(
       .lte('created_at', endIso),
   ])
 
+  // Queries para items VOIDED/DELETED (is_active=false)
+  const [invoicesVoidedResult, expensesVoidedResult] = await Promise.all([
+    supabase
+      .from('manual_invoices')
+      .select('grand_total, payment_method, payment_reference')
+      .eq('store_id', storeId)
+      .eq('source', 'provisional')
+      .eq('is_active', false)
+      .gte('created_at', startIso)
+      .lte('created_at', endIso),
+
+    supabase
+      .from('manual_invoice_expenses')
+      .select('amount')
+      .eq('store_id', storeId)
+      .eq('is_active', false)
+      .gte('expense_date', fromDateIso)
+      .lte('expense_date', endDate),
+  ])
+
   if (salesResult.error) throw new Error(salesResult.error.message)
-  if (invoicesResult.error) throw new Error(invoicesResult.error.message)
-  if (expensesResult.error) throw new Error(expensesResult.error.message)
+  if (invoicesActiveResult.error) throw new Error(invoicesActiveResult.error.message)
+  if (expensesActiveResult.error) throw new Error(expensesActiveResult.error.message)
   if (layawayPaymentsResult.error) throw new Error(layawayPaymentsResult.error.message)
+  if (invoicesVoidedResult.error) throw new Error(invoicesVoidedResult.error.message)
+  if (expensesVoidedResult.error) throw new Error(expensesVoidedResult.error.message)
 
   const posByMethod: Record<string, number> = {}
   let posTotal = 0
@@ -337,11 +386,12 @@ export async function getDaySalesSummary(
   const posCard = posByMethod['card'] ?? 0
   const posTransfer = posByMethod['transfer'] ?? 0
 
+  // ─── FACTURAS ACTIVAS ───
   let invoiceCash = 0
   let invoiceTotal = 0
   const invoiceByMethod: Record<string, number> = {}
 
-  for (const inv of invoicesResult.data ?? []) {
+  for (const inv of invoicesActiveResult.data ?? []) {
     const amount = Number(inv.grand_total ?? 0)
     invoiceTotal += amount
     if (inv.payment_method === 'cash') {
@@ -364,14 +414,51 @@ export async function getDaySalesSummary(
     }
   }
 
-  const expensesTotal = (expensesResult.data ?? []).reduce(
+  // ─── FACTURAS ANULADAS (para auditoría) ───
+  let invoiceVoidedCash = 0
+  let invoiceVoidedTotal = 0
+  const invoiceVoidedByMethod: Record<string, number> = {}
+
+  for (const inv of invoicesVoidedResult.data ?? []) {
+    const amount = Number(inv.grand_total ?? 0)
+    invoiceVoidedTotal += amount
+    if (inv.payment_method === 'cash') {
+      invoiceVoidedCash += amount
+    } else if (inv.payment_method === 'mixed' && inv.payment_reference) {
+      const parts = (inv.payment_reference as string).split(':')
+      if (parts.length >= 4) {
+        const m1 = parts[0]
+        const a1 = Number(parts[1]) || 0
+        const m2 = parts[2]
+        const a2 = Number(parts[3]) || 0
+        if (m1 === 'cash') invoiceVoidedCash += a1
+        else if (m1) invoiceVoidedByMethod[m1] = (invoiceVoidedByMethod[m1] ?? 0) + a1
+        if (m2 === 'cash') invoiceVoidedCash += a2
+        else if (m2) invoiceVoidedByMethod[m2] = (invoiceVoidedByMethod[m2] ?? 0) + a2
+      }
+    } else if (inv.payment_method) {
+      invoiceVoidedByMethod[inv.payment_method] = (invoiceVoidedByMethod[inv.payment_method] ?? 0) + amount
+    }
+  }
+
+  // ─── GASTOS ───
+  const expensesTotal = (expensesActiveResult.data ?? []).reduce(
     (sum, e) => sum + Number(e.amount ?? 0),
     0,
   )
 
+  const expensesVoidedTotal = (expensesVoidedResult.data ?? []).reduce(
+    (sum, e) => sum + Number(e.amount ?? 0),
+    0,
+  )
+
+  // ─── SEPARADOS ───
   let layawayCash = 0
   let layawayTotal = 0
   const layawayByMethod: Record<string, number> = {}
+  let layawayVoidedCash = 0
+  let layawayVoidedTotal = 0
+  const layawayVoidedByMethod: Record<string, number> = {}
 
   for (const p of layawayPaymentsResult.data ?? []) {
     const amount = Number(p.amount ?? 0)
@@ -392,9 +479,16 @@ export async function getDaySalesSummary(
     invoiceCash,
     invoiceTotal,
     invoiceByMethod,
+    invoiceVoidedCash,
+    invoiceVoidedTotal,
+    invoiceVoidedByMethod,
     expensesTotal,
+    expensesVoidedTotal,
     layawayCash,
     layawayTotal,
     layawayByMethod,
+    layawayVoidedCash,
+    layawayVoidedTotal,
+    layawayVoidedByMethod,
   }
 }

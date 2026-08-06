@@ -122,7 +122,21 @@ export function CierresCajaPage() {
   const invoiceCash = summary?.invoiceCash ?? 0
   const layawayCash = summary?.layawayCash ?? 0
   const expenses = summary?.expensesTotal ?? 0
+  
+  // Efectivo esperado: solo items ACTIVOS (esto es lo que calcula el RPC)
   const expectedCash = cashBase + posCash + invoiceCash + layawayCash - expenses
+
+  // CRÍTICO: Si hay items anulados que fueron pagados en efectivo,
+  // el efectivo esperado podría ser diferente si el dinero no fue devuelto
+  const invoiceVoidedCash = summary?.invoiceVoidedCash ?? 0
+  const expensesVoided = summary?.expensesVoidedTotal ?? 0
+  const layawayVoidedCash = summary?.layawayVoidedCash ?? 0
+  
+  // Efectivo esperado si el dinero de items anulados NO fue devuelto al cliente
+  const expectedCashIfVoidedNotReturned = expectedCash + invoiceVoidedCash + layawayVoidedCash - expensesVoided
+  
+  // Diferencia que el usuario debería tener en cuenta
+  const voidedDifferential = expectedCashIfVoidedNotReturned - expectedCash
 
   const totalDigital = (summary?.posCard ?? 0) + (summary?.posTransfer ?? 0)
     + Object.values(summary?.invoiceByMethod ?? {}).reduce((a, b) => a + b, 0)
@@ -662,6 +676,38 @@ export function CierresCajaPage() {
                       <span className="text-rose-300">{formatCop(expenses)}</span>
                     </div>
                   </div>
+
+                  {/* Transacciones anuladas / voided - solo mostrar si hay */}
+                  {((summary?.invoiceVoidedTotal ?? 0) > 0 || (summary?.expensesVoidedTotal ?? 0) > 0 || (summary?.layawayVoidedTotal ?? 0) > 0) && (
+                    <div className="pt-2 border-t border-zinc-800">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2 flex items-center gap-1">
+                        ⚠️ Transacciones anuladas hoy
+                      </p>
+                      <div className="space-y-1.5 opacity-75">
+                        {(summary?.invoiceVoidedTotal ?? 0) > 0 && (
+                          <div className="rounded-md border border-zinc-800/50 bg-zinc-950/40 px-3 py-2 flex justify-between text-sm">
+                            <span className="text-zinc-500">Facturas anuladas</span>
+                            <span className="text-zinc-400 line-through">{formatCop(summary?.invoiceVoidedTotal ?? 0)}</span>
+                          </div>
+                        )}
+                        {(summary?.expensesVoidedTotal ?? 0) > 0 && (
+                          <div className="rounded-md border border-zinc-800/50 bg-zinc-950/40 px-3 py-2 flex justify-between text-sm">
+                            <span className="text-zinc-500">Gastos anulados</span>
+                            <span className="text-zinc-400 line-through">{formatCop(summary?.expensesVoidedTotal ?? 0)}</span>
+                          </div>
+                        )}
+                        {(summary?.layawayVoidedTotal ?? 0) > 0 && (
+                          <div className="rounded-md border border-zinc-800/50 bg-zinc-950/40 px-3 py-2 flex justify-between text-sm">
+                            <span className="text-zinc-500">Separados anulados</span>
+                            <span className="text-zinc-400 line-through">{formatCop(summary?.layawayVoidedTotal ?? 0)}</span>
+                          </div>
+                        )}
+                        <p className="text-[10px] text-zinc-600 italic mt-1.5 px-3">
+                          No incluidas en efectivo esperado (solo auditoría)
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Columna derecha: desglose compacto + totales */}
@@ -968,6 +1014,37 @@ export function CierresCajaPage() {
                   />
                 </div>
               </div>
+
+              {/* ⚠️ CRÍTICO: Advertencia si hay items voided */}
+              {voidedDifferential > 0 && (
+                <div className="rounded-xl border-2 border-red-500/50 bg-red-950/30 p-3 space-y-1.5">
+                  <p className="font-semibold text-red-400 flex items-center gap-1.5">
+                    <span className="text-base">⚠️</span>
+                    ADVERTENCIA: Transacciones anuladas detectadas
+                  </p>
+                  <p className="text-xs text-red-300/90">
+                    Se encontraron transacciones anuladas HOY que fueron pagadas en efectivo. 
+                    El <strong>efectivo esperado podría ser incorrecto</strong> si ese dinero no fue devuelto al cliente.
+                  </p>
+                  <div className="pt-1 border-t border-red-500/30 space-y-1.5">
+                    <div className="flex justify-between text-xs text-red-200">
+                      <span>Efectivo esperado (solo activos):</span>
+                      <span className="font-mono font-semibold">{formatCop(expectedCash)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-red-200">
+                      <span>Si items voided NO fueron devueltos:</span>
+                      <span className="font-mono font-semibold">{formatCop(expectedCashIfVoidedNotReturned)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs bg-red-900/40 px-2 py-1 rounded border border-red-500/30">
+                      <span>Diferencia potencial:</span>
+                      <span className="font-mono font-bold text-red-300">+{formatCop(voidedDifferential)}</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-red-300/75 pt-1">
+                    <strong>Acción recomendada:</strong> Verifica con el cajero si el dinero de items anulados fue devuelto o si sigue en caja.
+                  </p>
+                </div>
+              )}
 
               {closeFeedback ? (
                 <p className="text-amber-300 px-1">{closeFeedback}</p>
