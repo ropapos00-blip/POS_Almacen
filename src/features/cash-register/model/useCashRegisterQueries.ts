@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  closeSession,
+  closeSessionTransactional,
   getActiveSession,
   getDaySalesSummary,
   getMostRecentSession,
@@ -80,7 +80,8 @@ export function useOpenSessionMutation(storeId?: string) {
 export function useCloseSessionMutation(storeId?: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: CloseSessionInput) => closeSession(input),
+    mutationFn: (input: CloseSessionInput) => 
+      closeSessionTransactional(input as CloseSessionInput & { sessionDate: string }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['cash-register', 'active', storeId] })
       void queryClient.invalidateQueries({ queryKey: ['cash-register', 'recent', storeId] })

@@ -54,4 +54,6 @@ export interface CloseSessionInput {
   closedBy: string
   cashCounted: number
   notesClose: string
+  /** ISO date (YYYY-MM-DD) de la sesion. Requerido para calculos transaccionales. */
+  sessionDate?: string
 }

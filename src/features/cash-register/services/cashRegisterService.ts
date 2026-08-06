@@ -71,6 +71,60 @@ export async function openSession(input: OpenSessionInput): Promise<CashRegister
   return data as CashRegisterSession
 }
 
+/**
+ * Valida que los cálculos de un resumen diario sean consistentes.
+ * Detecta inconsistencias en sumas de métodos vs totales reportados.
+ * NO lanza error, solo retorna validación para que UI pueda alertar.
+ */
+export function validateDaySalesSummary(summary: DaySalesSummary): {
+  isValid: boolean
+  errors: string[]
+  warnings: string[]
+} {
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  // Validar POS
+  const posByMethodSum = Object.values(summary.posByMethod).reduce((a, b) => a + b, 0)
+  if (Math.abs(posByMethodSum - summary.posTotal) > 0.01) {
+    errors.push(
+      `Ventas POS: suma de métodos (${posByMethodSum}) ≠ total (${summary.posTotal})`,
+    )
+  }
+
+  // Validar que posCash está correctamente en desglose
+  const posCashFromMethod = summary.posByMethod['cash'] ?? 0
+  if (Math.abs(posCashFromMethod - summary.posCash) > 0.01) {
+    warnings.push(
+      `Ventas POS: cash reportado (${summary.posCash}) ≠ cash en métodos (${posCashFromMethod})`,
+    )
+  }
+
+  // Validar facturas
+  const invoiceByMethodSum = Object.values(summary.invoiceByMethod).reduce((a, b) => a + b, 0)
+  const invoiceTotalRecalc = summary.invoiceCash + invoiceByMethodSum
+  if (Math.abs(invoiceTotalRecalc - summary.invoiceTotal) > 0.01) {
+    errors.push(
+      `Facturas: cash (${summary.invoiceCash}) + otros (${invoiceByMethodSum}) ≠ total (${summary.invoiceTotal})`,
+    )
+  }
+
+  // Validar separados
+  const layawayByMethodSum = Object.values(summary.layawayByMethod).reduce((a, b) => a + b, 0)
+  const layawayTotalRecalc = summary.layawayCash + layawayByMethodSum
+  if (Math.abs(layawayTotalRecalc - summary.layawayTotal) > 0.01) {
+    errors.push(
+      `Separados: cash (${summary.layawayCash}) + otros (${layawayByMethodSum}) ≠ total (${summary.layawayTotal})`,
+    )
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings,
+  }
+}
+
 export async function closeSession(input: CloseSessionInput): Promise<void> {
   const { error } = await supabase
     .from('cash_register_sessions')
@@ -85,6 +139,48 @@ export async function closeSession(input: CloseSessionInput): Promise<void> {
 
   if (error) {
     throw new Error(error.message)
+  }
+}
+
+/**
+ * Cierra caja con validaciones transaccionales y auditoría.
+ * Calcula efectivo esperado en backend y detecta discrepancias.
+ * Registra diferencias antes de confirmar cierre.
+ */
+export async function closeSessionTransactional(
+  input: CloseSessionInput & { sessionDate: string },
+): Promise<{
+  sessionId: string
+  closed: boolean
+  expectedCash: number
+  difference: number
+  message: string
+  discrepancyId?: string
+}> {
+  const { data, error } = await supabase.rpc('close_cash_register_transactional', {
+    p_session_id: input.sessionId,
+    p_closed_by: input.closedBy,
+    p_cash_counted: input.cashCounted,
+    p_notes_close: input.notesClose || null,
+    p_session_date: input.sessionDate,
+  })
+
+  if (error) {
+    throw new Error(`Error cerrando caja: ${error.message}`)
+  }
+
+  if (!data || data.length === 0) {
+    throw new Error('No se recibió respuesta del servidor')
+  }
+
+  const result = data[0]
+  return {
+    sessionId: result.out_session_id,
+    closed: result.out_closed,
+    expectedCash: Number(result.out_expected_cash),
+    difference: Number(result.out_difference),
+    message: result.out_message,
+    discrepancyId: result.out_discrepancy_id,
   }
 }
 

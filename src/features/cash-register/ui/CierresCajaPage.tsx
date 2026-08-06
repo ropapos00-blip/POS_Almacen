@@ -14,6 +14,7 @@ import {
   useUpdateCashBaseMutation,
 } from '../model/useCashRegisterQueries'
 import type { CashRegisterSession } from '../model/cashRegister.types'
+import { validateDaySalesSummary } from '../services/cashRegisterService'
 import { CierreReceipt } from './CierreReceipt'
 import type { CierreReceiptData } from './CierreReceipt'
 
@@ -71,6 +72,8 @@ export function CierresCajaPage() {
   const [closeFeedback, setCloseFeedback] = useState<string | null>(null)
   const [showCloseModal, setShowCloseModal] = useState(false)
   const [pendingPrintData, setPendingPrintData] = useState<CierreReceiptData | null>(null)
+  const [validationWarnings, setValidationWarnings] = useState<string[]>([])
+  const [cashCountedInput, setCashCountedInput] = useState('')
 
   // ─── Estado modal editar base ────────────────────────────────────────────────
   const [showEditBaseModal, setShowEditBaseModal] = useState(false)
@@ -124,6 +127,19 @@ export function CierresCajaPage() {
   const totalDigital = (summary?.posCard ?? 0) + (summary?.posTransfer ?? 0)
     + Object.values(summary?.invoiceByMethod ?? {}).reduce((a, b) => a + b, 0)
     + Object.values(summary?.layawayByMethod ?? {}).reduce((a, b) => a + b, 0)
+
+  // ─── Validación de consistencia ─────────────────────────────────────────────
+  useEffect(() => {
+    if (summary) {
+      const validation = validateDaySalesSummary(summary)
+      setValidationWarnings([
+        ...validation.errors,
+        ...validation.warnings,
+      ])
+    } else {
+      setValidationWarnings([])
+    }
+  }, [summary])
 
   const todayLabel = new Intl.DateTimeFormat('es-CO', {
     timeZone: 'America/Bogota',
@@ -195,37 +211,72 @@ export function CierresCajaPage() {
       return
     }
     setCloseFeedback(null)
-    if (!session || !user?.id) return
+    if (!session || !user?.id || !summary) return
+
+    // Validar si hay inconsistencias críticas
+    if (validationWarnings.length > 0) {
+      const confirmMsg = `Se detectaron inconsistencias:\n${validationWarnings.join('\n')}\n\n¿Deseas continuar con el cierre?`
+      if (!confirm(confirmMsg)) {
+        return
+      }
+    }
+
+    // Obtener efectivo contado del input (o usar esperado si está vacío)
+    const cashCounted = cashCountedInput.trim()
+      ? parseCopIntegerInput(cashCountedInput)
+      : expectedCash
+
+    if (cashCounted < 0) {
+      setCloseFeedback('El efectivo contado no puede ser negativo.')
+      return
+    }
+
     try {
-      await closeMutation.mutateAsync({
+      // Usar el nuevo RPC que calcula en backend y valida
+      const response = await closeMutation.mutateAsync({
         sessionId: session.id,
         closedBy: user.id,
-        cashCounted: expectedCash,
+        cashCounted,
         notesClose: '',
+        sessionDate: session.session_date,
       })
-      // Construir datos del tique con los valores actuales antes de que el query se invalide
+
+      // Construir datos del tique con los valores actuales
+      const posByMethod = summary?.posByMethod ?? {}
+      const invoiceByMethod = summary?.invoiceByMethod ?? {}
+      const layawayByMethod = summary?.layawayByMethod ?? {}
+
       setPendingPrintData({
         sessionDate: new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(`${session.session_date}T12:00:00`)),
         closedAt: new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' }).format(new Date()),
         cashBase,
         posByMethod,
         posCash,
-        posCard: summary?.posCard ?? 0,
-        posTransfer: summary?.posTransfer ?? 0,
-        posTotal: summary?.posTotal ?? 0,
+        posCard: summary.posCard ?? 0,
+        posTransfer: summary.posTransfer ?? 0,
+        posTotal: summary.posTotal ?? 0,
         invoiceCash,
         invoiceByMethod,
-        invoiceTotal: summary?.invoiceTotal ?? 0,
+        invoiceTotal: summary.invoiceTotal ?? 0,
         layawayCash,
         layawayByMethod,
-        layawayTotal: summary?.layawayTotal ?? 0,
+        layawayTotal: summary.layawayTotal ?? 0,
         expenses,
         expectedCash,
-        cashCounted: expectedCash,
-        difference: 0,
+        cashCounted,
+        difference: cashCounted - expectedCash,
         notesClose: null,
         cashierName: user.fullName ?? user.email ?? '—',
       })
+
+      // Mostrar notificación si hay discrepancia
+      if (response?.discrepancyId) {
+        setCloseFeedback(`✓ Caja cerrada. Discrepancia registrada: ${formatCop(response.difference)} ${response.difference > 0 ? '(sobrante)' : '(faltante)'}`)
+      } else {
+        setCloseFeedback('✓ Caja cerrada correctamente.')
+      }
+
+      setCashCountedInput('')
       setShowCloseModal(false)
     } catch (e) {
       setCloseFeedback(e instanceof Error ? e.message : 'Error al cerrar la sesion.')
