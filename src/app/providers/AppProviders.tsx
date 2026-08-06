@@ -19,8 +19,34 @@ const queryClient = new QueryClient({
   },
 })
 
+// Tablas de negocio con columna store_id cuyos cambios deben refrescar los
+// KPIs/listados de ESA tienda. Filtrar por store_id evita que una venta en
+// la tienda A dispare un refetch masivo en los navegadores de la tienda B.
+// sale_payments/layaway_payments no tienen store_id propio, pero se insertan
+// en la misma transaccion que sales/layaways, asi que esas ya cubren el caso.
+const STORE_SCOPED_REALTIME_TABLES = [
+  'sales',
+  'manual_invoices',
+  'manual_invoice_expenses',
+  'cash_register_sessions',
+  'layaways',
+] as const
+
+// Prefijos de queryKey afectados por esas tablas. Se invalidan de forma
+// selectiva (no toda la cache) para no refrescar catalogo/usuarios/etc.
+// sin necesidad.
+const REALTIME_INVALIDATION_QUERY_KEYS: unknown[][] = [
+  ['manual-invoices'],
+  ['cash-register'],
+  ['sales'],
+  ['layaways'],
+  ['dashboard'],
+  ['inventory'],
+]
+
 export function AppProviders() {
   const hydrateSession = useAuthStore((state) => state.hydrateSession)
+  const storeId = useAuthStore((state) => state.user?.storeId)
 
   useEffect(() => {
     void hydrateSession()
@@ -37,26 +63,35 @@ export function AppProviders() {
   }, [hydrateSession])
 
   useEffect(() => {
+    if (!storeId) {
+      return
+    }
+
     let invalidateTimer: ReturnType<typeof setTimeout> | null = null
 
-    const channel = supabase
-      .channel('app-realtime-db-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public' },
-        () => {
-          // Coalesce multiple DB events emitted by a single transaction burst.
-          if (invalidateTimer) {
-            return
-          }
+    const scheduleInvalidate = () => {
+      // Coalesce multiple DB events emitted by a single transaction burst.
+      if (invalidateTimer) {
+        return
+      }
 
-          invalidateTimer = setTimeout(() => {
-            invalidateTimer = null
-            void queryClient.invalidateQueries()
-          }, 250)
-        },
+      invalidateTimer = setTimeout(() => {
+        invalidateTimer = null
+        for (const queryKey of REALTIME_INVALIDATION_QUERY_KEYS) {
+          void queryClient.invalidateQueries({ queryKey })
+        }
+      }, 250)
+    }
+
+    let channel = supabase.channel(`app-realtime-db-changes-${storeId}`)
+    for (const table of STORE_SCOPED_REALTIME_TABLES) {
+      channel = channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table, filter: `store_id=eq.${storeId}` },
+        scheduleInvalidate,
       )
-      .subscribe()
+    }
+    channel.subscribe()
 
     return () => {
       if (invalidateTimer) {
@@ -64,7 +99,7 @@ export function AppProviders() {
       }
       void supabase.removeChannel(channel)
     }
-  }, [])
+  }, [storeId])
 
   return (
     <QueryClientProvider client={queryClient}>

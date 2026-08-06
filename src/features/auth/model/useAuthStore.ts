@@ -20,7 +20,7 @@ interface AuthState {
   setStoreAllowCashierClose: (storeAllowCashierClose: boolean) => void
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   isInitializing: true,
   isLoading: false,
   isAuthenticated: false,
@@ -37,6 +37,15 @@ export const useAuthStore = create<AuthState>((set) => ({
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error de sesion.'
+      // getSessionUser() solo llega aqui por un fallo transitorio (red, RLS, etc.),
+      // no por "no hay sesion" (eso devuelve null sin lanzar). Si ya habia un
+      // usuario autenticado, no lo borramos: eso apagaria todos los queries de la
+      // app (enabled=Boolean(storeId)) y los KPIs caerian a 0 momentaneamente en
+      // produccion. Solo se limpia el usuario si de verdad no habia sesion previa.
+      if (get().user) {
+        set({ isInitializing: false, error: message })
+        return
+      }
       set({
         isInitializing: false,
         isAuthenticated: false,
