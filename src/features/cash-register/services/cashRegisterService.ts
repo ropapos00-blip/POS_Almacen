@@ -128,17 +128,8 @@ export function validateDaySalesSummary(summary: DaySalesSummary): {
     )
   }
 
-  // Validar separados ANULADOS
-  const layawayVoidedByMethodSum = Object.values(summary.layawayVoidedByMethod).reduce((a, b) => a + b, 0)
-  const layawayVoidedTotalRecalc = summary.layawayVoidedCash + layawayVoidedByMethodSum
-  if (Math.abs(layawayVoidedTotalRecalc - summary.layawayVoidedTotal) > 0.01) {
-    warnings.push(
-      `Separados anulados: cash (${summary.layawayVoidedCash}) + otros (${layawayVoidedByMethodSum}) ≠ total (${summary.layawayVoidedTotal})`,
-    )
-  }
-
   // Alertar si hay items anulados el mismo día de cierre
-  if (summary.invoiceVoidedTotal > 0 || summary.expensesVoidedTotal > 0 || summary.layawayVoidedTotal > 0) {
+  if (summary.invoiceVoidedTotal > 0 || summary.expensesVoidedTotal > 0) {
     warnings.push(
       `⚠️  Hay transacciones anuladas hoy (no se incluyen en el efectivo esperado, solo auditoría)`,
     )
@@ -336,8 +327,9 @@ export async function getDaySalesSummary(
 
     supabase
       .from('layaway_payments')
-      .select('amount, payment_method, layaways!inner(store_id)')
+      .select('amount, payment_method, layaways!inner(store_id, status)')
       .eq('layaways.store_id', storeId)
+      .eq('layaways.status', 'active')
       .gte('created_at', startIso)
       .lte('created_at', endIso),
   ])
@@ -454,19 +446,24 @@ export async function getDaySalesSummary(
 
   // ─── SEPARADOS ───
   let layawayCash = 0
+  let layawayCard = 0
+  let layawayTransfer = 0
   let layawayTotal = 0
   const layawayByMethod: Record<string, number> = {}
-  let layawayVoidedCash = 0
-  let layawayVoidedTotal = 0
-  const layawayVoidedByMethod: Record<string, number> = {}
 
   for (const p of layawayPaymentsResult.data ?? []) {
     const amount = Number(p.amount ?? 0)
     layawayTotal += amount
-    if (p.payment_method === 'cash') {
+    const method = p.payment_method ?? 'cash'
+    
+    if (method === 'cash') {
       layawayCash += amount
-    } else if (p.payment_method) {
-      layawayByMethod[p.payment_method] = (layawayByMethod[p.payment_method] ?? 0) + amount
+    } else if (method === 'card') {
+      layawayCard += amount
+    } else if (method === 'transfer') {
+      layawayTransfer += amount
+    } else {
+      layawayByMethod[method] = (layawayByMethod[method] ?? 0) + amount
     }
   }
 
@@ -485,10 +482,9 @@ export async function getDaySalesSummary(
     expensesTotal,
     expensesVoidedTotal,
     layawayCash,
+    layawayCard,
+    layawayTransfer,
     layawayTotal,
     layawayByMethod,
-    layawayVoidedCash,
-    layawayVoidedTotal,
-    layawayVoidedByMethod,
   }
 }

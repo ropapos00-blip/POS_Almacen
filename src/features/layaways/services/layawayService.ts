@@ -79,6 +79,14 @@ export async function cancelLayaway(layawayId: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+export async function archiveLayaway(layawayId: string): Promise<void> {
+  const { error } = await supabase.rpc('archive_layaway', {
+    p_layaway_id: layawayId,
+  })
+
+  if (error) throw new Error(error.message)
+}
+
 export async function updateLayawayCustomer(
   id: string,
   customerName: string,

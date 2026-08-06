@@ -127,6 +127,7 @@ export async function listManualInvoicePaymentKpis(
 
   // Abonos de separados (layaways) tambien cuentan como dinero recibido en caja
   // por metodo de pago, igual que las facturas manuales.
+  // Los metodos de layaway_payments pueden ser 'cash', 'card', 'transfer', o especificos como 'addi', 'credilondon', etc.
   (layawayPaymentsRes.data ?? []).forEach((row) => {
     const createdIsoDate = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/Bogota',
@@ -137,9 +138,20 @@ export async function listManualInvoicePaymentKpis(
 
     const method = row.payment_method as string;
     const amount = Math.max(0, Number(row.amount ?? 0));
+    
+    // Si el metodo esta en la lista de paymentMethods, agregarlo directamente
     if (paymentMethods.includes(method as PaymentMethodKpiKey)) {
       addToResult(method as PaymentMethodKpiKey, amount, createdIsoDate);
     }
+    // Si es 'card' (tarjeta generica), mapearla a 'dataphone' como categoria por defecto de tarjeta
+    else if (method === 'card') {
+      addToResult('dataphone' as PaymentMethodKpiKey, amount, createdIsoDate);
+    }
+    // Si es 'transfer' (transferencia generica), mapearla a 'bancolombia' como categoria por defecto de transferencia
+    else if (method === 'transfer') {
+      addToResult('bancolombia' as PaymentMethodKpiKey, amount, createdIsoDate);
+    }
+    // Metodos desconocidos se ignoran (no deberia ocurrir normalmente)
   });
 
   return {

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   addLayawayPayment,
+  archiveLayaway,
   cancelLayaway,
   createLayaway,
   getLayawayKpis,
@@ -49,6 +50,16 @@ export function useCancelLayawayMutation(storeId?: string) {
         qc.invalidateQueries({ queryKey: ['layaways', storeId] }),
         qc.invalidateQueries({ queryKey: ['inventory', 'stock', storeId] }),
       ])
+    },
+  })
+}
+
+export function useArchiveLayawayMutation(storeId?: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (layawayId: string) => archiveLayaway(layawayId),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['layaways', storeId] })
     },
   })
 }

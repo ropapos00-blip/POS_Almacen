@@ -121,6 +121,8 @@ export function CierresCajaPage() {
   const posCash = summary?.posCash ?? 0
   const invoiceCash = summary?.invoiceCash ?? 0
   const layawayCash = summary?.layawayCash ?? 0
+  const layawayCard = summary?.layawayCard ?? 0
+  const layawayTransfer = summary?.layawayTransfer ?? 0
   const expenses = summary?.expensesTotal ?? 0
   
   // Efectivo esperado: solo items ACTIVOS (esto es lo que calcula el RPC)
@@ -130,15 +132,12 @@ export function CierresCajaPage() {
   // el efectivo esperado podría ser diferente si el dinero no fue devuelto
   const invoiceVoidedCash = summary?.invoiceVoidedCash ?? 0
   const expensesVoided = summary?.expensesVoidedTotal ?? 0
-  const layawayVoidedCash = summary?.layawayVoidedCash ?? 0
-  
-  // Efectivo esperado si el dinero de items anulados NO fue devuelto al cliente
-  const expectedCashIfVoidedNotReturned = expectedCash + invoiceVoidedCash + layawayVoidedCash - expensesVoided
   
   // Diferencia que el usuario debería tener en cuenta
-  const voidedDifferential = expectedCashIfVoidedNotReturned - expectedCash
+  const voidedDifferential = invoiceVoidedCash - expensesVoided
 
   const totalDigital = (summary?.posCard ?? 0) + (summary?.posTransfer ?? 0)
+    + (layawayCard + layawayTransfer)
     + Object.values(summary?.invoiceByMethod ?? {}).reduce((a, b) => a + b, 0)
     + Object.values(summary?.layawayByMethod ?? {}).reduce((a, b) => a + b, 0)
 
@@ -273,6 +272,8 @@ export function CierresCajaPage() {
         invoiceByMethod,
         invoiceTotal: summary.invoiceTotal ?? 0,
         layawayCash,
+        layawayCard,
+        layawayTransfer,
         layawayByMethod,
         layawayTotal: summary.layawayTotal ?? 0,
         expenses,
@@ -368,6 +369,8 @@ export function CierresCajaPage() {
           invoiceByMethod,
           invoiceTotal: summary?.invoiceTotal ?? 0,
           layawayCash,
+          layawayCard,
+          layawayTransfer,
           layawayByMethod,
           layawayTotal: summary?.layawayTotal ?? 0,
           expenses,
@@ -678,7 +681,7 @@ export function CierresCajaPage() {
                   </div>
 
                   {/* Transacciones anuladas / voided - solo mostrar si hay */}
-                  {((summary?.invoiceVoidedTotal ?? 0) > 0 || (summary?.expensesVoidedTotal ?? 0) > 0 || (summary?.layawayVoidedTotal ?? 0) > 0) && (
+                  {((summary?.invoiceVoidedTotal ?? 0) > 0 || (summary?.expensesVoidedTotal ?? 0) > 0) && (
                     <div className="pt-2 border-t border-zinc-800">
                       <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2 flex items-center gap-1">
                         ⚠️ Transacciones anuladas hoy
@@ -694,12 +697,6 @@ export function CierresCajaPage() {
                           <div className="rounded-md border border-zinc-800/50 bg-zinc-950/40 px-3 py-2 flex justify-between text-sm">
                             <span className="text-zinc-500">Gastos anulados</span>
                             <span className="text-zinc-400 line-through">{formatCop(summary?.expensesVoidedTotal ?? 0)}</span>
-                          </div>
-                        )}
-                        {(summary?.layawayVoidedTotal ?? 0) > 0 && (
-                          <div className="rounded-md border border-zinc-800/50 bg-zinc-950/40 px-3 py-2 flex justify-between text-sm">
-                            <span className="text-zinc-500">Separados anulados</span>
-                            <span className="text-zinc-400 line-through">{formatCop(summary?.layawayVoidedTotal ?? 0)}</span>
                           </div>
                         )}
                         <p className="text-[10px] text-zinc-600 italic mt-1.5 px-3">
@@ -725,6 +722,8 @@ export function CierresCajaPage() {
                   {(summary?.layawayTotal ?? 0) > 0 && (
                     <>
                       <PayMethodRow label="Efectivo separados" value={layawayCash} color="text-zinc-200" />
+                      {layawayCard > 0 && <PayMethodRow label="Tarjeta separados" value={layawayCard} color="text-zinc-200" />}
+                      {layawayTransfer > 0 && <PayMethodRow label="Transferencia separados" value={layawayTransfer} color="text-zinc-200" />}
                       {Object.entries(layawayByMethod).map(([m, v]) => (
                         <PayMethodRow key={`lay-${m}`} label={`${INVOICE_METHOD_LABELS[m] ?? m} separados`} value={v} color="text-zinc-200" />
                       ))}
@@ -1030,10 +1029,6 @@ export function CierresCajaPage() {
                     <div className="flex justify-between text-xs text-red-200">
                       <span>Efectivo esperado (solo activos):</span>
                       <span className="font-mono font-semibold">{formatCop(expectedCash)}</span>
-                    </div>
-                    <div className="flex justify-between text-xs text-red-200">
-                      <span>Si items voided NO fueron devueltos:</span>
-                      <span className="font-mono font-semibold">{formatCop(expectedCashIfVoidedNotReturned)}</span>
                     </div>
                     <div className="flex justify-between text-xs bg-red-900/40 px-2 py-1 rounded border border-red-500/30">
                       <span>Diferencia potencial:</span>
@@ -1346,9 +1341,6 @@ const INVOICE_METHOD_LABELS: Record<string, string> = {
 function SummaryBreakdown({
   cashBase,
   posByMethod,
-  posCash: _posCash,
-  posCard: _posCard,
-  posTransfer: _posTransfer,
   posTotal,
   invoiceCash,
   invoiceByMethod,

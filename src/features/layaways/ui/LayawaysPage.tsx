@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
-import { Package, Plus, Printer, Search, X } from 'lucide-react'
+import { Package, Plus, Printer, Search, X, Edit2, Trash2, Trash } from 'lucide-react'
 import { formatCop } from '../../../shared/utils/currency'
 import { formatCopInput, parseCopIntegerInput } from '../../../shared/utils/numberInput'
 import { formatDateTimeColombia } from '../../../shared/utils/dateTime'
@@ -14,6 +14,7 @@ import {
   useCancelLayawayMutation,
   useCreateLayawayMutation,
   useLayawaysQuery,
+  useArchiveLayawayMutation,
   useUpdateLayawayMutation,
 } from '../model/useLayawayQueries'
 import { findVariantByBarcode } from '../services/layawayService'
@@ -76,6 +77,7 @@ export function LayawaysPage() {
   const createMutation = useCreateLayawayMutation(user?.storeId)
   const paymentMutation = useAddLayawayPaymentMutation(user?.storeId)
   const cancelMutation = useCancelLayawayMutation(user?.storeId)
+  const archiveMutation = useArchiveLayawayMutation(user?.storeId)
   const updateMutation = useUpdateLayawayMutation(user?.storeId)
   const discountPinQuery = useDiscountPinConfigQuery(user?.storeId)
 
@@ -131,13 +133,12 @@ export function LayawaysPage() {
   const [payFeedback, setPayFeedback] = useState<string | null>(null)
 
   // ── Cancel confirm ──────────────────────────────────────────────────
-  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null)
-
-  // ── Edit customer ───────────────────────────────────────────────────
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editPhone, setEditPhone] = useState('')
   const [editFeedback, setEditFeedback] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [archivingId, setArchivingId] = useState<string | null>(null)
 
   // ── Print ───────────────────────────────────────────────────────────
   const [lastReceipt, setLastReceipt] = useState<LayawayReceiptData | null>(null)
@@ -186,7 +187,7 @@ export function LayawaysPage() {
     setPayMethod('cash')
     setPayNotes('')
     setPayFeedback(null)
-    setConfirmCancelId(null)
+    setDeletingId(null)
     setEditingId(null)
     setEditFeedback(null)
     setPanel('detail')
@@ -356,7 +357,7 @@ export function LayawaysPage() {
       setPayAmountRaw('')
       setPayMethod('cash')
       setPayFeedback(null)
-      setConfirmCancelId(null)
+      setDeletingId(null)
       setPanel('detail')
     } catch (err) {
       setCreateFeedback(err instanceof Error ? err.message : 'Error al crear el separado.')
@@ -415,13 +416,27 @@ export function LayawaysPage() {
   function handleCancelLayaway(layawayId: string) {
     cancelMutation.mutate(layawayId, {
       onSuccess: () => {
-        setConfirmCancelId(null)
+        setDeletingId(null)
         setPanel('idle')
         setSelectedId(null)
       },
       onError: (err) => {
         setPayFeedback(err instanceof Error ? err.message : 'Error al cancelar.')
-        setConfirmCancelId(null)
+        setDeletingId(null)
+      },
+    })
+  }
+
+  function handleArchiveLayaway(layawayId: string) {
+    archiveMutation.mutate(layawayId, {
+      onSuccess: () => {
+        setArchivingId(null)
+        setPanel('idle')
+        setSelectedId(null)
+      },
+      onError: (err) => {
+        setPayFeedback(err instanceof Error ? err.message : 'Error al archivar separado.')
+        setArchivingId(null)
       },
     })
   }
@@ -562,21 +577,36 @@ export function LayawaysPage() {
                           )
                         })() : null}
                         {isAdmin && l.status === 'active' ? (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              openDetail(l)
-                              setEditingId(l.id)
-                              setEditName(l.customer_name)
-                              setEditPhone(l.customer_phone ?? '')
-                              setEditFeedback(null)
-                              setConfirmCancelId(null)
-                            }}
-                            className="rounded-lg border border-zinc-700 px-2 py-0.5 text-xs text-zinc-400 transition hover:border-amber-400/60 hover:text-amber-400"
-                          >
-                            Editar
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openDetail(l)
+                                setEditingId(l.id)
+                                setEditName(l.customer_name)
+                                setEditPhone(l.customer_phone ?? '')
+                                setEditFeedback(null)
+                              }}
+                              title="Editar nombre y teléfono"
+                              className="rounded-lg border border-zinc-700 p-1 text-zinc-400 transition hover:border-sky-400/60 hover:text-sky-400"
+                            >
+                              <Edit2 size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openDetail(l)
+                                setDeletingId(l.id)
+                                setEditingId(null)
+                              }}
+                              title="Eliminar separado y restaurar inventario"
+                              className="rounded-lg border border-zinc-700 p-1 text-zinc-400 transition hover:border-red-400/60 hover:text-red-400"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
                         ) : null}
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${sc.cls}`}>
                           {sc.label}
@@ -875,18 +905,43 @@ export function LayawaysPage() {
                     )
                   })() : null}
                   {isAdmin && selectedLayaway.status === 'active' ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingId(selectedLayaway.id)
+                          setEditName(selectedLayaway.customer_name)
+                          setEditPhone(selectedLayaway.customer_phone ?? '')
+                          setEditFeedback(null)
+                        }}
+                        title="Editar cliente"
+                        className="rounded-lg border border-zinc-700 p-1.5 text-zinc-400 transition hover:border-sky-400/60 hover:text-sky-400"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDeletingId(selectedLayaway.id)
+                          setEditingId(null)
+                        }}
+                        title="Eliminar separado y restaurar inventario"
+                        className="rounded-lg border border-zinc-700 p-1.5 text-zinc-400 transition hover:border-red-400/60 hover:text-red-400"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ) : isAdmin && selectedLayaway.status !== 'active' ? (
                     <button
                       type="button"
                       onClick={() => {
-                        setEditingId(selectedLayaway.id)
-                        setEditName(selectedLayaway.customer_name)
-                        setEditPhone(selectedLayaway.customer_phone ?? '')
-                        setEditFeedback(null)
-                        setConfirmCancelId(null)
+                        setArchivingId(selectedLayaway.id)
+                        setEditingId(null)
                       }}
-                      className="rounded-lg border border-zinc-700 px-3 py-1 text-xs text-zinc-400 transition hover:border-amber-400/60 hover:text-amber-400"
+                      title="Archivar separado (oculta de la interfaz pero preserva datos)"
+                      className="rounded-lg border border-zinc-700 p-1.5 text-zinc-400 transition hover:border-amber-600/60 hover:text-amber-500"
                     >
-                      Editar
+                      <Trash size={14} />
                     </button>
                   ) : null}
                   <span
@@ -1147,41 +1202,84 @@ export function LayawaysPage() {
                 </div>
               ) : null}
 
-              {/* Cancel (admin only) */}
-              {isAdmin && selectedLayaway.status === 'active' ? (
-                <div className="mt-4">
-                  {confirmCancelId === selectedLayaway.id ? (
-                    <div className="rounded-xl border border-red-900/40 bg-red-950/30 p-4">
-                      <p className="mb-3 text-sm text-red-300">
-                        ¿Cancelar este separado? El inventario será restaurado.
-                      </p>
-                      <div className="flex gap-3">
-                        <button
-                          type="button"
-                          onClick={() => handleCancelLayaway(selectedLayaway.id)}
-                          disabled={cancelMutation.isPending}
-                          className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-semibold text-white transition hover:bg-red-500 disabled:opacity-50"
-                        >
-                          {cancelMutation.isPending ? 'Cancelando...' : 'Sí, cancelar'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmCancelId(null)}
-                          className="flex-1 rounded-lg bg-zinc-800 py-2 text-sm text-zinc-300 transition hover:bg-zinc-700"
-                        >
-                          No
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
+              {/* Delete confirmation (admin only) */}
+              {isAdmin && deletingId === selectedLayaway.id ? (
+                <div className="mt-4 rounded-xl border border-red-900/40 bg-red-950/30 p-4">
+                  <div className="mb-3">
+                    <p className="mb-2 text-sm font-medium text-red-200">Eliminar separado</p>
+                    <p className="text-xs text-red-300/80">
+                      Se cancelará el separado de <strong>{selectedLayaway.customer_name}</strong> por{' '}
+                      <strong>{formatCop(selectedLayaway.total_amount)}</strong>.
+                    </p>
+                    <p className="mt-2 text-xs text-green-300/80">
+                      ✓ El inventario será restaurado automáticamente (se devuelven todos los artículos).
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
                     <button
                       type="button"
-                      onClick={() => setConfirmCancelId(selectedLayaway.id)}
-                      className="w-full rounded-xl border border-zinc-800 py-2 text-sm text-zinc-600 transition hover:border-red-900/60 hover:text-red-400"
+                      onClick={() => handleCancelLayaway(selectedLayaway.id)}
+                      disabled={cancelMutation.isPending}
+                      className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-semibold text-white transition hover:bg-red-500 disabled:opacity-50"
                     >
-                      Anular separado
+                      {cancelMutation.isPending ? 'Eliminando...' : 'Sí, eliminar'}
                     </button>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => setDeletingId(null)}
+                      className="flex-1 rounded-lg bg-zinc-800 py-2 text-sm text-zinc-300 transition hover:bg-zinc-700"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : isAdmin && selectedLayaway.status === 'active' && !editingId ? (
+                <div className="mt-4 space-y-2 rounded-xl border border-amber-400/20 bg-amber-400/5 p-4">
+                  <p className="text-xs text-zinc-400">
+                    Vence: {new Date(selectedLayaway.due_date + 'T00:00:00').toLocaleDateString('es-CO', {
+                      day: '2-digit',
+                      month: 'long',
+                      year: 'numeric',
+                    })}
+                  </p>
+                  {selectedLayaway.total_amount - selectedLayaway.paid_amount > 0 ? (
+                    <p className="text-xs text-zinc-500">
+                      Saldo: <span className="font-medium text-amber-400">{formatCop(selectedLayaway.total_amount - selectedLayaway.paid_amount)}</span>
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {/* Archive confirmation (admin only, non-active layaways) */}
+              {isAdmin && archivingId === selectedLayaway.id ? (
+                <div className="mt-4 rounded-xl border border-amber-900/60 bg-amber-950/50 p-4">
+                  <div className="mb-3">
+                    <p className="mb-2 text-sm font-bold text-amber-300">📦 Archivar Separado</p>
+                    <p className="text-xs text-amber-200/90">
+                      Se archivará el separado de <strong>{selectedLayaway.customer_name}</strong> por{' '}
+                      <strong>{formatCop(selectedLayaway.total_amount)}</strong>. El separado se ocultará de la interfaz pero los datos se preservarán en la base de datos.
+                    </p>
+                    <p className="mt-3 text-xs text-amber-400/80">
+                      ℹ️ <strong>Los datos se preservan.</strong> El inventario será restaurado. Esta acción libera espacio en la interfaz.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleArchiveLayaway(selectedLayaway.id)}
+                      disabled={archiveMutation.isPending}
+                      className="flex-1 rounded-lg bg-amber-700 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-50"
+                    >
+                      {archiveMutation.isPending ? 'Archivando...' : 'Sí, archivar'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setArchivingId(null)}
+                      className="flex-1 rounded-lg bg-zinc-800 py-2 text-sm text-zinc-300 transition hover:bg-zinc-700"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
                 </div>
               ) : null}
 

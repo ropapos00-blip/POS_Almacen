@@ -42,16 +42,14 @@ export interface DaySalesSummary {
   expensesVoidedTotal: number
   /** Abonos a separados ACTIVOS pagados en efectivo */
   layawayCash: number
+  /** Abonos a separados ACTIVOS pagados con tarjeta */
+  layawayCard: number
+  /** Abonos a separados ACTIVOS pagados por transferencia */
+  layawayTransfer: number
   /** Total abonos a separados ACTIVOS del dia */
   layawayTotal: number
-  /** Desglose de abonos a separados ACTIVOS por metodo de pago (excluye efectivo) */
+  /** Desglose de abonos a separados ACTIVOS por metodo de pago (excluye cash/card/transfer) */
   layawayByMethod: Record<string, number>
-  /** Abonos a separados ANULADOS pagados en efectivo */
-  layawayVoidedCash: number
-  /** Total abonos a separados ANULADOS */
-  layawayVoidedTotal: number
-  /** Desglose de abonos a separados ANULADOS por método */
-  layawayVoidedByMethod: Record<string, number>
 }
 
 export interface OpenSessionInput {
