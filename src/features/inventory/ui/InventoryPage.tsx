@@ -9,6 +9,7 @@ import {
   useInventoryItemsQuery,
   useUpdateInventoryItemMutation,
 } from '../model/useInventoryQueries'
+import type { Category } from '../../catalog/model/catalog.types'
 import type { InventoryItemInput, InventoryItemRow } from '../model/inventory.types'
 import { BarcodeLabelPreview } from './BarcodeLabel'
 
@@ -180,7 +181,7 @@ function ItemModal({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs text-zinc-400">Valor de venta mínima</label>
                 <input
@@ -426,8 +427,8 @@ export function InventoryPage() {
     }
   }
 
-  const categories = categoriesQuery.data ?? []
-  const items = itemsQuery.data ?? []
+  const categories: Category[] = (categoriesQuery.data as Category[] | undefined) ?? []
+  const items: InventoryItemRow[] = (itemsQuery.data as InventoryItemRow[] | undefined) ?? []
   const isSaving = createItem.isPending || updateItem.isPending
 
   if (!user?.storeId) {
@@ -440,7 +441,7 @@ export function InventoryPage() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="min-w-0 max-w-full space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-zinc-100">Inventario</h1>
@@ -451,7 +452,7 @@ export function InventoryPage() {
         <button
           type="button"
           onClick={() => setShowCategoryModal(true)}
-          className="shrink-0 rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-amber-300"
+          className="shrink-0 rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-amber-300 w-full sm:w-auto text-center"
         >
           + Nueva categoría
         </button>
@@ -487,16 +488,16 @@ export function InventoryPage() {
 
       <div className="ghost-scrollbar max-h-[70vh] space-y-3 overflow-y-auto pr-1">
         {categories
-          .filter((cat) =>
+          .filter((cat: Category) =>
             categorySearch.trim() === '' ||
             cat.name.toLowerCase().includes(categorySearch.trim().toLowerCase())
           )
-          .map((cat) => {
+          .map((cat: Category) => {
           const trimmedItemSearch = itemSearch.trim().toLowerCase()
-          const allCatItems = items.filter((it) => it.categoryId === cat.id)
+          const allCatItems = items.filter((it: InventoryItemRow) => it.categoryId === cat.id)
           const catItems = trimmedItemSearch === ''
             ? allCatItems
-            : allCatItems.filter((it) =>
+            : allCatItems.filter((it: InventoryItemRow) =>
                 it.description.toLowerCase().includes(trimmedItemSearch) ||
                 it.reference.toLowerCase().includes(trimmedItemSearch)
               )
@@ -508,21 +509,24 @@ export function InventoryPage() {
           const isExpanded = trimmedItemSearch !== '' ? true : expandedCategories.has(cat.id)
 
           return (
-            <article key={cat.id} className="rounded-2xl border border-zinc-800 bg-zinc-900/70">
+            <article key={cat.id} className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/70">
               <div
                 role="button"
                 tabIndex={0}
                 onClick={() => toggleCategory(cat.id)}
                 onKeyDown={(e) => e.key === 'Enter' && toggleCategory(cat.id)}
-                className="flex w-full cursor-pointer flex-wrap items-center gap-x-2 gap-y-2 rounded-2xl px-4 py-3 text-left hover:bg-zinc-800/40"
+                className="flex w-full cursor-pointer flex-col gap-2.5 rounded-2xl p-3.5 text-left hover:bg-zinc-800/40 sm:flex-row sm:items-center sm:justify-between sm:p-4"
               >
-                <div className="flex min-w-0 flex-1 items-center gap-3">
-                  <span className="text-base font-semibold text-zinc-100">{cat.name}</span>
-                  <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
-                    {catItems.length} {catItems.length === 1 ? 'ítem' : 'ítems'}
-                  </span>
+                <div className="flex min-w-0 items-center justify-between gap-2 sm:justify-start">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="break-words text-base font-semibold text-zinc-100">{cat.name}</span>
+                    <span className="shrink-0 rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
+                      {catItems.length} {catItems.length === 1 ? 'ítem' : 'ítems'}
+                    </span>
+                  </div>
+                  <span className="shrink-0 text-zinc-500 sm:hidden">{isExpanded ? '▲' : '▼'}</span>
                 </div>
-                <div className="ml-auto flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-zinc-800/60 sm:border-0 sm:pt-0 sm:ml-auto">
                   <button
                     type="button"
                     onClick={(e) => {
@@ -530,25 +534,25 @@ export function InventoryPage() {
                       setItemModal({ categoryId: cat.id, categoryName: cat.name, editItem: null })
                       setExpandedCategories((prev) => new Set([...prev, cat.id]))
                     }}
-                    className="rounded-lg border border-amber-500/40 px-3 py-1 text-xs font-medium text-amber-300 hover:bg-amber-400/10"
+                    className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-300 hover:bg-amber-400/20 active:scale-95"
                   >
                     + Agregar ítem
                   </button>
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setRenameCategoryTarget({ id: cat.id, name: cat.name }) }}
-                    className="rounded-lg border border-sky-500/40 px-3 py-1 text-xs font-medium text-sky-300 hover:bg-sky-400/10"
+                    className="rounded-lg border border-sky-500/40 bg-sky-500/10 px-2.5 py-1 text-xs font-medium text-sky-300 hover:bg-sky-400/20 active:scale-95"
                   >
                     Editar
                   </button>
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setDeleteCategoryTarget({ id: cat.id, name: cat.name }) }}
-                    className="rounded-lg border border-rose-500/40 px-3 py-1 text-xs font-medium text-rose-300 hover:bg-rose-400/10"
+                    className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-2.5 py-1 text-xs font-medium text-rose-300 hover:bg-rose-400/20 active:scale-95"
                   >
                     Eliminar
                   </button>
-                  <span className="text-zinc-500">{isExpanded ? '▲' : '▼'}</span>
+                  <span className="hidden text-zinc-500 sm:inline-block pl-1">{isExpanded ? '▲' : '▼'}</span>
                 </div>
               </div>
 
@@ -560,7 +564,7 @@ export function InventoryPage() {
                     </p>
                   ) : (
                     <div className="ghost-scrollbar overflow-x-auto">
-                      <table className="w-full text-xs">
+                      <table className="w-full min-w-[600px] text-xs">
                         <thead>
                           <tr className="border-b border-zinc-800 text-left text-zinc-500">
                             <th className="py-2 pl-2 font-medium">Descripción</th>
@@ -573,7 +577,7 @@ export function InventoryPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {catItems.map((item) => (
+                          {catItems.map((item: InventoryItemRow) => (
                             <tr key={item.stockId} className="border-b border-zinc-800/60 hover:bg-zinc-800/30">
                               <td className="py-2 pl-2 text-zinc-200">{item.description}</td>
                               <td className="py-2 px-2 font-semibold text-emerald-300">{item.quantity}</td>

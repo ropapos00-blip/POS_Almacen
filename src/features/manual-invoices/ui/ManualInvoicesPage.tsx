@@ -15,6 +15,7 @@ import {
   useManualInvoicePaymentKpisQuery,
 } from '../model/useManualInvoicesQueries'
 import type { ManualInvoiceRow, ManualPaymentMethod } from '../model/manualInvoices.types'
+import type { PosVariant } from '../../pos/model/pos.types'
 import { useDiscountPinConfigQuery, usePosVariantsQuery } from '../../pos/model/usePosQueries'
 import { validateDiscountPin } from '../../pos/services/discountPinService'
 import { useLayawayKpisQuery } from '../../layaways/model/useLayawayQueries'
@@ -233,9 +234,9 @@ export function ManualInvoicesPage() {
   function addByBarcode(code: string) {
     const trimmed = code.trim().toUpperCase()
     if (!trimmed) return
-    const source = variantsQuery.data ?? []
+    const source: PosVariant[] = (variantsQuery.data as PosVariant[] | undefined) ?? []
     const match = source.find(
-      (it) => it.barcode.toUpperCase() === trimmed || it.sku.toUpperCase() === trimmed,
+      (it: PosVariant) => it.barcode.toUpperCase() === trimmed || it.sku.toUpperCase() === trimmed,
     )
     if (!match) {
       setBarcodeFeedback({ type: 'err', msg: `No encontrado en inventario: ${trimmed}` })
@@ -529,8 +530,8 @@ export function ManualInvoicesPage() {
   }
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[1.35fr_1fr]">
-      <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+    <section className="min-w-0 max-w-full grid gap-6 lg:grid-cols-[1.35fr_1fr]">
+      <article className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/80 p-3.5 sm:p-5">
         <h1 className="text-2xl font-semibold text-zinc-100">Facturacion manual provisional</h1>
         <p className="mt-2 text-sm text-zinc-400">
           Modulo temporal sin afectar inventario. Retirable cuando el inventario este completo.
@@ -540,7 +541,7 @@ export function ManualInvoicesPage() {
         {isAdminUser ? (
           <>
             {/* Barra de control de fecha para KPIs y Cierre de caja */}
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950/80 px-4 py-3">
+            <div className="mt-4 flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-950/80 p-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-3">
               <div>
                 <p className="text-xs font-semibold text-zinc-200">Indicadores por fecha</p>
                 <p className="text-[11px] text-zinc-400">
@@ -549,25 +550,25 @@ export function ManualInvoicesPage() {
                     : `Mostrando datos del día ${formattedSelectedDay}, mes de ${formattedSelectedMonth.toLowerCase()} y año ${selectedYear}.`}
                 </p>
               </div>
-              <label className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs text-zinc-400">Fecha:</span>
                 <input
                   type="date"
                   value={filterDate}
                   max={getTodayIsoDateColombia()}
                   onChange={(e) => { if (e.target.value) setFilterDate(e.target.value) }}
-                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-200 focus:border-amber-400 focus:outline-none"
+                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-200 focus:border-amber-400 focus:outline-none min-w-[130px]"
                 />
                 {!isSelectedToday && (
                   <button
                     type="button"
                     onClick={() => setFilterDate(getTodayIsoDateColombia())}
-                    className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-300 hover:bg-amber-500/20"
+                    className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-300 hover:bg-amber-500/20 active:scale-95"
                   >
                     Hoy
                   </button>
                 )}
-              </label>
+              </div>
             </div>
 
             <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -642,37 +643,37 @@ export function ManualInvoicesPage() {
               </article>
             </div>
             {/* KPIs de cierre de caja por método de pago */}
-            <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="mt-4 min-w-0 max-w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-xs text-zinc-400 font-semibold">Cierre de caja por método de pago</p>
+                  <p className="text-xs font-semibold text-zinc-400">Cierre de caja por método de pago</p>
                   <p className="text-[11px] text-zinc-600">Incluye facturas manuales y abonos de separados.</p>
                 </div>
-                <label className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs text-zinc-500">Día:</span>
                   <input
                     type="date"
                     value={filterDate}
                     max={getTodayIsoDateColombia()}
                     onChange={(e) => { if (e.target.value) setFilterDate(e.target.value) }}
-                    className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 focus:border-amber-400 focus:outline-none"
+                    className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 focus:border-amber-400 focus:outline-none min-w-[130px]"
                   />
                   {!isSelectedToday && (
                     <button
                       type="button"
                       onClick={() => setFilterDate(getTodayIsoDateColombia())}
-                      className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+                      className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200 active:scale-95"
                     >
                       Hoy
                     </button>
                   )}
-                </label>
+                </div>
               </div>
               {paymentKpisQuery.isLoading ? (
                 <p className="text-xs text-zinc-500">Cargando cierre de caja...</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-xs">
+                <div className="ghost-scrollbar overflow-x-auto -mx-1 sm:mx-0">
+                  <table className="w-full min-w-[340px] text-xs">
                     <thead>
                       <tr className="text-zinc-500">
                         <th className="px-2 py-1 text-left">Método</th>
@@ -728,7 +729,7 @@ export function ManualInvoicesPage() {
               onKeyDown={(e) => { if (e.key === 'Enter') { addByBarcode(barcodeInput) } }}
               placeholder="Escanea o escribe código de barras…"
               autoComplete="off"
-              className="flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-400 focus:outline-none"
+              className="flex-1 min-w-0 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-400 focus:outline-none"
             />
             <button
               type="button"
@@ -892,7 +893,7 @@ export function ManualInvoicesPage() {
           {paymentMethod === 'mixed' ? (
             <div className="space-y-2 rounded-xl border border-zinc-700 bg-zinc-950/80 p-3 md:col-span-2">
               <p className="text-xs font-semibold text-zinc-400">Desglose pago mixto</p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 <label className="space-y-1">
                   <span className="text-xs text-zinc-400">Pago 1 — método</span>
                   <select
@@ -922,7 +923,7 @@ export function ManualInvoicesPage() {
                   />
                 </label>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 <label className="space-y-1">
                   <span className="text-xs text-zinc-400">Pago 2 — método</span>
                   <select
@@ -1035,7 +1036,7 @@ export function ManualInvoicesPage() {
         </div>
       </article>
 
-      <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+      <article className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/80 p-3.5 sm:p-5">
         <h2 className="text-lg font-semibold text-zinc-100">Ultimas facturas manuales</h2>
         <p className="mt-1 text-xs text-zinc-500">Temporal para operacion mientras migra inventario</p>
 
@@ -1050,8 +1051,8 @@ export function ManualInvoicesPage() {
         </div>
 
         <ul className="ghost-scrollbar mt-3 max-h-140 space-y-2 overflow-y-auto pr-1">
-          {(invoicesQuery.data ?? [])
-            .filter((invoice) => {
+          {((invoicesQuery.data as ManualInvoiceRow[] | undefined) ?? [])
+            .filter((invoice: ManualInvoiceRow) => {
               if (!invoiceSearch.trim()) return true
               const q = invoiceSearch.trim().toLowerCase()
               return (
@@ -1060,12 +1061,12 @@ export function ManualInvoicesPage() {
                 (invoice.customer_phone ?? '').toLowerCase().includes(q)
               )
             })
-            .map((invoice) => (
+            .map((invoice: ManualInvoiceRow) => (
             <li key={invoice.id} className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2">
               <div className="flex items-center justify-between gap-2">
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="break-all text-sm font-semibold text-zinc-200">{invoice.invoice_number}</p>
-                  <p className="wrap-break-word text-xs text-zinc-500">
+                  <p className="break-words text-xs text-zinc-500">
                     {formatDateTimeColombia(invoice.created_at)} ·{' '}
                     {invoice.customer_name ?? 'Cliente general'}
                     {invoice.customer_phone ? ` · ${invoice.customer_phone}` : ''}
@@ -1227,7 +1228,7 @@ export function ManualInvoicesPage() {
               {editPaymentMethod === 'mixed' ? (
                 <div className="space-y-2 rounded-xl border border-zinc-700 bg-zinc-950/80 p-3">
                   <p className="text-xs font-semibold text-zinc-400">Desglose pago mixto</p>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                     <label className="space-y-1">
                       <span className="text-xs text-zinc-400">Pago 1 — método</span>
                       <select
@@ -1257,7 +1258,7 @@ export function ManualInvoicesPage() {
                       />
                     </label>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                     <label className="space-y-1">
                       <span className="text-xs text-zinc-400">Pago 2 — método</span>
                       <select
