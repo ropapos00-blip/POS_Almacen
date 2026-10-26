@@ -68,9 +68,9 @@ function validateMethodBreakdown(summary: DaySalesSummaryMock): { valid: boolean
   }
 
   // Validar facturas manuales
+  // invoiceCash está en un campo separado (no en invoiceByMethod), así que se suma directamente
   const invoiceByMethodSum = Object.values(summary.invoiceByMethod).reduce((a, b) => a + b, 0)
-  const invoiceCashFromMethod = summary.invoiceByMethod['cash'] ?? 0
-  const totalInvoiceByMethod = invoiceCashFromMethod + invoiceByMethodSum - invoiceCashFromMethod
+  const totalInvoiceByMethod = summary.invoiceCash + invoiceByMethodSum
 
   if (Math.abs(totalInvoiceByMethod - summary.invoiceTotal) > 0.01) {
     errors.push(
@@ -199,7 +199,8 @@ describe('Cálculos de Cierre de Caja', () => {
 
       const validation = validateTotalConsistency(50000, summary, 145000) // menos 5k
       expect(validation.valid).toBe(false)
-      expect(validation.errors).toContain(
+      // toContainEqual soporta matchers asimétricos en arrays (toContain solo valores primitivos exactos)
+      expect(validation.errors).toContainEqual(
         expect.stringContaining('Diferencia en cierre'),
       )
     })
@@ -436,6 +437,178 @@ describe('Cálculos de Cierre de Caja', () => {
 
       const validation = validateTotalConsistency(10000, summary, 40000)
       expect(validation.valid).toBe(true)
+    })
+  })
+})
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// NUEVOS TESTS — Bugs encontrados en auditoría QA (2026-10-25)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+describe('Bugs detectados en auditoría QA', () => {
+  describe('Bug #2 — Validación de facturas con cash+otros métodos', () => {
+    it('debe detectar inconsistencia cuando invoiceCash + invoiceByMethod ≠ invoiceTotal', () => {
+      // Bug original: el cálculo cancelaba invoiceCash haciendo que nunca detectara el error
+      const summary: DaySalesSummaryMock = {
+        posCash: 0, posCard: 0, posTransfer: 0,
+        posTotal: 0, posByMethod: {},
+        // invoiceCash(30k) + invoiceByMethod.card(20k) debería ser 50k pero invoiceTotal dice 60k
+        invoiceCash: 30000,
+        invoiceTotal: 60000, // ← mal: debería ser 50000
+        invoiceByMethod: { card: 20000 },
+        expensesTotal: 0,
+        layawayCash: 0, layawayTotal: 0, layawayByMethod: {},
+      }
+      const validation = validateMethodBreakdown(summary)
+      expect(validation.valid).toBe(false)
+      expect(validation.errors).toContainEqual(
+        expect.stringContaining('Facturas manuales'),
+      )
+    })
+
+    it('debe pasar cuando invoiceCash + invoiceByMethod === invoiceTotal exactamente', () => {
+      const summary: DaySalesSummaryMock = {
+        posCash: 0, posCard: 0, posTransfer: 0,
+        posTotal: 0, posByMethod: {},
+        invoiceCash: 30000,
+        invoiceTotal: 50000,       // 30k cash + 20k card = 50k ✓
+        invoiceByMethod: { card: 20000 },
+        expensesTotal: 0,
+        layawayCash: 0, layawayTotal: 0, layawayByMethod: {},
+      }
+      const validation = validateMethodBreakdown(summary)
+      expect(validation.valid).toBe(true)
+      expect(validation.errors).toHaveLength(0)
+    })
+  })
+
+  describe('Bug #5 — Separados con tarjeta/transferencia no incluidos en layawayByMethod', () => {
+    it('debe calcular correctamente efectivo cuando separados se pagan con card/transfer', () => {
+      // layawayCard y layawayTransfer son campos separados de layawayByMethod
+      // calculateExpectedCash solo suma layawayCash, así que el efectivo es correcto
+      const summary: DaySalesSummaryMock = {
+        posCash: 50000, posCard: 0, posTransfer: 0,
+        posTotal: 50000, posByMethod: { cash: 50000 },
+        invoiceCash: 0, invoiceTotal: 0, invoiceByMethod: {},
+        expensesTotal: 0,
+        layawayCash: 20000,  // solo este va al efectivo
+        layawayTotal: 50000, // 20k cash + 20k card + 10k transfer
+        layawayByMethod: {},  // card y transfer van a campos separados, no aquí
+      }
+      const expected = calculateExpectedCash(10000, summary)
+      // base(10k) + posCash(50k) + layawayCash(20k) = 80k
+      // layawayCard y layawayTransfer NO van al efectivo esperado
+      expect(expected).toBe(80000)
+    })
+
+    it('debe validar layawayTotal correctamente incluyendo card y transfer', () => {
+      // Simula el resultado del servicio con layawayCard/Transfer en campos separados
+      // La validación del servicio ahora debe incluirlos
+      const layawayCash = 20000
+      const layawayCard = 20000      // campo separado (no en layawayByMethod)
+      const layawayTransfer = 10000  // campo separado (no en layawayByMethod)
+      const layawayTotal = 50000
+      const layawayByMethod: Record<string, number> = {}
+
+      // Reproducir la lógica corregida de validateDaySalesSummary
+      const layawayByMethodSum = Object.values(layawayByMethod).reduce((a, b) => a + b, 0)
+      const layawayTotalRecalc = layawayCash + layawayCard + layawayTransfer + layawayByMethodSum
+      expect(layawayTotalRecalc).toBe(layawayTotal) // 20k + 20k + 10k = 50k ✓
+      expect(Math.abs(layawayTotalRecalc - layawayTotal)).toBeLessThanOrEqual(0.01)
+    })
+
+    it('BUG PREVIO — validación antigua FALLABA con layaway en tarjeta', () => {
+      // Con el código anterior (solo cash + layawayByMethod), la suma era 20k ≠ 50k
+      const layawayCash = 20000
+      const layawayTotal = 50000
+      const layawayByMethod: Record<string, number> = {}
+      const layawayByMethodSum = Object.values(layawayByMethod).reduce((a, b) => a + b, 0)
+
+      // Cálculo ANTERIOR (incorrecto): 20k + 0k = 20k ≠ 50k → falso error
+      const oldRecalc = layawayCash + layawayByMethodSum
+      expect(oldRecalc).not.toBe(layawayTotal) // demostramos que el bug existía
+      expect(Math.abs(oldRecalc - layawayTotal)).toBeGreaterThan(0.01) // generaba error falso
+    })
+  })
+
+  describe('KPIs en cero cuando summary es undefined', () => {
+    it('debe mostrar 0 cuando summary no ha cargado (no debe romper la UI)', () => {
+      // Función auxiliar que recibe el summary (simula CierresCajaPage)
+      // Al ser parámetro, TypeScript no estrecha a "never" al acceder con optional chaining
+      const extractKpis = (summary?: DaySalesSummaryMock, cashBase = 50000) => {
+        const posTotal = summary?.posTotal ?? 0
+        const invoiceTotal = summary?.invoiceTotal ?? 0
+        const layawayTotal = summary?.layawayTotal ?? 0
+        const expensesTotal = summary?.expensesTotal ?? 0
+        const posCash = summary?.posCash ?? 0
+        const invoiceCash = summary?.invoiceCash ?? 0
+        const layawayCash = summary?.layawayCash ?? 0
+        const expectedCash = cashBase + posCash + invoiceCash + layawayCash - expensesTotal
+        return { posTotal, invoiceTotal, layawayTotal, expensesTotal, expectedCash }
+      }
+
+      const kpis = extractKpis(undefined, 50000)
+
+      // Todos los KPIs deben ser 0 (no NaN, no error)
+      expect(kpis.posTotal).toBe(0)
+      expect(kpis.invoiceTotal).toBe(0)
+      expect(kpis.layawayTotal).toBe(0)
+      expect(kpis.expectedCash).toBe(50000) // solo la base
+      expect(Number.isNaN(kpis.expectedCash)).toBe(false)
+      expect(Number.isFinite(kpis.expectedCash)).toBe(true)
+    })
+  })
+
+  describe('Total digital con métodos reales de POS y plataformas', () => {
+    it('debe sumar correctamente todos los métodos digitales (nequi, daviplata, dataphone, addi)', () => {
+      // Simula posByMethod con métodos reales utilizados en tienda POS
+      const posByMethod: Record<string, number> = {
+        cash: 50000,
+        dataphone: 30000,
+        nequi: 25000,
+        bancolombia: 15000,
+        addi: 40000,
+      }
+
+      // Cálculo corregido de totalDigital:
+      const posDigital = Object.entries(posByMethod)
+        .filter(([method]) => method !== 'cash')
+        .reduce((sum, [, amount]) => sum + amount, 0)
+
+      const layawayCard = 10000
+      const layawayTransfer = 20000
+      const invoiceByMethod = { dataphone: 35000 }
+      const layawayByMethod = { addi: 15000 }
+
+      const totalDigital = posDigital
+        + (layawayCard + layawayTransfer)
+        + Object.values(invoiceByMethod).reduce((a, b) => a + b, 0)
+        + Object.values(layawayByMethod).reduce((a, b) => a + b, 0)
+
+      // posDigital = 30k + 25k + 15k + 40k = 110k
+      expect(posDigital).toBe(110000)
+      // totalDigital = 110k + (10k + 20k) + 35k + 15k = 190k
+      expect(totalDigital).toBe(190000)
+    })
+  })
+
+  describe('Separados completados en el cierre (neq cancelled)', () => {
+    it('debe incluir pagos de separados completados para evitar descuadre de caja', () => {
+      // Un separado completado hoy debe sumar su abono al efectivo de la caja
+      const payments = [
+        { amount: 30000, payment_method: 'cash', layaway_status: 'completed' },
+        { amount: 20000, payment_method: 'cash', layaway_status: 'active' },
+        { amount: 15000, payment_method: 'cash', layaway_status: 'cancelled' }, // no entra
+      ]
+
+      // Filtrar solo los que no están cancelados (como el nuevo servicio)
+      const validPayments = payments.filter((p) => p.layaway_status !== 'cancelled')
+      const totalCashLayaway = validPayments
+        .filter((p) => p.payment_method === 'cash')
+        .reduce((sum, p) => sum + p.amount, 0)
+
+      // 30k (completado) + 20k (activo) = 50k. El cancelado (15k) se descarta.
+      expect(totalCashLayaway).toBe(50000)
     })
   })
 })

@@ -121,10 +121,10 @@ export function validateDaySalesSummary(summary: DaySalesSummary): {
 
   // Validar separados ACTIVOS
   const layawayByMethodSum = Object.values(summary.layawayByMethod).reduce((a, b) => a + b, 0)
-  const layawayTotalRecalc = summary.layawayCash + layawayByMethodSum
+  const layawayTotalRecalc = summary.layawayCash + (summary.layawayCard ?? 0) + (summary.layawayTransfer ?? 0) + layawayByMethodSum
   if (Math.abs(layawayTotalRecalc - summary.layawayTotal) > 0.01) {
     errors.push(
-      `Separados activos: cash (${summary.layawayCash}) + otros (${layawayByMethodSum}) ≠ total (${summary.layawayTotal})`,
+      `Separados: cash (${summary.layawayCash}) + tarjeta (${summary.layawayCard ?? 0}) + transf (${summary.layawayTransfer ?? 0}) + otros (${layawayByMethodSum}) ≠ total (${summary.layawayTotal})`,
     )
   }
 
@@ -329,7 +329,7 @@ export async function getDaySalesSummary(
       .from('layaway_payments')
       .select('amount, payment_method, layaways!inner(store_id, status)')
       .eq('layaways.store_id', storeId)
-      .eq('layaways.status', 'active')
+      .neq('layaways.status', 'cancelled')
       .gte('created_at', startIso)
       .lte('created_at', endIso),
   ])
@@ -375,8 +375,13 @@ export async function getDaySalesSummary(
   }
 
   const posCash = posByMethod['cash'] ?? 0
-  const posCard = posByMethod['card'] ?? 0
-  const posTransfer = posByMethod['transfer'] ?? 0
+  const posCard = (posByMethod['card'] ?? 0) + (posByMethod['dataphone'] ?? 0)
+  const posTransfer =
+    (posByMethod['transfer'] ?? 0) +
+    (posByMethod['bancolombia'] ?? 0) +
+    (posByMethod['daviplata'] ?? 0) +
+    (posByMethod['nequi'] ?? 0) +
+    (posByMethod['rapirecarga'] ?? 0)
 
   // ─── FACTURAS ACTIVAS ───
   let invoiceCash = 0

@@ -1,3 +1,24 @@
+import { supabase } from '../../../integrations/supabase/client/supabaseClient'
+import {
+  getTodayIsoDateColombia,
+  toUtcIsoEndOfColombiaDay,
+  toUtcIsoStartOfColombiaDay,
+} from '../../../shared/utils/dateTime'
+import type {
+  DeleteManualExpenseInput,
+  CreateManualExpenseInput,
+  CreateManualInvoiceInput,
+  CreateManualInvoiceExchangeInput,
+  CreateManualInvoiceReturnInput,
+  ManualExpenseKpis,
+  ManualExpenseRow,
+  ManualInvoiceKpis,
+  ManualInvoiceRow,
+  UpdateManualExpenseInput,
+  UpdateManualInvoiceHeaderInput,
+  VoidManualInvoiceInput,
+} from '../model/manualInvoices.types'
+
 type PaymentKpiTotals = { day: number; month: number; year: number }
 
 type PaymentMethodKpiKey =
@@ -22,41 +43,124 @@ type ManualInvoicePaymentKpis = {
   exchangeOverageCollected: PaymentKpiTotals
 }
 
+/**
+ * Consulta todas las facturas manuales del año sin truncarse en 1000 filas.
+ * Ordena DESC (lo más reciente primero) y pagina en lotes si hay más de 1000 registros.
+ */
+async function fetchAllManualInvoicesForYear(
+  storeId: string,
+  yearStartIso: string,
+  yearEndIso: string,
+) {
+  const PAGE_SIZE = 1000
+
+  const firstReq = await supabase
+    .from('manual_invoices')
+    .select('grand_total, credit_applied_total, created_at, payment_method, payment_reference', { count: 'exact' })
+    .eq('store_id', storeId)
+    .eq('source', 'provisional')
+    .eq('is_active', true)
+    .gte('created_at', toUtcIsoStartOfColombiaDay(yearStartIso))
+    .lte('created_at', toUtcIsoEndOfColombiaDay(yearEndIso))
+    .order('created_at', { ascending: false })
+    .range(0, PAGE_SIZE - 1)
+
+  if (firstReq.error) throw new Error(firstReq.error.message)
+  const rows = [...(firstReq.data ?? [])]
+  const totalCount = firstReq.count ?? rows.length
+
+  if (totalCount > PAGE_SIZE) {
+    const remainingPromises = []
+    for (let offset = PAGE_SIZE; offset < totalCount; offset += PAGE_SIZE) {
+      remainingPromises.push(
+        supabase
+          .from('manual_invoices')
+          .select('grand_total, credit_applied_total, created_at, payment_method, payment_reference')
+          .eq('store_id', storeId)
+          .eq('source', 'provisional')
+          .eq('is_active', true)
+          .gte('created_at', toUtcIsoStartOfColombiaDay(yearStartIso))
+          .lte('created_at', toUtcIsoEndOfColombiaDay(yearEndIso))
+          .order('created_at', { ascending: false })
+          .range(offset, offset + PAGE_SIZE - 1),
+      )
+    }
+    const remainingResponses = await Promise.all(remainingPromises)
+    for (const res of remainingResponses) {
+      if (res.error) throw new Error(res.error.message)
+      if (res.data) rows.push(...res.data)
+    }
+  }
+
+  return rows
+}
+
+/**
+ * Consulta todos los abonos a separados del año sin truncarse en 1000 filas.
+ */
+async function fetchAllLayawayPaymentsForYear(
+  storeId: string,
+  yearStartIso: string,
+  yearEndIso: string,
+) {
+  const PAGE_SIZE = 1000
+
+  const firstReq = await supabase
+    .from('layaway_payments')
+    .select('amount, payment_method, created_at, layaways!inner(store_id, status)', { count: 'exact' })
+    .eq('layaways.store_id', storeId)
+    .neq('layaways.status', 'cancelled')
+    .gte('created_at', toUtcIsoStartOfColombiaDay(yearStartIso))
+    .lte('created_at', toUtcIsoEndOfColombiaDay(yearEndIso))
+    .order('created_at', { ascending: false })
+    .range(0, PAGE_SIZE - 1)
+
+  if (firstReq.error) throw new Error(firstReq.error.message)
+  const rows = [...(firstReq.data ?? [])]
+  const totalCount = firstReq.count ?? rows.length
+
+  if (totalCount > PAGE_SIZE) {
+    const remainingPromises = []
+    for (let offset = PAGE_SIZE; offset < totalCount; offset += PAGE_SIZE) {
+      remainingPromises.push(
+        supabase
+          .from('layaway_payments')
+          .select('amount, payment_method, created_at, layaways!inner(store_id, status)')
+          .eq('layaways.store_id', storeId)
+          .neq('layaways.status', 'cancelled')
+          .gte('created_at', toUtcIsoStartOfColombiaDay(yearStartIso))
+          .lte('created_at', toUtcIsoEndOfColombiaDay(yearEndIso))
+          .order('created_at', { ascending: false })
+          .range(offset, offset + PAGE_SIZE - 1),
+      )
+    }
+    const remainingResponses = await Promise.all(remainingPromises)
+    for (const res of remainingResponses) {
+      if (res.error) throw new Error(res.error.message)
+      if (res.data) rows.push(...res.data)
+    }
+  }
+
+  return rows
+}
+
 // KPIs agrupados por método de pago para cierre de caja
 export async function listManualInvoicePaymentKpis(
   storeId: string,
   filterDate?: string,
 ): Promise<ManualInvoicePaymentKpis> {
-  const todayIso = getTodayIsoDateColombia();
-  const selectedIso = filterDate ?? todayIso;
-  const yearStartIso = `${selectedIso.slice(0, 4)}-01-01`;
-  const [invoicesRes, layawayPaymentsRes] = await Promise.all([
-    supabase
-      .from('manual_invoices')
-      .select('grand_total, credit_applied_total, created_at, payment_method, payment_reference')
-      .eq('store_id', storeId)
-      .eq('source', 'provisional')
-      .eq('is_active', true)
-      .gte('created_at', toUtcIsoStartOfColombiaDay(yearStartIso))
-      .limit(10000),
-    supabase
-      .from('layaway_payments')
-      .select('amount, payment_method, created_at, layaways!inner(store_id)')
-      .eq('layaways.store_id', storeId)
-      .gte('created_at', toUtcIsoStartOfColombiaDay(yearStartIso))
-      .limit(10000),
-  ]);
+  const todayIso = getTodayIsoDateColombia()
+  const selectedIso = filterDate ?? todayIso
+  const selectedYear = selectedIso.slice(0, 4)
+  const selectedMonth = selectedIso.slice(0, 7)
+  const yearStartIso = `${selectedYear}-01-01`
+  const yearEndIso = `${selectedYear}-12-31`
 
-  if (invoicesRes.error) {
-    throw new Error(invoicesRes.error.message);
-  }
-  if (layawayPaymentsRes.error) {
-    throw new Error(layawayPaymentsRes.error.message);
-  }
+  const [invoicesData, layawayPaymentsData] = await Promise.all([
+    fetchAllManualInvoicesForYear(storeId, yearStartIso, yearEndIso),
+    fetchAllLayawayPaymentsForYear(storeId, yearStartIso, yearEndIso),
+  ])
 
-  const data = invoicesRes.data;
-
-  const selectedMonth = selectedIso.slice(0, 7);
   const paymentMethods: PaymentMethodKpiKey[] = [
     'cash',
     'addi',
@@ -66,115 +170,90 @@ export async function listManualInvoicePaymentKpis(
     'daviplata',
     'nequi',
     'rapirecarga',
-  ];
+  ]
 
   // Estructura: { [method]: { day: number, month: number, year: number } }
   const result = {} as Record<PaymentMethodKpiKey, PaymentKpiTotals>
-  const exchangeOverageCollected = { day: 0, month: 0, year: 0 };
+  const exchangeOverageCollected = { day: 0, month: 0, year: 0 }
   for (const method of paymentMethods) {
-    result[method] = { day: 0, month: 0, year: 0 };
+    result[method] = { day: 0, month: 0, year: 0 }
   }
 
   function addToResult(method: PaymentMethodKpiKey, amount: number, dateIso: string) {
-    result[method].year += amount;
-    if (dateIso.slice(0, 7) === selectedMonth) result[method].month += amount;
-    if (dateIso === selectedIso) result[method].day += amount;
+    if (dateIso.slice(0, 4) === selectedYear) result[method].year += amount
+    if (dateIso.slice(0, 7) === selectedMonth) result[method].month += amount
+    if (dateIso === selectedIso) result[method].day += amount
   }
 
-  (data ?? []).forEach((row) => {
+  ;(invoicesData ?? []).forEach((row) => {
     const createdIsoDate = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/Bogota',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
-    }).format(new Date(String(row.created_at)));
+    }).format(new Date(String(row.created_at)))
 
-    const creditApplied = Math.max(0, Number(row.credit_applied_total ?? 0));
-    const amountDue = Math.max(0, Number(row.grand_total ?? 0) - creditApplied);
+    const creditApplied = Math.max(0, Number(row.credit_applied_total ?? 0))
+    const amountDue = Math.max(0, Number(row.grand_total ?? 0) - creditApplied)
     if (creditApplied > 0 && amountDue > 0) {
-      exchangeOverageCollected.year += amountDue;
-      if (createdIsoDate.slice(0, 7) === selectedMonth) exchangeOverageCollected.month += amountDue;
-      if (createdIsoDate === selectedIso) exchangeOverageCollected.day += amountDue;
+      if (createdIsoDate.slice(0, 4) === selectedYear) exchangeOverageCollected.year += amountDue
+      if (createdIsoDate.slice(0, 7) === selectedMonth) exchangeOverageCollected.month += amountDue
+      if (createdIsoDate === selectedIso) exchangeOverageCollected.day += amountDue
     }
 
-    const method = row.payment_method as string;
+    const method = row.payment_method as string
 
     if (method === 'mixed') {
-      // payment_reference format: "method1:amount1:method2:amount2"
-      const ref = row.payment_reference as string | null;
-      if (!ref) return;
-      const parts = ref.split(':');
+      const ref = row.payment_reference as string | null
+      if (!ref) return
+      const parts = ref.split(':')
       if (parts.length >= 4) {
-        const m1 = parts[0];
-        const a1 = Math.max(0, Number(parts[1]) || 0);
-        const m2 = parts[2];
-        const a2 = Math.max(0, Number(parts[3]) || 0);
+        const m1 = parts[0]
+        const a1 = Math.max(0, Number(parts[1]) || 0)
+        const m2 = parts[2]
+        const a2 = Math.max(0, Number(parts[3]) || 0)
         if (paymentMethods.includes(m1 as PaymentMethodKpiKey)) {
-          addToResult(m1 as PaymentMethodKpiKey, a1, createdIsoDate);
+          addToResult(m1 as PaymentMethodKpiKey, a1, createdIsoDate)
         }
         if (paymentMethods.includes(m2 as PaymentMethodKpiKey)) {
-          addToResult(m2 as PaymentMethodKpiKey, a2, createdIsoDate);
+          addToResult(m2 as PaymentMethodKpiKey, a2, createdIsoDate)
         }
       }
-      return;
+      return
     }
 
-    const amount = Math.max(0, Number(row.grand_total ?? 0) - Number(row.credit_applied_total ?? 0));
+    const amount = Math.max(0, Number(row.grand_total ?? 0) - Number(row.credit_applied_total ?? 0))
     if (paymentMethods.includes(method as PaymentMethodKpiKey)) {
-      addToResult(method as PaymentMethodKpiKey, amount, createdIsoDate);
+      addToResult(method as PaymentMethodKpiKey, amount, createdIsoDate)
     }
-  });
+  })
 
-  // Abonos de separados (layaways) tambien cuentan como dinero recibido en caja
-  // por metodo de pago, igual que las facturas manuales.
-  // Los metodos de layaway_payments pueden ser 'cash', 'card', 'transfer', o especificos como 'addi', 'credilondon', etc.
-  (layawayPaymentsRes.data ?? []).forEach((row) => {
+  ;(layawayPaymentsData ?? []).forEach((row) => {
     const createdIsoDate = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/Bogota',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
-    }).format(new Date(String(row.created_at)));
+    }).format(new Date(String(row.created_at)))
 
-    const method = row.payment_method as string;
-    const amount = Math.max(0, Number(row.amount ?? 0));
+    const method = row.payment_method as string
+    const amount = Math.max(0, Number(row.amount ?? 0))
     
-    // Si el metodo esta en la lista de paymentMethods, agregarlo directamente
     if (paymentMethods.includes(method as PaymentMethodKpiKey)) {
-      addToResult(method as PaymentMethodKpiKey, amount, createdIsoDate);
+      addToResult(method as PaymentMethodKpiKey, amount, createdIsoDate)
+    } else if (method === 'card') {
+      addToResult('dataphone' as PaymentMethodKpiKey, amount, createdIsoDate)
+    } else if (method === 'transfer') {
+      addToResult('bancolombia' as PaymentMethodKpiKey, amount, createdIsoDate)
     }
-    // Si es 'card' (tarjeta generica), mapearla a 'dataphone' como categoria por defecto de tarjeta
-    else if (method === 'card') {
-      addToResult('dataphone' as PaymentMethodKpiKey, amount, createdIsoDate);
-    }
-    // Si es 'transfer' (transferencia generica), mapearla a 'bancolombia' como categoria por defecto de transferencia
-    else if (method === 'transfer') {
-      addToResult('bancolombia' as PaymentMethodKpiKey, amount, createdIsoDate);
-    }
-    // Metodos desconocidos se ignoran (no deberia ocurrir normalmente)
-  });
+  })
 
   return {
     ...result,
     exchangeOverageCollected,
-  };
+  }
 }
-import { supabase } from '../../../integrations/supabase/client/supabaseClient'
-import { getTodayIsoDateColombia, toUtcIsoStartOfColombiaDay } from '../../../shared/utils/dateTime'
-import type {
-  DeleteManualExpenseInput,
-  CreateManualExpenseInput,
-  CreateManualInvoiceInput,
-  CreateManualInvoiceExchangeInput,
-  CreateManualInvoiceReturnInput,
-  ManualExpenseKpis,
-  ManualExpenseRow,
-  ManualInvoiceKpis,
-  ManualInvoiceRow,
-  UpdateManualExpenseInput,
-  UpdateManualInvoiceHeaderInput,
-  VoidManualInvoiceInput,
-} from '../model/manualInvoices.types'
+
 
 function getRpcErrorMessage(error: { code?: string; message: string; details?: string | null; hint?: string | null }) {
   const parts = [error.message]
@@ -368,26 +447,20 @@ export async function getManualInvoiceById(storeId: string, invoiceId: string) {
   return data as ManualInvoiceRow
 }
 
-export async function listManualInvoiceKpis(storeId: string): Promise<ManualInvoiceKpis> {
+export async function listManualInvoiceKpis(
+  storeId: string,
+  filterDate?: string,
+): Promise<ManualInvoiceKpis> {
   const todayIso = getTodayIsoDateColombia()
-  const yearStartIso = `${todayIso.slice(0, 4)}-01-01`
+  const selectedIso = filterDate ?? todayIso
+  const selectedYear = selectedIso.slice(0, 4)
+  const selectedMonth = selectedIso.slice(0, 7)
+  const yearStartIso = `${selectedYear}-01-01`
+  const yearEndIso = `${selectedYear}-12-31`
 
-  const { data, error } = await supabase
-    .from('manual_invoices')
-    .select('grand_total, created_at')
-    .eq('store_id', storeId)
-    .eq('source', 'provisional')
-    .eq('is_active', true)
-    .gte('created_at', toUtcIsoStartOfColombiaDay(yearStartIso))
-    .limit(10000)
+  const rows = await fetchAllManualInvoicesForYear(storeId, yearStartIso, yearEndIso)
 
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  const todayMonth = todayIso.slice(0, 7)
-
-  return (data ?? []).reduce<ManualInvoiceKpis>(
+  return rows.reduce<ManualInvoiceKpis>(
     (acc, row) => {
       const createdIsoDate = new Intl.DateTimeFormat('en-CA', {
         timeZone: 'America/Bogota',
@@ -398,15 +471,17 @@ export async function listManualInvoiceKpis(storeId: string): Promise<ManualInvo
 
       const amount = Math.max(0, Number(row.grand_total ?? 0))
 
-      acc.yearTotal += amount
-      acc.yearCount += 1
+      if (createdIsoDate.slice(0, 4) === selectedYear) {
+        acc.yearTotal += amount
+        acc.yearCount += 1
+      }
 
-      if (createdIsoDate.slice(0, 7) === todayMonth) {
+      if (createdIsoDate.slice(0, 7) === selectedMonth) {
         acc.monthTotal += amount
         acc.monthCount += 1
       }
 
-      if (createdIsoDate === todayIso) {
+      if (createdIsoDate === selectedIso) {
         acc.dayTotal += amount
         acc.dayCount += 1
       }
@@ -441,9 +516,16 @@ export async function listManualExpenses(storeId: string) {
   return (data ?? []) as ManualExpenseRow[]
 }
 
-export async function listManualExpenseKpis(storeId: string): Promise<ManualExpenseKpis> {
+export async function listManualExpenseKpis(
+  storeId: string,
+  filterDate?: string,
+): Promise<ManualExpenseKpis> {
   const todayIso = getTodayIsoDateColombia()
-  const yearStartIso = `${todayIso.slice(0, 4)}-01-01`
+  const selectedIso = filterDate ?? todayIso
+  const selectedYear = selectedIso.slice(0, 4)
+  const selectedMonth = selectedIso.slice(0, 7)
+  const yearStartIso = `${selectedYear}-01-01`
+  const yearEndIso = `${selectedYear}-12-31`
 
   const { data, error } = await supabase
     .from('manual_invoice_expenses')
@@ -451,28 +533,30 @@ export async function listManualExpenseKpis(storeId: string): Promise<ManualExpe
     .eq('store_id', storeId)
     .eq('is_active', true)
     .gte('expense_date', yearStartIso)
-    .limit(10000)
+    .lte('expense_date', yearEndIso)
+    .order('expense_date', { ascending: false })
+    .limit(5000)
 
   if (error) {
     throw new Error(error.message)
   }
-
-  const todayMonth = todayIso.slice(0, 7)
 
   return (data ?? []).reduce<ManualExpenseKpis>(
     (acc, row) => {
       const expenseDate = String(row.expense_date ?? '')
       const amount = Math.max(0, Number(row.amount ?? 0))
 
-      acc.yearTotal += amount
-      acc.yearCount += 1
+      if (expenseDate.slice(0, 4) === selectedYear) {
+        acc.yearTotal += amount
+        acc.yearCount += 1
+      }
 
-      if (expenseDate.slice(0, 7) === todayMonth) {
+      if (expenseDate.slice(0, 7) === selectedMonth) {
         acc.monthTotal += amount
         acc.monthCount += 1
       }
 
-      if (expenseDate === todayIso) {
+      if (expenseDate === selectedIso) {
         acc.dayTotal += amount
         acc.dayCount += 1
       }

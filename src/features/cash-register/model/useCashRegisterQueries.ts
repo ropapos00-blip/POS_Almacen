@@ -62,6 +62,8 @@ export function useDaySalesSummaryQuery(
     queryFn: () => getDaySalesSummary(storeId as string, fromDateIso as string, toDateIso, preciseRange),
     enabled: Boolean(storeId) && Boolean(fromDateIso),
     refetchInterval: 30_000,
+    staleTime: 15_000,
+    placeholderData: (previousData) => previousData,
   })
 }
 

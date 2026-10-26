@@ -136,7 +136,13 @@ export function CierresCajaPage() {
   // Diferencia que el usuario debería tener en cuenta
   const voidedDifferential = invoiceVoidedCash - expensesVoided
 
-  const totalDigital = (summary?.posCard ?? 0) + (summary?.posTransfer ?? 0)
+  // Total digital: incluye todos los métodos no-efectivo de POS (datáfono, bancos, apps),
+  // más tarjetas/transferencias de separados y métodos no-efectivo de facturas y separados
+  const posDigital = Object.entries(summary?.posByMethod ?? {})
+    .filter(([method]) => method !== 'cash')
+    .reduce((sum, [, amount]) => sum + amount, 0)
+
+  const totalDigital = posDigital
     + (layawayCard + layawayTransfer)
     + Object.values(summary?.invoiceByMethod ?? {}).reduce((a, b) => a + b, 0)
     + Object.values(summary?.layawayByMethod ?? {}).reduce((a, b) => a + b, 0)
@@ -426,37 +432,58 @@ export function CierresCajaPage() {
         )}
       </header>
 
+      {/* ── Banner de error si falla la consulta del resumen ─────────────── */}
+      {summaryQuery.isError && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-800/80 bg-rose-950/40 p-3.5 text-sm text-rose-300">
+          <div className="flex items-center gap-2">
+            <span>⚠️</span>
+            <span>No se pudo sincronizar el resumen de movimientos. Revisa tu conexión.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => void summaryQuery.refetch()}
+            className="rounded-lg border border-rose-700 bg-rose-900/60 px-3 py-1 text-xs font-medium text-rose-200 hover:bg-rose-800/80 transition-colors"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+
       {/* ── KPIs del dia ──────────────────────────────────────────────────────── */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <article className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
           <p className="text-xs text-zinc-500">Efectivo en caja</p>
-          <p className="mt-1 text-lg font-semibold text-zinc-100">{formatCop(expectedCash)}</p>
+          <p className="mt-1 text-lg font-semibold text-zinc-100">
+            {summaryQuery.isLoading && !summary ? 'Cargando...' : formatCop(expectedCash)}
+          </p>
           <p className="text-xs text-zinc-500">Base + ingresos - gastos</p>
         </article>
         <article className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
           <p className="text-xs text-zinc-500">{isMultiDay ? 'Ventas POS del periodo' : 'Ventas POS hoy'}</p>
           <p className="mt-1 text-lg font-semibold text-emerald-300">
-            {formatCop(summary?.posTotal ?? 0)}
+            {summaryQuery.isLoading && !summary ? 'Cargando...' : formatCop(summary?.posTotal ?? 0)}
           </p>
-          <p className="text-xs text-zinc-500">Efectivo: {formatCop(posCash)}</p>
+          <p className="text-xs text-zinc-500">Efectivo: {summaryQuery.isLoading && !summary ? '...' : formatCop(posCash)}</p>
         </article>
         <article className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
           <p className="text-xs text-zinc-500">{isMultiDay ? 'Facturas manuales del periodo' : 'Facturas manuales hoy'}</p>
           <p className="mt-1 text-lg font-semibold text-amber-300">
-            {formatCop(summary?.invoiceTotal ?? 0)}
+            {summaryQuery.isLoading && !summary ? 'Cargando...' : formatCop(summary?.invoiceTotal ?? 0)}
           </p>
-          <p className="text-xs text-zinc-500">Efectivo: {formatCop(invoiceCash)}</p>
+          <p className="text-xs text-zinc-500">Efectivo: {summaryQuery.isLoading && !summary ? '...' : formatCop(invoiceCash)}</p>
         </article>
         <article className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
           <p className="text-xs text-zinc-500">{isMultiDay ? 'Separados del periodo' : 'Separados hoy'}</p>
           <p className="mt-1 text-lg font-semibold text-sky-300">
-            {formatCop(summary?.layawayTotal ?? 0)}
+            {summaryQuery.isLoading && !summary ? 'Cargando...' : formatCop(summary?.layawayTotal ?? 0)}
           </p>
-          <p className="text-xs text-zinc-500">Efectivo: {formatCop(layawayCash)}</p>
+          <p className="text-xs text-zinc-500">Efectivo: {summaryQuery.isLoading && !summary ? '...' : formatCop(layawayCash)}</p>
         </article>
         <article className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
           <p className="text-xs text-zinc-500">{isMultiDay ? 'Gastos del periodo' : 'Gastos hoy'}</p>
-          <p className="mt-1 text-lg font-semibold text-rose-300">{formatCop(expenses)}</p>
+          <p className="mt-1 text-lg font-semibold text-rose-300">
+            {summaryQuery.isLoading && !summary ? 'Cargando...' : formatCop(expenses)}
+          </p>
           <p className="text-xs text-zinc-500">Deducido del efectivo</p>
         </article>
       </div>
@@ -529,6 +556,8 @@ export function CierresCajaPage() {
             invoiceByMethod={invoiceByMethod}
             invoiceTotal={summary?.invoiceTotal ?? 0}
             layawayCash={layawayCash}
+            layawayCard={layawayCard}
+            layawayTransfer={layawayTransfer}
             layawayByMethod={layawayByMethod}
             layawayTotal={summary?.layawayTotal ?? 0}
             expenses={expenses}
@@ -658,6 +687,18 @@ export function CierresCajaPage() {
                             <span className="text-zinc-200">{formatCop(layawayCash)}</span>
                           </div>
                         )}
+                        {layawayCard > 0 && (
+                          <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
+                            <span className="text-zinc-400">Tarjeta</span>
+                            <span className="text-zinc-200">{formatCop(layawayCard)}</span>
+                          </div>
+                        )}
+                        {layawayTransfer > 0 && (
+                          <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
+                            <span className="text-zinc-400">Transferencia</span>
+                            <span className="text-zinc-200">{formatCop(layawayTransfer)}</span>
+                          </div>
+                        )}
                         {Object.entries(layawayByMethod).map(([method, amount]) => (
                           <div key={method} className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
                             <span className="text-zinc-400">{INVOICE_METHOD_LABELS[method] ?? method}</span>
@@ -780,6 +821,8 @@ export function CierresCajaPage() {
               invoiceByMethod={invoiceByMethod}
               invoiceTotal={summary?.invoiceTotal ?? 0}
               layawayCash={layawayCash}
+              layawayCard={layawayCard}
+              layawayTransfer={layawayTransfer}
               layawayByMethod={layawayByMethod}
               layawayTotal={summary?.layawayTotal ?? 0}
               expenses={expenses}
@@ -1318,6 +1361,8 @@ interface SummaryBreakdownProps {
   invoiceByMethod: Record<string, number>
   invoiceTotal: number
   layawayCash: number
+  layawayCard?: number
+  layawayTransfer?: number
   layawayByMethod: Record<string, number>
   layawayTotal: number
   expenses: number
@@ -1346,6 +1391,8 @@ function SummaryBreakdown({
   invoiceByMethod,
   invoiceTotal,
   layawayCash,
+  layawayCard = 0,
+  layawayTransfer = 0,
   layawayByMethod,
   layawayTotal,
   expenses,
@@ -1419,6 +1466,18 @@ function SummaryBreakdown({
                     <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
                       <span className="text-zinc-400">Efectivo</span>
                       <span className="text-zinc-200">{formatCop(layawayCash)}</span>
+                    </div>
+                  )}
+                  {layawayCard > 0 && (
+                    <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
+                      <span className="text-zinc-400">Tarjeta</span>
+                      <span className="text-zinc-200">{formatCop(layawayCard)}</span>
+                    </div>
+                  )}
+                  {layawayTransfer > 0 && (
+                    <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 flex justify-between text-sm">
+                      <span className="text-zinc-400">Transferencia</span>
+                      <span className="text-zinc-200">{formatCop(layawayTransfer)}</span>
                     </div>
                   )}
                   {Object.entries(layawayByMethod).map(([method, amount]) => (

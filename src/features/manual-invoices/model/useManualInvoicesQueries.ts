@@ -43,10 +43,10 @@ export function useManualInvoicesQuery(storeId?: string) {
   })
 }
 
-export function useManualInvoiceKpisQuery(storeId?: string, enabled = true) {
+export function useManualInvoiceKpisQuery(storeId?: string, enabled = true, filterDate?: string) {
   return useQuery({
-    queryKey: ['manual-invoices', 'kpis', storeId],
-    queryFn: () => listManualInvoiceKpis(storeId as string),
+    queryKey: ['manual-invoices', 'kpis', storeId, filterDate],
+    queryFn: () => listManualInvoiceKpis(storeId as string, filterDate),
     enabled: Boolean(storeId) && enabled,
   })
 }
@@ -69,10 +69,10 @@ export function useManualExpensesQuery(storeId?: string, enabled = true) {
   })
 }
 
-export function useManualExpenseKpisQuery(storeId?: string, enabled = true) {
+export function useManualExpenseKpisQuery(storeId?: string, enabled = true, filterDate?: string) {
   return useQuery({
-    queryKey: ['manual-invoices', 'expenses', 'kpis', storeId],
-    queryFn: () => listManualExpenseKpis(storeId as string),
+    queryKey: ['manual-invoices', 'expenses', 'kpis', storeId, filterDate],
+    queryFn: () => listManualExpenseKpis(storeId as string, filterDate),
     enabled: Boolean(storeId) && enabled,
   })
 }
@@ -86,6 +86,7 @@ export function useCreateManualInvoiceMutation(storeId?: string) {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'list', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'kpis', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'payment-kpis', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'customer-credit-balance'] }),
       ])
@@ -102,6 +103,7 @@ export function useUpdateManualInvoiceMutation(storeId?: string) {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'list', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'kpis', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'payment-kpis', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),
       ])
     },
@@ -117,6 +119,7 @@ export function useVoidManualInvoiceMutation(storeId?: string) {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'list', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'kpis', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'payment-kpis', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', storeId] }),
       ])
     },
@@ -132,6 +135,7 @@ export function useCreateManualInvoiceReturnMutation(storeId?: string) {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'list', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'kpis', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'payment-kpis', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'customer-credit-balance'] }),
       ])
     },
@@ -147,6 +151,7 @@ export function useCreateManualInvoiceExchangeMutation(storeId?: string) {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'list', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'kpis', storeId] }),
+        queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'payment-kpis', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['manual-invoices', 'customer-credit-balance'] }),
         queryClient.invalidateQueries({ queryKey: ['pos', 'variants', storeId] }),
         queryClient.invalidateQueries({ queryKey: ['inventory', 'stock', storeId] }),

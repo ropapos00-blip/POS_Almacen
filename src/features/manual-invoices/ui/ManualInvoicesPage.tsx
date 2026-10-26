@@ -20,6 +20,7 @@ import { validateDiscountPin } from '../../pos/services/discountPinService'
 import { useLayawayKpisQuery } from '../../layaways/model/useLayawayQueries'
 import { ManualInvoiceReceipt } from './ManualInvoiceReceipt'
 import { CustomerPicker } from '../../customers/ui/CustomerPicker'
+import { Edit2, Printer, Trash2 } from 'lucide-react'
 
 
 interface DraftItem {
@@ -68,20 +69,7 @@ function createDraftItem(): DraftItem {
   }
 }
 
-function invoiceActionButtonClass(variant: 'print' | 'edit' | 'delete') {
-  const base =
-    'inline-flex h-8 w-full items-center justify-center rounded-lg border px-3 text-xs font-medium transition-colors'
 
-  if (variant === 'print') {
-    return `${base} border-amber-500/50 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20`
-  }
-
-  if (variant === 'edit') {
-    return `${base} border-sky-500/40 bg-sky-500/10 text-sky-200 hover:bg-sky-500/20`
-  }
-
-  return `${base} border-rose-500/50 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20`
-}
 
 export function ManualInvoicesPage() {
   const user = useAuthStore((state) => state.user)
@@ -122,8 +110,8 @@ export function ManualInvoicesPage() {
   const [barcodeFeedback, setBarcodeFeedback] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
 
   const invoicesQuery = useManualInvoicesQuery(user?.storeId)
-  const manualKpisQuery = useManualInvoiceKpisQuery(user?.storeId, isAdminUser)
-  const layawayKpisQuery = useLayawayKpisQuery(user?.storeId, isAdminUser)
+  const manualKpisQuery = useManualInvoiceKpisQuery(user?.storeId, isAdminUser, filterDate)
+  const layawayKpisQuery = useLayawayKpisQuery(user?.storeId, isAdminUser, filterDate)
   const createMutation = useCreateManualInvoiceMutation(user?.storeId)
   const updateMutation = useUpdateManualInvoiceMutation(user?.storeId)
   const voidMutation = useVoidManualInvoiceMutation(user?.storeId)
@@ -132,6 +120,24 @@ export function ManualInvoicesPage() {
   const pinRequired =
     discountPinQuery.data?.enabled === true && discountPinQuery.data?.hasPin === true
   const variantsQuery = usePosVariantsQuery(user?.storeId)
+
+  const isSelectedToday = filterDate === getTodayIsoDateColombia()
+  const selectedDateObj = useMemo(() => new Date(`${filterDate}T12:00:00`), [filterDate])
+  const formattedSelectedDay = useMemo(() => {
+    return new Intl.DateTimeFormat('es-CO', {
+      timeZone: 'America/Bogota',
+      day: 'numeric',
+      month: 'short',
+    }).format(selectedDateObj)
+  }, [selectedDateObj])
+  const formattedSelectedMonth = useMemo(() => {
+    const m = new Intl.DateTimeFormat('es-CO', {
+      timeZone: 'America/Bogota',
+      month: 'long',
+    }).format(selectedDateObj)
+    return m.charAt(0).toUpperCase() + m.slice(1)
+  }, [selectedDateObj])
+  const selectedYear = filterDate.slice(0, 4)
 
   const handlePrint = useReactToPrint({
     contentRef: receiptRef,
@@ -533,9 +539,42 @@ export function ManualInvoicesPage() {
 
         {isAdminUser ? (
           <>
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
+            {/* Barra de control de fecha para KPIs y Cierre de caja */}
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950/80 px-4 py-3">
+              <div>
+                <p className="text-xs font-semibold text-zinc-200">Indicadores por fecha</p>
+                <p className="text-[11px] text-zinc-400">
+                  {isSelectedToday
+                    ? 'Mostrando datos del día de hoy, mes actual y año en curso.'
+                    : `Mostrando datos del día ${formattedSelectedDay}, mes de ${formattedSelectedMonth.toLowerCase()} y año ${selectedYear}.`}
+                </p>
+              </div>
+              <label className="flex items-center gap-2">
+                <span className="text-xs text-zinc-400">Fecha:</span>
+                <input
+                  type="date"
+                  value={filterDate}
+                  max={getTodayIsoDateColombia()}
+                  onChange={(e) => { if (e.target.value) setFilterDate(e.target.value) }}
+                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-200 focus:border-amber-400 focus:outline-none"
+                />
+                {!isSelectedToday && (
+                  <button
+                    type="button"
+                    onClick={() => setFilterDate(getTodayIsoDateColombia())}
+                    className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-300 hover:bg-amber-500/20"
+                  >
+                    Hoy
+                  </button>
+                )}
+              </label>
+            </div>
+
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
               <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-                <p className="text-xs text-zinc-500">Facturas manuales del dia</p>
+                <p className="text-xs text-zinc-500">
+                  Facturas manuales del día {isSelectedToday ? '' : `(${formattedSelectedDay})`}
+                </p>
                 <p className="mt-1 text-lg font-semibold text-emerald-300">
                   {formatCop(manualKpisQuery.data?.dayTotal ?? 0)}
                 </p>
@@ -544,7 +583,9 @@ export function ManualInvoicesPage() {
                 </p>
               </article>
               <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-                <p className="text-xs text-zinc-500">Facturas manuales del mes</p>
+                <p className="text-xs text-zinc-500">
+                  Facturas manuales del mes ({formattedSelectedMonth})
+                </p>
                 <p className="mt-1 text-lg font-semibold text-amber-300">
                   {formatCop(manualKpisQuery.data?.monthTotal ?? 0)}
                 </p>
@@ -553,7 +594,9 @@ export function ManualInvoicesPage() {
                 </p>
               </article>
               <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-                <p className="text-xs text-zinc-500">Facturas manuales del año</p>
+                <p className="text-xs text-zinc-500">
+                  Facturas manuales del año ({selectedYear})
+                </p>
                 <p className="mt-1 text-lg font-semibold text-sky-300">
                   {formatCop(manualKpisQuery.data?.yearTotal ?? 0)}
                 </p>
@@ -565,7 +608,9 @@ export function ManualInvoicesPage() {
             {/* KPIs separados */}
             <div className="mt-3 grid gap-3 md:grid-cols-3">
               <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-                <p className="text-xs text-zinc-500">Separados del dia</p>
+                <p className="text-xs text-zinc-500">
+                  Separados del día {isSelectedToday ? '' : `(${formattedSelectedDay})`}
+                </p>
                 <p className="mt-1 text-lg font-semibold text-emerald-300">
                   {formatCop(layawayKpisQuery.data?.dayTotal ?? 0)}
                 </p>
@@ -574,7 +619,9 @@ export function ManualInvoicesPage() {
                 </p>
               </article>
               <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-                <p className="text-xs text-zinc-500">Separados del mes</p>
+                <p className="text-xs text-zinc-500">
+                  Separados del mes ({formattedSelectedMonth})
+                </p>
                 <p className="mt-1 text-lg font-semibold text-amber-300">
                   {formatCop(layawayKpisQuery.data?.monthTotal ?? 0)}
                 </p>
@@ -583,7 +630,9 @@ export function ManualInvoicesPage() {
                 </p>
               </article>
               <article className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-                <p className="text-xs text-zinc-500">Separados del año</p>
+                <p className="text-xs text-zinc-500">
+                  Separados del año ({selectedYear})
+                </p>
                 <p className="mt-1 text-lg font-semibold text-sky-300">
                   {formatCop(layawayKpisQuery.data?.yearTotal ?? 0)}
                 </p>
@@ -608,7 +657,7 @@ export function ManualInvoicesPage() {
                     onChange={(e) => { if (e.target.value) setFilterDate(e.target.value) }}
                     className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 focus:border-amber-400 focus:outline-none"
                   />
-                  {filterDate !== getTodayIsoDateColombia() && (
+                  {!isSelectedToday && (
                     <button
                       type="button"
                       onClick={() => setFilterDate(getTodayIsoDateColombia())}
@@ -628,12 +677,10 @@ export function ManualInvoicesPage() {
                       <tr className="text-zinc-500">
                         <th className="px-2 py-1 text-left">Método</th>
                         <th className="px-2 py-1 text-right text-amber-300">
-                          {new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'short' }).format(
-                            new Date(`${filterDate}T12:00:00`)
-                          )}
+                          {formattedSelectedDay}
                         </th>
-                        <th className="px-2 py-1 text-right">Mes</th>
-                        <th className="px-2 py-1 text-right">Año</th>
+                        <th className="px-2 py-1 text-right">Mes ({formattedSelectedMonth})</th>
+                        <th className="px-2 py-1 text-right">Año ({selectedYear})</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1032,31 +1079,36 @@ export function ManualInvoicesPage() {
                 {invoice.payment_reference ? ` · Ref ${invoice.payment_reference}` : ''}
               </p>
 
-              <div className={`mt-3 grid gap-2 ${isAdminUser ? 'sm:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
+              <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800/60 pt-2">
                 <button
                   type="button"
                   onClick={() => selectAndReprint(invoice)}
-                  className={invoiceActionButtonClass('print')}
+                  className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 text-xs font-medium text-amber-300 transition-colors hover:border-amber-500/70 hover:bg-amber-500/20 active:scale-95"
                 >
-                  Reimprimir
+                  <Printer size={13} className="shrink-0" />
+                  <span>Reimprimir</span>
                 </button>
                 {isAdminUser ? (
-                  <>
+                  <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => openEditInvoiceModal(invoice)}
-                      className={invoiceActionButtonClass('edit')}
+                      className="inline-flex h-7 items-center gap-1 rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 text-xs font-medium text-sky-300 transition-colors hover:border-sky-500/60 hover:bg-sky-500/20 active:scale-95"
+                      title="Editar factura"
                     >
-                      Editar
+                      <Edit2 size={12} className="shrink-0" />
+                      <span>Editar</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setInvoiceForDelete(invoice)}
-                      className={invoiceActionButtonClass('delete')}
+                      className="inline-flex h-7 items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 text-xs font-medium text-rose-300 transition-colors hover:border-rose-500/60 hover:bg-rose-500/20 active:scale-95"
+                      title="Eliminar factura"
                     >
-                      Eliminar
+                      <Trash2 size={12} className="shrink-0" />
+                      <span>Eliminar</span>
                     </button>
-                  </>
+                  </div>
                 ) : null}
               </div>
             </li>

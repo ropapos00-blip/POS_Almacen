@@ -1,5 +1,9 @@
 import { supabase } from '../../../integrations/supabase/client/supabaseClient'
-import { getTodayIsoDateColombia, toUtcIsoStartOfColombiaDay } from '../../../shared/utils/dateTime'
+import {
+  getTodayIsoDateColombia,
+  toUtcIsoEndOfColombiaDay,
+  toUtcIsoStartOfColombiaDay,
+} from '../../../shared/utils/dateTime'
 import type { AddLayawayPaymentInput, CreateLayawayInput, Layaway, VariantLookup } from '../model/layaway.types'
 
 export interface LayawayKpis {
@@ -100,18 +104,26 @@ export async function updateLayawayCustomer(
   if (error) throw new Error(error.message)
 }
 
-export async function getLayawayKpis(storeId: string): Promise<LayawayKpis> {
+export async function getLayawayKpis(storeId: string, filterDate?: string): Promise<LayawayKpis> {
   const todayIso = getTodayIsoDateColombia()
-  const yearStartIso = `${todayIso.slice(0, 4)}-01-01`
+  const selectedIso = filterDate ?? todayIso
+  const selectedYear = selectedIso.slice(0, 4)
+  const selectedMonth = selectedIso.slice(0, 7)
+  const yearStartIso = `${selectedYear}-01-01`
+  const yearEndIso = `${selectedYear}-12-31`
 
-  const [paymentsRes, activeRes] = await Promise.all([
+  const PAGE_SIZE = 1000
+
+  const [firstPaymentsRes, activeRes] = await Promise.all([
     supabase
       .from('layaway_payments')
-      .select('amount, created_at, layaways!inner(store_id, status)')
+      .select('amount, created_at, layaways!inner(store_id, status)', { count: 'exact' })
       .eq('layaways.store_id', storeId)
       .neq('layaways.status', 'cancelled')
       .gte('created_at', toUtcIsoStartOfColombiaDay(yearStartIso))
-      .limit(10000),
+      .lte('created_at', toUtcIsoEndOfColombiaDay(yearEndIso))
+      .order('created_at', { ascending: false })
+      .range(0, PAGE_SIZE - 1),
     supabase
       .from('layaways')
       .select('id', { count: 'exact', head: true })
@@ -119,17 +131,45 @@ export async function getLayawayKpis(storeId: string): Promise<LayawayKpis> {
       .eq('status', 'active'),
   ])
 
-  if (paymentsRes.error) throw new Error(paymentsRes.error.message)
+  if (firstPaymentsRes.error) throw new Error(firstPaymentsRes.error.message)
   if (activeRes.error) throw new Error(activeRes.error.message)
 
-  const todayMonth = todayIso.slice(0, 7)
+  const paymentRows = [...(firstPaymentsRes.data ?? [])]
+  const totalCount = firstPaymentsRes.count ?? paymentRows.length
+
+  if (totalCount > PAGE_SIZE) {
+    const remainingPromises = []
+    for (let offset = PAGE_SIZE; offset < totalCount; offset += PAGE_SIZE) {
+      remainingPromises.push(
+        supabase
+          .from('layaway_payments')
+          .select('amount, created_at, layaways!inner(store_id, status)')
+          .eq('layaways.store_id', storeId)
+          .neq('layaways.status', 'cancelled')
+          .gte('created_at', toUtcIsoStartOfColombiaDay(yearStartIso))
+          .lte('created_at', toUtcIsoEndOfColombiaDay(yearEndIso))
+          .order('created_at', { ascending: false })
+          .range(offset, offset + PAGE_SIZE - 1),
+      )
+    }
+    const remainingResponses = await Promise.all(remainingPromises)
+    for (const res of remainingResponses) {
+      if (res.error) throw new Error(res.error.message)
+      if (res.data) paymentRows.push(...res.data)
+    }
+  }
+
   const kpis: LayawayKpis = {
-    dayTotal: 0, monthTotal: 0, yearTotal: 0,
-    dayCount: 0, monthCount: 0, yearCount: 0,
+    dayTotal: 0,
+    monthTotal: 0,
+    yearTotal: 0,
+    dayCount: 0,
+    monthCount: 0,
+    yearCount: 0,
     activeCount: activeRes.count ?? 0,
   }
 
-  ;(paymentsRes.data ?? []).forEach((row) => {
+  paymentRows.forEach((row) => {
     const createdIsoDate = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/Bogota',
       year: 'numeric',
@@ -137,13 +177,16 @@ export async function getLayawayKpis(storeId: string): Promise<LayawayKpis> {
       day: '2-digit',
     }).format(new Date(String(row.created_at)))
     const amount = Math.max(0, Number(row.amount ?? 0))
-    kpis.yearTotal += amount
-    kpis.yearCount += 1
-    if (createdIsoDate.slice(0, 7) === todayMonth) {
+
+    if (createdIsoDate.slice(0, 4) === selectedYear) {
+      kpis.yearTotal += amount
+      kpis.yearCount += 1
+    }
+    if (createdIsoDate.slice(0, 7) === selectedMonth) {
       kpis.monthTotal += amount
       kpis.monthCount += 1
     }
-    if (createdIsoDate === todayIso) {
+    if (createdIsoDate === selectedIso) {
       kpis.dayTotal += amount
       kpis.dayCount += 1
     }

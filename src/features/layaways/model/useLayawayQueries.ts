@@ -132,10 +132,10 @@ export function useUpdateLayawayMutation(storeId?: string) {
   })
 }
 
-export function useLayawayKpisQuery(storeId?: string, enabled = true) {
+export function useLayawayKpisQuery(storeId?: string, enabled = true, filterDate?: string) {
   return useQuery({
-    queryKey: ['layaways', 'kpis', storeId],
-    queryFn: () => getLayawayKpis(storeId!),
+    queryKey: ['layaways', 'kpis', storeId, filterDate],
+    queryFn: () => getLayawayKpis(storeId!, filterDate),
     enabled: Boolean(storeId) && enabled,
   })
 }
